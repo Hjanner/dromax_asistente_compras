@@ -1,0 +1,14 @@
+# Entorno y configuración local: nunca se versionan (llaves de OpenRouter, credenciales del rol de solo lectura)
+.env
+*.conf
+*.local
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Editores / sistema
+.vscode/
+.idea/
+*.swp
+.DS_Store
