@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="res_config_settings_view_form_ai_purchase" model="ir.ui.view">
+        <field name="name">res.config.settings.view.form.inherit.dromax_asistente_compras</field>
+        <field name="model">res.config.settings</field>
+        <field name="priority" eval="90"/>
+        <field name="inherit_id" ref="base.res_config_settings_view_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//form" position="inside">
+                <app data-string="Asistente de Compras IA" string="Asistente de Compras IA"
+                     name="dromax_asistente_compras" groups="base.group_system">
+                    <block title="OpenRouter" name="ai_purchase_openrouter">
+                        <setting id="ai_purchase_api_key" string="Llave de OpenRouter"
+                                 help="Créala en OpenRouter con un tope de crédito propio, para acotar el daño si se filtra. No se guarda en el repositorio.">
+                            <field name="ai_purchase_openrouter_api_key" password="True" placeholder="sk-or-v1-..."/>
+                            <div class="mt8">
+                                <button name="action_ai_purchase_test_openrouter" type="object"
+                                        string="Probar llave" icon="oi-arrow-right" class="btn-link"/>
+                            </div>
+                        </setting>
+                        <setting id="ai_purchase_models" string="Niveles de modelo"
+                                 help="Identificadores de openrouter.ai/models. La propuesta de compra, sus ajustes y el flujo dinámico usan siempre el nivel avanzado.">
+                            <div class="content-group">
+                                <div class="row mt8">
+                                    <label for="ai_purchase_model_basic" class="col-lg-4 o_light_label"/>
+                                    <field name="ai_purchase_model_basic" class="col-lg-8"/>
+                                </div>
+                                <div class="row">
+                                    <label for="ai_purchase_model_medium" class="col-lg-4 o_light_label"/>
+                                    <field name="ai_purchase_model_medium" class="col-lg-8"/>
+                                </div>
+                                <div class="row">
+                                    <label for="ai_purchase_model_advanced" class="col-lg-4 o_light_label"/>
+                                    <field name="ai_purchase_model_advanced" class="col-lg-8"/>
+                                </div>
+                            </div>
+                        </setting>
+                        <setting id="ai_purchase_usage" string="Consumo"
+                                 help="Cada llamada al modelo queda registrada con sus tokens y su costo.">
+                            <button name="%(dromax_asistente_compras.action_ai_usage_log)d" type="action"
+                                    string="Ver consumo de IA" icon="oi-arrow-right" class="btn-link"/>
+                        </setting>
+                    </block>
+                    <block title="Consultas a la base de datos" name="ai_purchase_sql">
+                        <setting id="ai_purchase_sql_limits" string="Límites"
+                                 help="Tope de filas que se envían al modelo por consulta y tiempo máximo de cada consulta.">
+                            <div class="content-group">
+                                <div class="row mt8">
+                                    <label for="ai_purchase_sql_max_rows" class="col-lg-6 o_light_label"/>
+                                    <field name="ai_purchase_sql_max_rows" class="col-lg-3"/>
+                                </div>
+                                <div class="row">
+                                    <label for="ai_purchase_sql_timeout_seconds" class="col-lg-6 o_light_label"/>
+                                    <field name="ai_purchase_sql_timeout_seconds" class="col-lg-3"/>
+                                </div>
+                            </div>
+                        </setting>
+                    </block>
+                </app>
+            </xpath>
+        </field>
+    </record>
+
+    <record id="action_ai_purchase_settings" model="ir.actions.act_window">
+        <field name="name">Ajustes</field>
+        <field name="res_model">res.config.settings</field>
+        <field name="view_mode">form</field>
+        <field name="target">inline</field>
+        <field name="context">{'module': 'dromax_asistente_compras', 'bin_size': False}</field>
+    </record>
+
+</odoo>

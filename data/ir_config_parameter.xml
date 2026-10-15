@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Valores iniciales de los niveles de modelo. noupdate: lo que se cambie
+         en Ajustes no lo pisa una actualización del módulo. -->
+    <data noupdate="1">
+        <record id="param_model_basic" model="ir.config_parameter">
+            <field name="key">dromax_asistente_compras.model_basic</field>
+            <field name="value">deepseek/deepseek-v4-flash</field>
+        </record>
+        <record id="param_model_medium" model="ir.config_parameter">
+            <field name="key">dromax_asistente_compras.model_medium</field>
+            <field name="value">google/gemini-3.8-flash</field>
+        </record>
+        <record id="param_model_advanced" model="ir.config_parameter">
+            <field name="key">dromax_asistente_compras.model_advanced</field>
+            <field name="value">anthropic/claude-opus-5.5</field>
+        </record>
+    </data>
+</odoo>

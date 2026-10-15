@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <menuitem id="menu_ai_purchase_root" name="Compras IA" sequence="26"
+              web_icon="dromax_asistente_compras,static/description/icon.png"
+              groups="dromax_asistente_compras.group_ai_purchase_user,base.group_system"/>
+
+    <menuitem id="menu_ai_purchase_config" name="Configuración" parent="menu_ai_purchase_root"
+              sequence="100" groups="base.group_system"/>
+    <menuitem id="menu_ai_purchase_settings" name="Ajustes" parent="menu_ai_purchase_config"
+              action="action_ai_purchase_settings" sequence="10"/>
+    <menuitem id="menu_ai_usage_log" name="Consumo de IA" parent="menu_ai_purchase_config"
+              action="action_ai_usage_log" sequence="20"/>
+
+</odoo>
