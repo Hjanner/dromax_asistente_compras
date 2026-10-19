@@ -4,6 +4,7 @@ from odoo.exceptions import UserError
 
 from ..services import openrouter
 from ..services.config import PARAM_PREFIX
+from ..services import prompt
 from ..services.readonly_sql import DEFAULT_MAX_ROWS, DEFAULT_TIMEOUT_SECONDS
 
 
@@ -28,6 +29,16 @@ class ResConfigSettings(models.TransientModel):
     ai_purchase_sql_timeout_seconds = fields.Integer(
         "Tiempo máximo por consulta (s)", config_parameter=PARAM_PREFIX + "sql_timeout_seconds",
         default=DEFAULT_TIMEOUT_SECONDS)
+
+    ai_purchase_rotation_window_weeks = fields.Integer(
+        "Semanas de historial", config_parameter=PARAM_PREFIX + "rotation_window_weeks",
+        default=prompt.DEFAULT_WINDOW_WEEKS)
+    ai_purchase_outlier_mad_factor = fields.Integer(
+        "Umbral de atípicos (× MAD)", config_parameter=PARAM_PREFIX + "outlier_mad_factor",
+        default=prompt.DEFAULT_OUTLIER_MAD)
+    ai_purchase_coverage_weeks = fields.Integer(
+        "Semanas de cobertura", config_parameter=PARAM_PREFIX + "coverage_weeks",
+        default=prompt.DEFAULT_COVERAGE_WEEKS)
 
     def action_ai_purchase_test_openrouter(self):
         """Comprueba la llave guardada y muestra su tope de crédito y consumo."""

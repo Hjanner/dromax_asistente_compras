@@ -1,0 +1,204 @@
+# -*- coding: utf-8 -*-
+"""Esquema que se le explica al modelo en el system prompt.
+
+No se vuelcan todas las columnas (sale_order_line tiene más de cien y gastaría
+tokens en cada llamada): solo las útiles para compras, con lo que significan.
+Antes de enviarlo se filtra contra las columnas que existen de verdad en la
+base (`existing_schema`), así el prompt no promete columnas que no están: la
+base multisucursal de producción puede diferir de la de desarrollo.
+"""
+
+# tabla -> (descripción, [(columna, descripción), ...])
+CATALOG = {
+    "res_company": (
+        "Empresas. Cada farmacia es una sucursal: una empresa hija (parent_id) de la principal.",
+        [
+            ("id", ""),
+            ("name", "nombre de la empresa o sucursal"),
+            ("parent_id", "empresa principal (NULL en la principal)"),
+            ("active", ""),
+        ],
+    ),
+    "pos_order": (
+        "Ventas del punto de venta (TPV): ~90 % de las ventas, a clientes particulares.",
+        [
+            ("id", ""),
+            ("name", "número de ticket"),
+            ("date_order", "fecha y hora de la venta (UTC)"),
+            ("state", "paid, done o invoiced = venta efectiva; draft y cancel no cuentan"),
+            ("company_id", "sucursal"),
+            ("config_id", "caja (punto de venta)"),
+            ("amount_total", "total con impuestos"),
+        ],
+    ),
+    "pos_order_line": (
+        "Líneas de las ventas del TPV.",
+        [
+            ("order_id", "pos_order.id"),
+            ("product_id", "product_product.id"),
+            ("qty", "unidades vendidas (negativas en devoluciones)"),
+            ("price_unit", "precio unitario"),
+            ("discount", "descuento en %"),
+            ("price_subtotal", "subtotal sin impuestos"),
+            ("company_id", "sucursal"),
+        ],
+    ),
+    "sale_order": (
+        "Pedidos de venta: clientes especiales (alcaldía, personal de la empresa...), "
+        "a menudo con descuentos o volúmenes atípicos.",
+        [
+            ("id", ""),
+            ("name", "número de pedido"),
+            ("date_order", "fecha del pedido (UTC)"),
+            ("state", "sale = confirmado; draft, sent y cancel no son ventas"),
+            ("company_id", "sucursal"),
+            ("warehouse_id", "almacén que despacha"),
+            ("amount_total", "total con impuestos"),
+        ],
+    ),
+    "sale_order_line": (
+        "Líneas de los pedidos de venta.",
+        [
+            ("order_id", "sale_order.id"),
+            ("product_id", "product_product.id"),
+            ("product_uom_qty", "cantidad pedida"),
+            ("qty_delivered", "cantidad entregada"),
+            ("price_unit", "precio unitario"),
+            ("discount", "descuento en %"),
+            ("price_subtotal", "subtotal sin impuestos"),
+            ("state", "estado del pedido (copiado de sale_order)"),
+            ("company_id", "sucursal"),
+        ],
+    ),
+    "purchase_order": (
+        "Órdenes de compra a droguerías.",
+        [
+            ("id", ""),
+            ("name", "número de orden"),
+            ("partner_id", "droguería (id del contacto)"),
+            ("date_order", "fecha de la orden (UTC)"),
+            ("date_planned", "fecha prevista de llegada"),
+            ("state", "purchase o done = confirmada; draft, sent, to approve y cancel no comprometen compra"),
+            ("company_id", "sucursal"),
+            ("amount_total", "total con impuestos"),
+        ],
+    ),
+    "purchase_order_line": (
+        "Líneas de las órdenes de compra. Pendiente de recibir = product_qty - qty_received "
+        "en líneas con state IN ('purchase', 'done').",
+        [
+            ("order_id", "purchase_order.id"),
+            ("product_id", "product_product.id"),
+            ("partner_id", "droguería"),
+            ("product_qty", "cantidad pedida"),
+            ("qty_received", "cantidad ya recibida"),
+            ("price_unit", "precio unitario de compra"),
+            ("discount", "descuento en %"),
+            ("date_planned", "fecha prevista de llegada"),
+            ("state", "estado de la orden (copiado de purchase_order)"),
+            ("company_id", "sucursal"),
+        ],
+    ),
+    "stock_quant": (
+        "Existencias por producto y ubicación. Solo cuentan las ubicaciones internas "
+        "(stock_location.usage = 'internal').",
+        [
+            ("product_id", "product_product.id"),
+            ("location_id", "stock_location.id"),
+            ("quantity", "unidades en existencia"),
+            ("reserved_quantity", "unidades reservadas para salidas"),
+            ("company_id", "sucursal"),
+        ],
+    ),
+    "stock_location": (
+        "Ubicaciones de inventario.",
+        [
+            ("id", ""),
+            ("complete_name", "ruta completa, p. ej. FARM1/Existencias"),
+            ("usage", "internal = stock propio; customer, supplier, inventory... no son stock"),
+            ("warehouse_id", "almacén al que pertenece"),
+            ("company_id", "sucursal"),
+        ],
+    ),
+    "stock_warehouse": (
+        "Almacenes.",
+        [
+            ("id", ""),
+            ("name", ""),
+            ("code", "código corto"),
+            ("company_id", "sucursal"),
+            ("lot_stock_id", "ubicación principal de existencias"),
+        ],
+    ),
+    "product_product": (
+        "Variantes de producto: lo que se vende, se compra y se almacena (product_id en el resto de tablas).",
+        [
+            ("id", ""),
+            ("product_tmpl_id", "product_template.id"),
+            ("default_code", "código interno"),
+            ("barcode", "código de barras"),
+            ("active", "FALSE = archivado"),
+        ],
+    ),
+    "product_template": (
+        "Fichas de producto.",
+        [
+            ("id", ""),
+            ("name", "JSONB con traducciones: usa name->>'es_VE' con respaldo en name->>'en_US'"),
+            ("default_code", "código interno"),
+            ("categ_id", "product_category.id"),
+            ("detailed_type", "product = almacenable; consu y service no llevan stock"),
+            ("list_price", "precio de venta"),
+            ("sale_ok", "se puede vender"),
+            ("purchase_ok", "se puede comprar"),
+            ("uom_id", "unidad de venta (uom_uom.id)"),
+            ("uom_po_id", "unidad de compra (uom_uom.id)"),
+            ("active", "FALSE = archivado"),
+        ],
+    ),
+    "product_category": (
+        "Categorías de producto.",
+        [
+            ("id", ""),
+            ("complete_name", "ruta completa de la categoría"),
+            ("parent_id", "categoría padre"),
+        ],
+    ),
+    "uom_uom": (
+        "Unidades de medida.",
+        [
+            ("id", ""),
+            ("name", "JSONB con traducciones, como product_template.name"),
+            ("factor", "factor respecto a la unidad de referencia de su categoría"),
+        ],
+    ),
+}
+
+
+def existing_schema(cr, tables):
+    """Catálogo recortado a las tablas de `tables` y a las columnas que existen.
+
+    Devuelve [(tabla, descripción, [(columna, descripción), ...]), ...].
+    Las tablas permitidas que no están en el catálogo (p. ej. las vistas ai_v_*
+    cuando existan) se listan con todas sus columnas reales.
+    """
+    tables = sorted(tables)
+    cr.execute("""
+        SELECT table_name, array_agg(column_name::text ORDER BY ordinal_position)
+          FROM information_schema.columns
+         WHERE table_schema = 'public' AND table_name = ANY(%s)
+         GROUP BY table_name
+    """, (tables,))
+    real = dict(cr.fetchall())
+    result = []
+    for table in tables:
+        if table not in real:
+            continue  # aún no existe en esta base (vistas futuras, TPV sin instalar...)
+        columns = set(real[table])
+        if table in CATALOG:
+            desc, cols = CATALOG[table]
+            cols = [(c, d) for c, d in cols if c in columns]
+        else:
+            desc, cols = "", [(c, "") for c in real[table]]
+        result.append((table, desc, cols))
+    return result

@@ -37,6 +37,8 @@ DEFAULT_WHITELIST = frozenset({
     "stock_quant", "stock_location", "stock_warehouse",
     # Productos
     "product_product", "product_template", "product_category", "uom_uom",
+    # Empresas: cada farmacia es una sucursal (empresa hija). Sin datos de clientes.
+    "res_company",
 })
 
 # Palabras que no tienen cabida en una consulta de lectura. Se comparan como

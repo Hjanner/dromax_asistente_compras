@@ -35,7 +35,8 @@ BEGIN
         'sale_order', 'sale_order_line', 'pos_order', 'pos_order_line',
         'purchase_order', 'purchase_order_line',
         'stock_quant', 'stock_location', 'stock_warehouse',
-        'product_product', 'product_template', 'product_category', 'uom_uom'
+        'product_product', 'product_template', 'product_category', 'uom_uom',
+        'res_company'
     ] LOOP
         IF to_regclass('public.' || quote_ident(t)) IS NOT NULL THEN
             EXECUTE format('GRANT SELECT ON public.%I TO dromax_ai_ro', t);

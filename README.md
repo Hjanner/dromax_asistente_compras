@@ -50,6 +50,29 @@ psql -d <base> -v ro_password='<clave>' -f scripts/create_readonly_role.sql
 
 Se puede volver a ejecutar cuando se añadan tablas o vistas a la lista blanca.
 
+## Chat del agente
+
+Menú **Compras IA → Chat** (grupo *Asistente de Compras IA / Usuario*).
+
+- Preguntas predefinidas (`services/presets.py`), cada una con su nivel de
+  modelo: *Arma la compra de esta semana* (avanzado), *Productos por
+  agotarse*, *Más vendidos de las últimas 4 semanas*, *Compras pendientes de
+  recibir* y *Stock sin rotación*. También se puede escribir libremente
+  eligiendo el nivel.
+- El agente (`services/agent.py`) llama a OpenRouter con la herramienta
+  `run_readonly_sql` hasta tener respuesta (tope `agent_max_steps`, 8 por
+  defecto). Bajo cada respuesta se ven el modelo, el costo, la duración y las
+  consultas SQL que hizo.
+- El system prompt (`services/prompt.py`) lleva el contexto del negocio, las
+  reglas contra el sobre-stock y el esquema de las tablas permitidas, filtrado
+  contra las columnas que existen en la base (`services/schema_catalog.py`).
+- Las conversaciones (`ai.purchase.chat.session` / `.message`) son privadas:
+  cada comprador ve solo las suyas.
+
+Los parámetros del cálculo (semanas de historial, umbral de atípicos en MAD y
+semanas de cobertura) se cambian en Ajustes; los valores iniciales (8, 3 y 1)
+son provisionales hasta hablar con el encargado de compras.
+
 ## OpenRouter: niveles de modelo y consumo
 
 Una sola llave y tres niveles, configurables en **Ajustes → Asistente de

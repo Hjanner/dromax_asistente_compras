@@ -53,3 +53,59 @@ class TestUi(HttpCase):
     def test_usage_log_graph(self):
         self._open("action=dromax_asistente_compras.action_ai_usage_log&view_type=graph",
                    ".o_graph_renderer canvas")
+
+
+CHAT_FLOW = """
+const until = (sel, text) => new Promise((resolve, reject) => {
+    let n = 0;
+    const t = setInterval(() => {
+        const el = [...document.querySelectorAll(sel)].find(e => !text || e.textContent.includes(text));
+        if (el) { clearInterval(t); resolve(el); }
+        else if (++n > 150) { clearInterval(t); reject(new Error("No apareció " + sel + " " + (text || ""))); }
+    }, 100);
+});
+(async () => {
+    try {
+        await until(".o_ai_preset[data-preset='compra_semana']");
+        const input = await until(".o_ai_input");
+        input.value = "¿Cuántos productos hay?";
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        await until(".o_ai_send:not([disabled])");
+        document.querySelector(".o_ai_send").click();
+        await until(".o_ai_msg_assistant td", "Kilometraje");
+        await until(".o_ai_session", "¿Cuántos productos hay?");
+        document.querySelector(".o_ai_trace_toggle").click();
+        await until(".o_ai_trace pre", "SELECT");
+        console.log("test successful");
+    } catch (e) {
+        console.error(e.message);
+    }
+})();
+"""
+
+
+@tagged("post_install", "-at_install", "dromax_asistente_compras")
+class TestChatUi(HttpCase):
+    """Conversación completa en el navegador, con OpenRouter y la herramienta
+    simulados en el servidor."""
+
+    def test_chat_flow(self):
+        from unittest.mock import patch
+
+        from ..services import agent as agent_mod
+        from ..services import openrouter
+        from .test_chat import ScriptedTransport, text_response, tool_call_response
+
+        new_test_user(self.env, login="ai_chat_ui_buyer",
+                      groups="base.group_user,dromax_asistente_compras.group_ai_purchase_user")
+        self.env["ir.config_parameter"].sudo().set_param(
+            "dromax_asistente_compras.openrouter_api_key", "sk-or-test")
+        transport = ScriptedTransport(
+            tool_call_response("SELECT name FROM product_template"),
+            text_response("| Producto | Unidades |\n|---|---|\n| Kilometraje | 3 |"))
+        fake_tool = lambda env, name, args: {"columns": ["name"], "rows": [["Kilometraje"]],
+                                             "row_count": 1, "truncated": False, "elapsed_ms": 2}
+        with patch.object(openrouter, "Transport", lambda: transport), \
+                patch.object(agent_mod, "call_tool", fake_tool):
+            self.browser_js("/web#action=dromax_asistente_compras.action_ai_purchase_chat",
+                            CHAT_FLOW, login="ai_chat_ui_buyer")

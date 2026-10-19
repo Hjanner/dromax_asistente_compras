@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="dromax_asistente_compras.AiPurchaseChat">
+        <div class="o_ai_purchase_chat d-flex h-100">
+
+            <!-- Conversaciones -->
+            <aside class="o_ai_sidebar d-flex flex-column border-end">
+                <div class="p-2">
+                    <button class="btn btn-primary w-100 o_ai_new" t-on-click="newSession"
+                            t-att-disabled="state.loading">
+                        <i class="fa fa-plus me-1"/> Nueva conversación
+                    </button>
+                </div>
+                <div class="o_ai_sessions flex-grow-1 overflow-auto">
+                    <t t-foreach="state.sessions" t-as="session" t-key="session.id">
+                        <div class="o_ai_session d-flex align-items-center px-3 py-2"
+                             t-att-class="{'active': session.id === state.activeId}"
+                             t-on-click="() => this.selectSession(session.id)">
+                            <span class="flex-grow-1 text-truncate" t-esc="session.name"/>
+                            <i class="fa fa-trash-o o_ai_session_delete ms-2" title="Eliminar"
+                               t-on-click="(ev) => this.deleteSession(session.id, ev)"/>
+                        </div>
+                    </t>
+                </div>
+            </aside>
+
+            <!-- Hilo -->
+            <main class="d-flex flex-column flex-grow-1 o_ai_main">
+                <header class="d-flex align-items-center gap-2 px-3 py-2 border-bottom">
+                    <h5 class="m-0 flex-grow-1 text-truncate"
+                        t-esc="activeSession ? activeSession.name : 'Asistente de Compras IA'"/>
+                </header>
+
+                <div class="o_ai_thread flex-grow-1 overflow-auto px-3 py-3" t-ref="thread">
+                    <div t-if="!state.messages.length and !state.loading" class="o_ai_welcome text-center">
+                        <h4>¿Qué quieres revisar hoy?</h4>
+                        <p class="text-muted">Elige una pregunta frecuente o escribe la tuya.</p>
+                        <div class="o_ai_presets d-flex flex-wrap justify-content-center gap-2">
+                            <t t-foreach="state.presets" t-as="preset" t-key="preset.key">
+                                <button class="btn btn-outline-primary o_ai_preset"
+                                        t-att-data-preset="preset.key"
+                                        t-on-click="() => this.send({ preset: preset.key })">
+                                    <span t-esc="preset.label"/>
+                                    <small class="d-block text-muted" t-esc="levelLabel(preset.level)"/>
+                                </button>
+                            </t>
+                        </div>
+                    </div>
+
+                    <t t-foreach="state.messages" t-as="msg" t-key="msg.id">
+                        <div t-if="msg.role === 'user'" class="o_ai_msg o_ai_msg_user">
+                            <div class="o_ai_bubble">
+                                <t t-if="msg.preset_label"><i class="fa fa-bolt me-1"/><t t-esc="msg.preset_label"/></t>
+                                <t t-else="" t-esc="msg.content"/>
+                            </div>
+                        </div>
+                        <div t-else="" class="o_ai_msg o_ai_msg_assistant"
+                             t-att-class="{'o_ai_msg_error': msg.state === 'error'}">
+                            <div class="o_ai_bubble">
+                                <div class="o_ai_content" t-out="renderMarkdown(msg.content)"/>
+                                <div class="o_ai_meta text-muted small mt-2">
+                                    <span t-if="msg.level" t-esc="levelLabel(msg.level)"/>
+                                    <span t-if="msg.model"> · <t t-esc="msg.model"/></span>
+                                    <span> · <t t-esc="formatCost(msg.cost)"/></span>
+                                    <span> · <t t-esc="formatDuration(msg.duration_ms)"/></span>
+                                    <a t-if="msg.tool_trace.length" href="#" class="ms-2 o_ai_trace_toggle"
+                                       t-on-click.prevent="() => this.toggleTrace(msg.id)">
+                                        <i class="fa fa-database me-1"/>
+                                        <t t-esc="msg.tool_trace.length"/> consulta(s)
+                                    </a>
+                                </div>
+                                <div t-if="state.openTraces[msg.id]" class="o_ai_trace mt-2">
+                                    <t t-foreach="msg.tool_trace" t-as="step" t-key="step_index">
+                                        <div class="o_ai_trace_step mb-2">
+                                            <pre class="mb-1" t-esc="step.query"/>
+                                            <div class="small">
+                                                <span t-if="step.error" class="text-danger" t-esc="step.error"/>
+                                                <span t-else="" class="text-muted">
+                                                    <t t-esc="step.row_count"/> fila(s)<t t-if="step.truncated"> (recortado)</t>
+                                                    · <t t-esc="step.elapsed_ms"/> ms
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </t>
+                                </div>
+                            </div>
+                        </div>
+                    </t>
+
+                    <t t-if="state.loading">
+                        <div class="o_ai_msg o_ai_msg_user">
+                            <div class="o_ai_bubble" t-esc="state.pendingText"/>
+                        </div>
+                        <div class="o_ai_msg o_ai_msg_assistant o_ai_thinking">
+                            <div class="o_ai_bubble text-muted">
+                                <i class="fa fa-circle-o-notch fa-spin me-2"/>Analizando los datos…
+                            </div>
+                        </div>
+                    </t>
+                </div>
+
+                <!-- Preguntas frecuentes también a mano durante la conversación -->
+                <!-- Sin scroll propio: si no caben en una fila, pasan a la siguiente.
+                     Con overflow, la rueda del ratón los desplazaba fuera de la vista. -->
+                <div t-if="state.messages.length" class="o_ai_presets_bar d-flex flex-wrap gap-2 px-3 pt-2">
+                    <t t-foreach="state.presets" t-as="preset" t-key="preset.key">
+                        <button class="btn btn-sm btn-outline-secondary text-nowrap o_ai_preset"
+                                t-att-data-preset="preset.key" t-att-disabled="state.loading"
+                                t-on-click="() => this.send({ preset: preset.key })"
+                                t-esc="preset.label"/>
+                    </t>
+                </div>
+                <form class="o_ai_composer d-flex align-items-end gap-2 p-3" t-on-submit="onSubmit">
+                    <textarea class="form-control o_ai_input" rows="2" t-ref="input"
+                              placeholder="Escribe tu pregunta… (Enter envía, Mayús+Enter salto de línea)"
+                              t-model="state.input" t-on-keydown="onKeydown"
+                              t-att-disabled="state.loading"/>
+                    <div class="d-flex flex-column o_ai_level_box">
+                        <label class="text-muted small mb-1" for="o_ai_level">Nivel</label>
+                        <select id="o_ai_level" class="form-select o_ai_level" title="Nivel de modelo para las preguntas escritas"
+                                t-model="state.level" t-att-disabled="state.loading">
+                            <t t-foreach="state.levels" t-as="lvl" t-key="lvl.key">
+                                <option t-att-value="lvl.key" t-esc="lvl.label"/>
+                            </t>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary o_ai_send"
+                            t-att-disabled="state.loading or !state.input.trim()">
+                        <i class="fa fa-paper-plane"/>
+                    </button>
+                </form>
+            </main>
+        </div>
+    </t>
+
+</templates>

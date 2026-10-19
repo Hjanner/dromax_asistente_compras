@@ -5,6 +5,10 @@
               web_icon="dromax_asistente_compras,static/description/icon.png"
               groups="dromax_asistente_compras.group_ai_purchase_user,base.group_system"/>
 
+    <menuitem id="menu_ai_purchase_chat" name="Chat" parent="menu_ai_purchase_root"
+              action="action_ai_purchase_chat" sequence="10"
+              groups="dromax_asistente_compras.group_ai_purchase_user"/>
+
     <menuitem id="menu_ai_purchase_config" name="Configuración" parent="menu_ai_purchase_root"
               sequence="100" groups="base.group_system"/>
     <menuitem id="menu_ai_purchase_settings" name="Ajustes" parent="menu_ai_purchase_config"

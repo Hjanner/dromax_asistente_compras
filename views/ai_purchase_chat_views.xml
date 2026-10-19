@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="action_ai_purchase_chat" model="ir.actions.client">
+        <field name="name">Asistente de Compras IA</field>
+        <field name="tag">dromax_ai_purchase_chat</field>
+    </record>
+
+</odoo>
