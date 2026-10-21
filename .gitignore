@@ -12,3 +12,6 @@ __pycache__/
 .idea/
 *.swp
 .DS_Store
+
+# Archivos de inventario descargados de las droguerías (datos de proveedores)
+inventarios/

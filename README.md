@@ -4,6 +4,8 @@ Módulo de Odoo 17 que arma, en un chat, una propuesta de compra semanal por
 laboratorio y, con el visto bueno del comprador, la convierte en solicitudes de
 presupuesto (`purchase.order`) en borrador.
 
+El avance, las decisiones y lo pendiente están en [ESTADO.md](ESTADO.md).
+
 ## Principios
 
 - **Reactivo, no autónomo**: el comprador dispara el análisis con preguntas
