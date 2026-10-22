@@ -50,6 +50,21 @@ PRESETS = [
         ),
     },
     {
+        "key": "comparar_droguerias",
+        "label": "Compara precios entre droguerías",
+        "level": "medium",
+        "task": "supplier_comparison",
+        "prompt": (
+            "Compara la oferta vigente de las droguerías: de los productos disponibles "
+            "en más de una droguería, muestra los 20 con mayor ahorro porcentual del mejor "
+            "precio final frente al segundo, con la droguería más barata, su descuento, su "
+            "stock, el vencimiento del lote y si el producto está en nuestro catálogo. "
+            "Deja fuera los casos en que el segundo precio supera el triple del mejor "
+            "(probable presentación distinta) y di solo cuántos son. Al final, di cuántos "
+            "de nuestros productos aparecen en la oferta y cuántos no."
+        ),
+    },
+    {
         "key": "sin_rotacion",
         "label": "Stock sin rotación",
         "level": "medium",

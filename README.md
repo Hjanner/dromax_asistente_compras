@@ -51,6 +51,27 @@ psql -d <base> -v ro_password='<clave>' -f scripts/create_readonly_role.sql
 ```
 
 Se puede volver a ejecutar cuando se añadan tablas o vistas a la lista blanca.
+Las vistas `ai_v_*` del módulo no lo necesitan: se recrean al actualizar el
+módulo y su `init()` vuelve a dar el permiso al rol configurado en `ro_user`.
+
+## Oferta de droguerías (`ai_v_oferta`)
+
+La oferta llega del módulo FTP (`advanced_interbranch_transfer`, dependencia
+del módulo): una fila de `supplier.product.staging` por producto y droguería.
+La vista `ai_v_oferta` (menú *Compras IA → Oferta por producto*) la une a los
+productos propios por **código de barras normalizado** y añade la comparación
+entre droguerías: cada una entra con su mejor oferta disponible (con stock),
+aunque traiga varios lotes; `orden_precio` es su puesto (1 = la más barata) y
+cada fila lleva el mejor precio, el de la segunda droguería y cuántas tienen
+el código disponible. El costo que cuenta es el
+precio final, que ya trae todos los descuentos.
+
+La normalización (`services/barcode.py`) deja todo como EAN-13: quita lo que
+no sean dígitos, rellena con ceros los UPC-A de 12 dígitos y los EAN-8, y
+convierte los GTIN-14 con indicador de empaque (INTERCONTINENTAL) al artículo,
+recalculando el dígito de control. Se guarda en `ai_barcode_norm`, tanto en
+`product.product` como en la oferta. Si dos productos propios comparten
+código normalizado, la vista toma el más antiguo.
 
 ## Chat del agente
 
@@ -59,7 +80,7 @@ Menú **Compras IA → Chat** (grupo *Asistente de Compras IA / Usuario*).
 - Preguntas predefinidas (`services/presets.py`), cada una con su nivel de
   modelo: *Arma la compra de esta semana* (avanzado), *Productos por
   agotarse*, *Más vendidos de las últimas 4 semanas*, *Compras pendientes de
-  recibir* y *Stock sin rotación*. También se puede escribir libremente
+  recibir*, *Compara precios entre droguerías* y *Stock sin rotación*. También se puede escribir libremente
   eligiendo el nivel.
 - El agente (`services/agent.py`) llama a OpenRouter con la herramienta
   `run_readonly_sql` hasta tener respuesta (tope `agent_max_steps`, 8 por

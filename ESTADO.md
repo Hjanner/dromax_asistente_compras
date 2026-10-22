@@ -1,6 +1,6 @@
 # Estado del proyecto
 
-Última actualización: 2026-10-21. Qué está hecho, qué decidimos y qué falta.
+Última actualización: 2026-10-22. Qué está hecho, qué decidimos y qué falta.
 El README explica cómo funciona lo que ya existe.
 
 ## Hecho
@@ -23,6 +23,46 @@ El README explica cómo funciona lo que ya existe.
   - host, usuario y clave FTP visibles solo para administradores. Los botones
     los leen con `sudo()`, así que cualquier usuario interno puede probar la
     conexión y descargar.
+- **Carga de inventarios robusta** (módulo FTP, commit `60d4970`, 2026-10-22):
+  - tarea programada *Inventarios FTP de droguerías* cada 30 min, **instalada
+    desactivada** (se activa a mano, porque se conecta a los FTP reales);
+  - no reemplaza la oferta si el archivo viene vacío o trae menos del 50 % de
+    los productos cargados (`advanced_interbranch_transfer.ftp_min_rows_ratio`);
+    botón *Cargar de todas formas* para un recorte real;
+  - resultado de la última carga en el contacto; las líneas malas se
+    descartan y se informan, sin abortar la carga;
+  - formato por droguería: archivo, codificación, separador y mapa de columnas;
+  - oferta con laboratorio, descuento original (`15+0+0+7`) y datos extra;
+  - lista *Inventario → Productos → Oferta de droguerías* (reemplaza la
+    acción manual 706, ya borrada) y botón inteligente en el contacto;
+  - 17 tests en el módulo FTP (2 de navegador).
+
+- **Oferta en el agente** (versión `17.0.0.5.0`, 58 tests, 2026-10-22):
+  - `services/barcode.py`: código normalizado a EAN-13 (UPC-A y EAN-8 con
+    ceros, GTIN-14 → artículo con nuevo dígito de control), guardado en
+    `ai_barcode_norm` de `product.product` y de la oferta, más la fecha de
+    vencimiento del lote como fecha;
+  - vista `ai_v_oferta` (menú *Oferta por producto*): oferta × producto propio
+    con la comparación entre droguerías (cada una con su mejor oferta
+    disponible aunque traiga varios lotes): puesto, mejor precio, segundo
+    precio y droguerías con stock; `init()` da SELECT al rol `dromax_ai_ro`
+    cada vez que se recrea la vista;
+  - la herramienta solo anuncia al modelo las tablas de la lista blanca que
+    existen (antes listaba también las vistas `ai_v_*` futuras);
+  - en el prompt (catálogo, reglas y consejos de SQL) y la pregunta
+    predefinida *Compara precios entre droguerías*;
+  - el módulo ahora depende de `advanced_interbranch_transfer`.
+  - Con la oferta real: la normalización sube de 3251 a 3626 los códigos
+    comunes entre INSUAMINCA y VITALCLINIC; 2012 códigos están en las tres
+    droguerías y 2626 en dos. En `DROMAX_AI_DEV` ningún producto propio casa
+    (solo hay 11, sin esos códigos): el cruce real se verá con la base de Daniel.
+
+- **Agente sin respuesta al agotar las consultas** (2026-10-22): Gemini vía
+  OpenRouter ignora `tool_choice: "none"` y seguía pidiendo consultas, así que
+  la respuesta final salía vacía. Ahora la última llamada va sin herramientas,
+  con las consultas del turno en texto; el prompt dice el tope de consultas y
+  la penúltima avisa que queda una. Probado en vivo con `comprador.prueba`
+  (*Compara precios entre droguerías*: ~7 consultas, ~0,04 USD, < 1 min).
 
 ## Decisiones
 
@@ -54,21 +94,27 @@ descuento, precio final y stock.
 En los tres casos, precio final = precio × Π(1 − descuento). En VITALCLINIC
 entran en el producto los descuentos de las columnas 6, 10 y 11.
 
+Mapa de columnas configurado en `DROMAX_AI_DEV` (pestaña *Configuración FTP*;
+`BASE` = `codigo,barras,descripcion,lote,precio,descuento,precio_final,stock`):
+
+| Droguería | Codificación | Columnas |
+|---|---|---|
+| INTERCONTINENTAL (70) | Latin-1 | `BASE,laboratorio` |
+| INSUAMINCA (71) | UTF-8 | `BASE,laboratorio,extra` |
+| VITALCLINIC (69) | UTF-8 | `BASE,extra,descuento,descuento` |
+
+Comprobado con los archivos descargados: cero líneas descartadas y precio ×
+descuentos encadenados = precio final en todas las filas.
+
 ## Siguiente
 
-1. **Carga de inventarios robusta** (módulo FTP):
-   - cron automático (el diseño habla de cada 30 min);
-   - cifrar las claves FTP;
-   - guardar el laboratorio y el descuento original en texto;
-   - formato configurable por droguería (codificación y mapa de columnas);
-   - no borrar el inventario anterior si el archivo nuevo viene vacío o
-     muy recortado.
-2. **Inventarios en el agente:**
-   - normalizar los códigos de barras (GTIN-14 → EAN-13, ceros a la
-     izquierda);
-   - vista `ai_v_oferta` (oferta de droguerías × productos) y añadirla a la
-     lista blanca y al script del rol;
-   - reporte `ai.barcode.mismatch` (`pg_trgm` 1.6 disponible).
+1. **Cifrar las claves FTP** (falta decidir dónde vive la llave; hablarlo
+   con Daniel).
+2. **Reporte `ai.barcode.mismatch`** (`pg_trgm` 1.6 disponible), sobre
+   `ai_barcode_norm`. Incluir el caso «mismo código, otra presentación»: ~120
+   códigos con un precio más del triple que en otra droguería (p. ej.
+   INSUAMINCA vende «X 10 TAB CAJA X 30 BLISTER» con el código de la caja
+   de un blíster). Hoy solo lo maneja el prompt.
 3. **Con la base multisucursal de Daniel:**
    - vistas `ai_v_rotacion`, `ai_v_stock`, `ai_v_pendiente` y `ai_v_faltantes`
      por sucursal;
@@ -88,7 +134,8 @@ entran en el producto los descuentos de las columnas 6, 10 y 11.
 
 ## Pendiente fuera del repo
 
-- En la base local hay una acción manual (`action=706`) con la lista de
-  `supplier.product.staging`. Hay que reemplazarla por una vista del módulo.
+- Entregar a Daniel el `.zip` del módulo FTP cuando lo pida (ver CLAUDE.md).
+- Usuario de prueba sin permisos de administración en `DROMAX_AI_DEV`:
+  `comprador.prueba` (id 83; Compras, Inventario y Asistente de Compras IA).
 - Contactos de droguerías en `DROMAX_AI_DEV`: VITALCLINIC (69),
   INTERCONTINENTAL (70) e INSUAMINCA (71).

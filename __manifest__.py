@@ -19,7 +19,7 @@ rol de solo lectura. La única escritura es la orden de compra en borrador.
     """,
     'author': "Hjanner",
     'category': 'Inventory/Purchase',
-    'version': '17.0.0.4.0',
+    'version': '17.0.0.5.0',
     'license': 'LGPL-3',
     'application': True,
     'installable': True,
@@ -27,6 +27,8 @@ rol de solo lectura. La única escritura es la orden de compra en borrador.
         'base',
         'purchase',
         'stock',
+        # Oferta de las droguerías (tabla supplier_product_staging) cargada por FTP.
+        'advanced_interbranch_transfer',
     ],
     'data': [
         'security/ai_purchase_groups.xml',
@@ -36,6 +38,7 @@ rol de solo lectura. La única escritura es la orden de compra en borrador.
         'views/ai_usage_log_views.xml',
         'views/res_config_settings_views.xml',
         'views/ai_purchase_chat_views.xml',
+        'views/ai_v_oferta_views.xml',
         'views/menus.xml',
     ],
     'assets': {

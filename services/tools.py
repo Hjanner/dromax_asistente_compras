@@ -49,10 +49,24 @@ _IMPLEMENTATIONS = {
 }
 
 
+def _existing_relations(env, names):
+    """Las de `names` que existen en el esquema public (tablas o vistas)."""
+    env.cr.execute("""
+        SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+         WHERE n.nspname = 'public' AND c.relname = ANY(%s)
+    """, (list(names),))
+    return {row[0] for row in env.cr.fetchall()}
+
+
 def tool_definitions(env):
-    """Definiciones para enviar al modelo, con la lista blanca vigente."""
+    """Definiciones para enviar al modelo, con la lista blanca vigente.
+
+    Solo anuncia las tablas que existen en esta base: las vistas ai_v_* que
+    aún no se crearon le harían gastar consultas en errores.
+    """
     spec = {**RUN_READONLY_SQL, "function": dict(RUN_READONLY_SQL["function"])}
-    spec["function"]["description"] += " Tablas permitidas: %s." % ", ".join(sorted(get_whitelist(env)))
+    tables = _existing_relations(env, get_whitelist(env))
+    spec["function"]["description"] += " Tablas permitidas: %s." % ", ".join(sorted(tables))
     return [spec]
 
 

@@ -39,6 +39,13 @@ class TestReadonlySql(TransactionCase):
         self.assertIsInstance(res["rows"][0][0], int)
         self.assertFalse(res["truncated"])
 
+    def test_offer_view(self):
+        # La vista se recrea al actualizar el módulo; init() vuelve a darle
+        # permiso al rol (si no, Postgres respondería "permiso denegado").
+        res = run_readonly_sql(
+            self.env, "SELECT count(*) AS n, count(product_id) AS con_producto FROM ai_v_oferta")
+        self.assertEqual(res["columns"], ["n", "con_producto"])
+
     def test_truncated(self):
         res = run_readonly_sql(self.env, "SELECT g FROM generate_series(1, 50) g", max_rows=10)
         self.assertEqual(res["row_count"], 10)
@@ -105,3 +112,5 @@ class TestReadonlySql(TransactionCase):
         spec = tool_definitions(self.env)[0]["function"]
         self.assertEqual(spec["name"], "run_readonly_sql")
         self.assertIn("stock_quant", spec["description"])
+        self.assertIn("ai_v_oferta", spec["description"])
+        self.assertNotIn("ai_v_rotacion", spec["description"], "todavía no existe")

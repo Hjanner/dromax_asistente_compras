@@ -107,8 +107,35 @@ class TestChat(TransactionCase):
             tool_call_response("SELECT 1", "c1"), tool_call_response("SELECT 2", "c2"),
             text_response("Con lo consultado: ..."))
         res = run_agent(env, "pregunta", level="basic")
+        self.assertEqual(res["state"], "ok")
         self.assertEqual(res["content"], "Con lo consultado: ...")
-        self.assertEqual(transport.payloads[-1]["tool_choice"], "none")
+        # Antes de la última consulta se le avisa que no le quedan más.
+        results = [m["content"] for m in transport.payloads[1]["messages"] if m["role"] == "tool"]
+        self.assertIn("una sola consulta", results[0])
+        self.assertNotIn("una sola consulta", results[1])
+        # La última llamada va sin herramientas y con las consultas en texto.
+        final = transport.payloads[-1]
+        self.assertNotIn("tools", final)
+        self.assertNotIn("tool_choice", final)
+        roles = [m["role"] for m in final["messages"]]
+        self.assertNotIn("tool", roles)
+        self.assertEqual(roles[-3:], ["user", "assistant", "user"])
+        self.assertFalse(any(m.get("tool_calls") for m in final["messages"]))
+        summary = final["messages"][-2]["content"]
+        self.assertIn("SELECT 1", summary)
+        self.assertIn("SELECT 2", summary)
+        self.assertIn('"rows": [[11]]', summary)
+        self.assertEqual(final["messages"][-1]["content"], agent_mod.FINAL_INSTRUCTION)
+
+    def test_agent_out_of_steps_model_keeps_asking(self):
+        """El modelo pide otra consulta en vez de responder (pasó con Gemini)."""
+        env = self.env(user=self.buyer)
+        env["ir.config_parameter"].sudo().set_param(P + "agent_max_steps", "1")
+        self._transport(tool_call_response("SELECT 1", "c1"), tool_call_response("SELECT 2", "c2"))
+        res = run_agent(env, "pregunta", level="basic")
+        self.assertEqual(res["state"], "error")
+        self.assertIn("1 consultas que tiene permitidas", res["content"])
+        self.assertEqual(len(res["tool_trace"]), 1)
 
     def test_agent_openrouter_error(self):
         self._transport(OpenRouterError("OpenRouter respondió 402: sin crédito"))
@@ -132,6 +159,8 @@ class TestChat(TransactionCase):
         # Las vistas ai_v_* aún no existen: no se anuncian.
         self.assertNotIn("ai_v_rotacion", text)
         self.assertIn("últimas 8 semanas", text)
+        self.assertIn("como máximo 8 consultas", text)
+        self.assertIn("presentación distinta", text)
         self.env["ir.config_parameter"].sudo().set_param(P + "rotation_window_weeks", "12")
         self.assertIn("últimas 12 semanas", build_system_prompt(self.env))
 

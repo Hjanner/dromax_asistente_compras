@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_ai_v_oferta_tree" model="ir.ui.view">
+        <field name="name">ai.v.oferta.tree</field>
+        <field name="model">ai.v.oferta</field>
+        <field name="arch" type="xml">
+            <tree create="0" edit="0" delete="0"
+                  decoration-success="orden_precio == 1" decoration-muted="not disponible">
+                <field name="codigo_barras"/>
+                <field name="product_id" optional="show"/>
+                <field name="descripcion"/>
+                <field name="partner_id"/>
+                <field name="laboratorio" optional="show"/>
+                <field name="fecha_vencimiento" optional="show"/>
+                <field name="precio_lista" optional="hide"/>
+                <field name="descuento_pct" optional="show"/>
+                <field name="precio_final"/>
+                <field name="stock_drogueria"/>
+                <field name="orden_precio" optional="show"/>
+                <field name="mejor_precio" optional="hide"/>
+                <field name="segundo_precio" optional="show"/>
+                <field name="droguerias_con_stock" optional="show"/>
+                <field name="codigo_barras_drogueria" optional="hide"/>
+                <field name="codigo_drogueria" optional="hide"/>
+                <field name="fecha_carga" optional="hide"/>
+                <field name="disponible" column_invisible="True"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_ai_v_oferta_search" model="ir.ui.view">
+        <field name="name">ai.v.oferta.search</field>
+        <field name="model">ai.v.oferta</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="descripcion"/>
+                <field name="codigo_barras" filter_domain="['|', ('codigo_barras', 'ilike', self), ('codigo_barras_drogueria', 'ilike', self)]"/>
+                <field name="product_id"/>
+                <field name="laboratorio"/>
+                <field name="partner_id"/>
+                <filter name="disponible" string="Disponibles" domain="[('disponible', '=', True)]"/>
+                <filter name="mejor_precio" string="Mejor precio" domain="[('orden_precio', '=', 1)]"
+                        help="La droguería más barata de cada código"/>
+                <filter name="varias" string="En varias droguerías" domain="[('droguerias_con_stock', '>', 1)]"/>
+                <separator/>
+                <filter name="con_producto" string="Con producto propio" domain="[('product_id', '!=', False)]"/>
+                <filter name="sin_producto" string="Sin producto propio" domain="[('product_id', '=', False)]"/>
+                <separator/>
+                <filter name="vence_pronto" string="Vence en menos de 6 meses"
+                        domain="[('fecha_vencimiento', '&lt;', (context_today() + relativedelta(months=6)).strftime('%Y-%m-%d'))]"/>
+                <group expand="0" string="Agrupar por">
+                    <filter name="group_codigo" string="Código de barras" context="{'group_by': 'codigo_barras'}"/>
+                    <filter name="group_producto" string="Producto propio" context="{'group_by': 'product_id'}"/>
+                    <filter name="group_partner" string="Droguería" context="{'group_by': 'partner_id'}"/>
+                    <filter name="group_laboratorio" string="Laboratorio" context="{'group_by': 'laboratorio'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_ai_v_oferta" model="ir.actions.act_window">
+        <field name="name">Oferta por producto</field>
+        <field name="res_model">ai.v.oferta</field>
+        <field name="view_mode">tree</field>
+        <field name="search_view_id" ref="view_ai_v_oferta_search"/>
+        <field name="context">{'search_default_disponible': 1}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_empty_folder">No hay oferta de droguerías cargada</p>
+            <p>La oferta llega de los inventarios FTP de las droguerías y se cruza con los
+               productos propios por código de barras normalizado (EAN-13).</p>
+        </field>
+    </record>
+
+</odoo>

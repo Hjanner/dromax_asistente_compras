@@ -35,12 +35,25 @@ class TestUi(HttpCase):
             "prompt_tokens": 1000, "completion_tokens": 200, "cost": 0.008,
         })
 
-    def _open(self, fragment, selector):
-        self.browser_js("/web#" + fragment, WAIT_FOR % selector, login="ai_purchase_admin_ui")
+    def _open(self, fragment, selector, login="ai_purchase_admin_ui"):
+        self.browser_js("/web#" + fragment, WAIT_FOR % selector, login=login)
 
     def test_settings(self):
         self._open("action=dromax_asistente_compras.action_ai_purchase_settings",
                    "div[name='ai_purchase_model_advanced'] input")
+
+    def test_offer_list(self):
+        buyer = new_test_user(self.env, login="ai_purchase_buyer_ui",
+                              groups="base.group_user,dromax_asistente_compras.group_ai_purchase_user")
+        buyer.password = buyer.login
+        drogueria = self.env["res.partner"].create({"name": "DROGUERÍA UI", "is_company": True})
+        self.env["supplier.product.staging"].create({
+            "partner_id": drogueria.id, "codigo_barras": "17593255000418",
+            "descripcion_producto": "GASA UI", "fecha_lote": "30/01/2031",
+            "precio_unitario_final": 4.17, "stock_disponible": 10,
+        })
+        self._open("action=dromax_asistente_compras.action_ai_v_oferta",
+                   ".o_list_view .o_data_row", login=buyer.login)
 
     def test_usage_log_list(self):
         self._open("action=dromax_asistente_compras.action_ai_usage_log&view_type=list",

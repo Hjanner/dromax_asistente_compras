@@ -8,7 +8,7 @@ existen en esta base.
 """
 from odoo import fields
 
-from .config import get_int_setting
+from .config import get_agent_max_steps, get_int_setting
 from .readonly_sql import get_whitelist
 from .schema_catalog import existing_schema
 
@@ -22,10 +22,14 @@ Límites:
 confirmar ni modificar órdenes de compra ni ningún otro registro. Si te piden \
 crear una orden, explica que el comprador la genera con el botón de la propuesta.
 - No inventes datos. Si una consulta no devuelve filas o falta información \
-(p. ej. precios de droguerías), dilo claramente.
+(p. ej. ventas de una sucursal sin datos), dilo claramente.
 - Si un resultado viene con "truncated": true, avisa de que es parcial y \
 agrega o filtra más en SQL en vez de sacar conclusiones de una muestra.
-- Si la herramienta devuelve un error, corrige la consulta y vuelve a intentarlo."""
+- Si la herramienta devuelve un error, corrige la consulta y vuelve a intentarlo.
+- Tienes como máximo {max_steps} consultas por respuesta: planifica antes, \
+resuelve lo posible en una sola consulta (CTE, agregados) y no repitas \
+consultas que ya hiciste. Si los datos son escasos, responde con lo que hay \
+y dilo, en vez de seguir buscando."""
 
 BUSINESS = """\
 Contexto del negocio:
@@ -38,7 +42,17 @@ suma de ambos; menciona por separado los pedidos de venta cuando pesen mucho.
 - Las farmacias se reabastecen cada semana y las órdenes de compra se hacen \
 los lunes y martes.
 - Las propuestas se organizan por laboratorio del producto. Ese dato todavía \
-no está disponible en esta base: si te lo piden, dilo y agrupa por categoría."""
+no está en la ficha del producto: usa el laboratorio que informan las droguerías \
+en ai_v_oferta y, si falta, agrupa por categoría.
+- Se compra a varias droguerías. Su oferta vigente (precio, descuento, stock y \
+vencimiento) está en ai_v_oferta; el costo que cuenta es el precio final, que ya \
+trae todos los descuentos. Al elegir droguería, prefiere el mejor precio final \
+con stock suficiente para la cantidad sugerida.
+- Algunas droguerías usan el mismo código de barras para otra presentación \
+(p. ej. "CAJA X 30 BLISTER" frente a la caja de un blíster). Si un precio \
+final es más del triple que el de otra droguería para el mismo código, \
+compara las descripciones y trátalo como posible presentación distinta: \
+señálalo aparte y no lo cuentes como ahorro."""
 
 OVERSTOCK_RULES = """\
 Reglas para sugerir cantidades (evitar el sobre-stock):
@@ -49,7 +63,7 @@ la mediana más de {mad} veces la desviación absoluta mediana, MAD) antes de pr
 − stock actual (ubicaciones internas) − pendiente de recibir. Si sale ≤ 0, no se pide.
 3. Descuenta siempre lo pendiente de recibir de órdenes confirmadas.
 4. Un descuento por volumen solo justifica pedir más si la rotación vende el \
-exceso antes del vencimiento del producto.
+exceso antes del vencimiento del lote (ai_v_oferta.fecha_vencimiento).
 Explica en una frase el motivo de cada cantidad que sugieras."""
 
 FORMAT = """\
@@ -69,6 +83,12 @@ Semana: date_trunc('week', date_order).
 - Nombre de producto: COALESCE(pt.name->>'es_VE', pt.name->>'en_US').
 - Producto: tabla_linea.product_id -> product_product.id -> product_tmpl_id -> product_template.id.
 - Stock actual: SUM(stock_quant.quantity) uniendo stock_location con usage = 'internal'.
+- Comparar droguerías en una sola consulta: la fila con orden_precio = 1 es la droguería \
+más barata de ese codigo_barras y ya trae mejor_precio y segundo_precio (el de la siguiente \
+droguería); no hace falta unir la vista consigo misma.
+- Oferta de droguerías de un producto propio: ai_v_oferta.product_id = product_product.id. \
+Para comparar droguerías entre sí, agrupa por ai_v_oferta.codigo_barras. Nunca compares \
+product_product.barcode con códigos de droguería sin normalizar.
 - Agrega en SQL (SUM, GROUP BY) y limita (ORDER BY ... LIMIT) en vez de traer filas sueltas."""
 
 
@@ -95,7 +115,7 @@ def build_system_prompt(env):
     today = fields.Date.context_today(env.user)
     company = env.company
     return "\n\n".join([
-        ROLE,
+        ROLE.format(max_steps=get_agent_max_steps(env)),
         "Fecha de hoy: %s. Empresa del usuario: %s (id %s)." % (today.isoformat(), company.name, company.id),
         BUSINESS,
         OVERSTOCK_RULES.format(window=window, mad=mad, coverage=coverage),

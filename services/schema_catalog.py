@@ -10,6 +10,35 @@ base multisucursal de producción puede diferir de la de desarrollo.
 
 # tabla -> (descripción, [(columna, descripción), ...])
 CATALOG = {
+    "ai_v_oferta": (
+        "Oferta vigente de las droguerías (inventarios que publican por FTP), una fila por "
+        "producto y droguería, ya cruzada con los productos propios por código de barras "
+        "normalizado. Úsala para comparar droguerías: el costo que cuenta es precio_final. "
+        "Las columnas de comparación solo consideran ofertas disponibles (con stock y precio).",
+        [
+            ("partner_id", "droguería (id del contacto)"),
+            ("drogueria", "nombre de la droguería"),
+            ("product_id", "product_product.id del producto propio; NULL si no lo tenemos o el código no casa"),
+            ("product_tmpl_id", "product_template.id"),
+            ("producto", "nombre del producto propio"),
+            ("codigo_barras", "código de barras normalizado (EAN-13): clave para comparar droguerías"),
+            ("codigo_drogueria", "código del producto en la droguería"),
+            ("descripcion", "descripción en el archivo de la droguería"),
+            ("laboratorio", "laboratorio según la droguería (texto; no todas lo informan)"),
+            ("fecha_vencimiento", "vencimiento del lote ofrecido"),
+            ("precio_lista", "precio antes de descuentos"),
+            ("descuento_pct", "descuento total en %, con los descuentos en cascada ya aplicados"),
+            ("precio_final", "precio con todos los descuentos: el costo de compra"),
+            ("stock_drogueria", "unidades disponibles en la droguería"),
+            ("disponible", "TRUE si tiene stock y precio final > 0"),
+            ("orden_precio", "puesto de la droguería para ese código (1 = la más barata); solo en la "
+                             "fila de su mejor oferta disponible, NULL en las demás"),
+            ("mejor_precio", "precio final más bajo entre las ofertas disponibles del código"),
+            ("segundo_precio", "mejor precio de la segunda droguería más barata del código; NULL si solo hay una"),
+            ("droguerias_con_stock", "cuántas droguerías tienen ese código disponible"),
+            ("fecha_carga", "cuándo se cargó el inventario de la droguería (UTC)"),
+        ],
+    ),
     "res_company": (
         "Empresas. Cada farmacia es una sucursal: una empresa hija (parent_id) de la principal.",
         [
@@ -136,7 +165,8 @@ CATALOG = {
             ("id", ""),
             ("product_tmpl_id", "product_template.id"),
             ("default_code", "código interno"),
-            ("barcode", "código de barras"),
+            ("barcode", "código de barras tal como se escribió"),
+            ("ai_barcode_norm", "código de barras normalizado (EAN-13), el que casa con ai_v_oferta.codigo_barras"),
             ("active", "FALSE = archivado"),
         ],
     ),

@@ -33,3 +33,11 @@ def get_int_setting(env, name, default, maximum=None):
         value = default
     value = max(1, value)
     return min(value, maximum) if maximum else value
+
+
+# Consultas (rondas de herramientas) que puede hacer el agente por respuesta.
+DEFAULT_AGENT_MAX_STEPS = 8
+
+
+def get_agent_max_steps(env):
+    return get_int_setting(env, "agent_max_steps", DEFAULT_AGENT_MAX_STEPS, 20)
