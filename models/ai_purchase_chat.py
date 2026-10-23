@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 from odoo import _, api, fields, models
-from odoo.exceptions import UserError
+from odoo.exceptions import AccessError, UserError
 
 from ..services import presets
 from ..services.agent import run_agent
+from ..services.tools import GROUP_XMLID
 
 MAX_USER_TEXT = 4000
 LEVELS = [("basic", "Básico"), ("medium", "Medio"), ("advanced", "Avanzado")]
@@ -29,8 +30,16 @@ class AiPurchaseChatSession(models.Model):
 
     # --- API del chat (llamada desde el cliente web con orm.call) ------------
     @api.model
+    def _check_ai_access(self):
+        """Mensaje claro para quien abra el chat por URL sin ser de compras ni administrador."""
+        if not self.env.user.has_group(GROUP_XMLID):
+            raise AccessError(_("El Asistente de Compras IA es solo para el personal de compras "
+                                "y los administradores."))
+
+    @api.model
     def chat_bootstrap(self):
         """Datos iniciales de la pantalla: conversaciones y preguntas predefinidas."""
+        self._check_ai_access()
         sessions = self.search([("user_id", "=", self.env.uid)], limit=50)
         return {
             "sessions": [s._chat_session_dict() for s in sessions],
@@ -40,6 +49,7 @@ class AiPurchaseChatSession(models.Model):
 
     @api.model
     def chat_new_session(self):
+        self._check_ai_access()
         return self.create({})._chat_session_dict()
 
     def chat_messages(self):

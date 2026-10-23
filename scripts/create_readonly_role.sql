@@ -32,6 +32,7 @@ DECLARE
 BEGIN
     FOREACH t IN ARRAY ARRAY[
         'ai_v_rotacion', 'ai_v_stock', 'ai_v_pendiente', 'ai_v_faltantes', 'ai_v_oferta',
+        'ai_barcode_mismatch',
         'sale_order', 'sale_order_line', 'pos_order', 'pos_order_line',
         'purchase_order', 'purchase_order_line',
         'stock_quant', 'stock_location', 'stock_warehouse',

@@ -46,6 +46,10 @@ class TestReadonlySql(TransactionCase):
             self.env, "SELECT count(*) AS n, count(product_id) AS con_producto FROM ai_v_oferta")
         self.assertEqual(res["columns"], ["n", "con_producto"])
 
+    def test_barcode_report_table(self):
+        res = run_readonly_sql(self.env, "SELECT tipo, count(*) FROM ai_barcode_mismatch GROUP BY tipo")
+        self.assertEqual(res["columns"], ["tipo", "count"])
+
     def test_truncated(self):
         res = run_readonly_sql(self.env, "SELECT g FROM generate_series(1, 50) g", max_rows=10)
         self.assertEqual(res["row_count"], 10)

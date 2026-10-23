@@ -29,6 +29,7 @@ import re
 DEFAULT_WHITELIST = frozenset({
     # Vistas de la capa de datos del módulo
     "ai_v_rotacion", "ai_v_stock", "ai_v_pendiente", "ai_v_faltantes", "ai_v_oferta",
+    "ai_barcode_mismatch",
     # Ventas
     "sale_order", "sale_order_line", "pos_order", "pos_order_line",
     # Compras

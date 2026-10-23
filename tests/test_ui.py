@@ -55,6 +55,32 @@ class TestUi(HttpCase):
         self._open("action=dromax_asistente_compras.action_ai_v_oferta",
                    ".o_list_view .o_data_row", login=buyer.login)
 
+    def test_barcode_report(self):
+        buyer = new_test_user(self.env, login="ai_bm_buyer_ui",
+                              groups="base.group_user,dromax_asistente_compras.group_ai_purchase_user")
+        buyer.password = buyer.login
+        self.env["ai.barcode.mismatch"].search([]).unlink()
+        self.env["product.product"].create({"name": "ZQX UI SIN CODIGO", "detailed_type": "product"})
+        self.browser_js("/web#action=dromax_asistente_compras.action_ai_barcode_mismatch", """
+            const until = (sel) => new Promise((resolve, reject) => {
+                let n = 0;
+                const t = setInterval(() => {
+                    const el = document.querySelector(sel);
+                    if (el) { clearInterval(t); resolve(el); }
+                    else if (++n > 600) { clearInterval(t); reject(new Error("No apareció " + sel)); }
+                }, 100);
+            });
+            (async () => {
+                try {
+                    (await until("button[name='action_generate']")).click();
+                    await until(".o_list_view .o_group_header");
+                    console.log("test successful");
+                } catch (e) {
+                    console.error(e.message);
+                }
+            })();
+        """, login=buyer.login)
+
     def test_usage_log_list(self):
         self._open("action=dromax_asistente_compras.action_ai_usage_log&view_type=list",
                    ".o_list_view .o_data_row")

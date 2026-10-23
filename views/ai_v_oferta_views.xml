@@ -62,6 +62,7 @@
     <record id="action_ai_v_oferta" model="ir.actions.act_window">
         <field name="name">Oferta por producto</field>
         <field name="res_model">ai.v.oferta</field>
+        <field name="groups_id" eval="[(6, 0, [ref('group_ai_purchase_user')])]"/>
         <field name="view_mode">tree</field>
         <field name="search_view_id" ref="view_ai_v_oferta_search"/>
         <field name="context">{'search_default_disponible': 1}</field>

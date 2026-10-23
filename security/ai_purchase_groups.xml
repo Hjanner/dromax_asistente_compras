@@ -2,20 +2,27 @@
 <odoo>
     <data noupdate="0">
 
-        <!-- Categoría visible para que el grupo aparezca como casilla en la
-             ficha del usuario. -->
-        <record id="module_category_ai_purchase" model="ir.module.category">
+        <!-- Acceso al asistente: menú, chat, oferta, reporte y botones de compra.
+             Es un grupo técnico (no sale como casilla en la ficha del usuario):
+             lo reciben solos el personal de compras y los administradores, a
+             través de los grupos que lo implican más abajo. Así nadie ajeno a
+             compras puede tenerlo por una casilla marcada de más. -->
+        <record id="group_ai_purchase_user" model="res.groups">
             <field name="name">Asistente de Compras IA</field>
-            <field name="description">Acceso al agente de compras: chat, propuestas y generación de borradores.</field>
-            <field name="sequence">90</field>
+            <field name="category_id" ref="base.module_category_hidden"/>
+            <!-- Antes implicaba Compras; ahora es al revés (evita un ciclo). -->
+            <field name="implied_ids" eval="[(3, ref('purchase.group_purchase_user'))]"/>
+            <field name="comment">Puede usar el agente de compras y convertir propuestas en solicitudes de presupuesto en borrador.</field>
         </record>
 
-        <!-- Sin este grupo no se ven el menú, el chat ni los botones de compra. -->
-        <record id="group_ai_purchase_user" model="res.groups">
-            <field name="name">Usuario</field>
-            <field name="category_id" ref="module_category_ai_purchase"/>
-            <field name="implied_ids" eval="[(4, ref('purchase.group_purchase_user'))]"/>
-            <field name="comment">Puede usar el agente de compras y convertir propuestas en solicitudes de presupuesto en borrador.</field>
+        <!-- Personal de compras (Compras / Usuario; el responsable lo hereda). -->
+        <record id="purchase.group_purchase_user" model="res.groups">
+            <field name="implied_ids" eval="[(4, ref('group_ai_purchase_user'))]"/>
+        </record>
+
+        <!-- Administradores (Ajustes). -->
+        <record id="base.group_system" model="res.groups">
+            <field name="implied_ids" eval="[(4, ref('group_ai_purchase_user'))]"/>
         </record>
 
     </data>

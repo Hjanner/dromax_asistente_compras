@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_ai_barcode_mismatch_tree" model="ir.ui.view">
+        <field name="name">ai.barcode.mismatch.tree</field>
+        <field name="model">ai.barcode.mismatch</field>
+        <field name="arch" type="xml">
+            <tree create="0" edit="0" delete="0"
+                  decoration-warning="tipo in ('codigo_distinto', 'presentacion', 'duplicado')"
+                  decoration-muted="tipo in ('sin_oferta', 'sin_producto')">
+                <header>
+                    <button name="action_generate" type="object" string="Actualizar reporte"
+                            class="btn-primary" display="always"/>
+                </header>
+                <field name="tipo"/>
+                <field name="product_id"/>
+                <field name="codigo_propio" optional="show"/>
+                <field name="codigo_barras"/>
+                <field name="descripcion" optional="show"/>
+                <field name="droguerias" optional="show"/>
+                <field name="partner_id" optional="hide"/>
+                <field name="codigo_drogueria" optional="hide"/>
+                <field name="similitud" optional="show"/>
+                <field name="precio_min" optional="hide"/>
+                <field name="precio_max" optional="hide"/>
+                <field name="detalle"/>
+                <field name="create_date" string="Generado" optional="hide"/>
+                <button name="action_open_product" type="object" icon="fa-external-link"
+                        title="Abrir el producto" invisible="not product_id"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_ai_barcode_mismatch_search" model="ir.ui.view">
+        <field name="name">ai.barcode.mismatch.search</field>
+        <field name="model">ai.barcode.mismatch</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="product_id"/>
+                <field name="codigo_barras" filter_domain="['|', '|', ('codigo_barras', 'ilike', self), ('codigo_propio', 'ilike', self), ('codigo_drogueria', 'ilike', self)]"/>
+                <field name="descripcion"/>
+                <field name="droguerias"/>
+                <filter name="codigo_distinto" string="Nombre parecido, código distinto" domain="[('tipo', '=', 'codigo_distinto')]"/>
+                <filter name="presentacion" string="Posible otra presentación" domain="[('tipo', '=', 'presentacion')]"/>
+                <filter name="duplicado" string="Código duplicado" domain="[('tipo', '=', 'duplicado')]"/>
+                <filter name="sin_codigo" string="Sin código de barras" domain="[('tipo', '=', 'sin_codigo')]"/>
+                <filter name="sin_oferta" string="Sin oferta" domain="[('tipo', '=', 'sin_oferta')]"/>
+                <filter name="sin_producto" string="Código sin producto propio" domain="[('tipo', '=', 'sin_producto')]"/>
+                <separator/>
+                <filter name="con_producto" string="Con producto propio" domain="[('product_id', '!=', False)]"/>
+                <group expand="0" string="Agrupar por">
+                    <filter name="group_tipo" string="Tipo" context="{'group_by': 'tipo'}"/>
+                    <filter name="group_producto" string="Producto propio" context="{'group_by': 'product_id'}"/>
+                    <filter name="group_partner" string="Droguería" context="{'group_by': 'partner_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_ai_barcode_mismatch" model="ir.actions.act_window">
+        <field name="name">Códigos de barras</field>
+        <field name="res_model">ai.barcode.mismatch</field>
+        <field name="groups_id" eval="[(6, 0, [ref('group_ai_purchase_user')])]"/>
+        <field name="view_mode">tree</field>
+        <field name="search_view_id" ref="view_ai_barcode_mismatch_search"/>
+        <field name="context">{'search_default_group_tipo': 1}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">Todavía no se generó el reporte</p>
+            <p>Pulsa «Actualizar reporte» para comparar los códigos de barras de los productos
+               propios con los de la oferta de las droguerías.</p>
+        </field>
+    </record>
+
+</odoo>

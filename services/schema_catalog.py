@@ -39,6 +39,25 @@ CATALOG = {
             ("fecha_carga", "cuándo se cargó el inventario de la droguería (UTC)"),
         ],
     ),
+    "ai_barcode_mismatch": (
+        "Reporte de incoherencias de código de barras entre productos propios y droguerías "
+        "(se genera con un botón; puede estar desactualizado o vacío).",
+        [
+            ("tipo", "codigo_distinto (nombre parecido con otro código), sin_oferta, sin_codigo, "
+                     "sin_producto (código de droguería que no tenemos), presentacion (mismo código "
+                     "con precio más del triple: otra presentación), duplicado"),
+            ("product_id", "product_product.id del producto propio"),
+            ("codigo_propio", "código de barras en la ficha del producto"),
+            ("codigo_barras", "código normalizado (EAN-13) de la droguería o del producto"),
+            ("descripcion", "descripción en la droguería"),
+            ("droguerias", "droguerías que ofrecen ese código"),
+            ("similitud", "parecido de nombres de 0 a 1 (solo codigo_distinto)"),
+            ("precio_min", "precio final mínimo entre droguerías"),
+            ("precio_max", "precio final máximo (presentacion)"),
+            ("detalle", "explicación de la incoherencia"),
+            ("create_date", "cuándo se generó el reporte (UTC)"),
+        ],
+    ),
     "res_company": (
         "Empresas. Cada farmacia es una sucursal: una empresa hija (parent_id) de la principal.",
         [

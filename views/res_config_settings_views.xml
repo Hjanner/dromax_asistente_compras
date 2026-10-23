@@ -84,6 +84,7 @@
     <record id="action_ai_purchase_settings" model="ir.actions.act_window">
         <field name="name">Ajustes</field>
         <field name="res_model">res.config.settings</field>
+        <field name="groups_id" eval="[(6, 0, [ref('base.group_system')])]"/>
         <field name="view_mode">form</field>
         <field name="target">inline</field>
         <field name="context">{'module': 'dromax_asistente_compras', 'bin_size': False}</field>

@@ -1,6 +1,6 @@
 # Estado del proyecto
 
-Última actualización: 2026-10-22. Qué está hecho, qué decidimos y qué falta.
+Última actualización: 2026-10-23. Qué está hecho, qué decidimos y qué falta.
 El README explica cómo funciona lo que ya existe.
 
 ## Hecho
@@ -64,6 +64,36 @@ El README explica cómo funciona lo que ya existe.
   la penúltima avisa que queda una. Probado en vivo con `comprador.prueba`
   (*Compara precios entre droguerías*: ~7 consultas, ~0,04 USD, < 1 min).
 
+- **Claves FTP cifradas** (módulo FTP 1.2, commit `177255b`, 2026-10-23):
+  Fernet con la llave en la variable de entorno `FTP_SECRET_KEY` (varias
+  separadas por coma para rotarla). Sin llave no se guardan claves; con otra
+  llave no se conecta. Migración que cifra las claves en claro; las tres
+  locales ya están cifradas. README del módulo con la configuración en el
+  servidor. 24 tests en el módulo FTP.
+
+- **Reporte de códigos de barras** (versión `17.0.0.6.0`, 70 tests,
+  2026-10-23): `ai.barcode.mismatch`, menú *Códigos de barras*, seis tipos
+  (nombre parecido con otro código, sin oferta, sin código, código sin
+  producto propio, posible otra presentación, duplicado). Regla de nombres
+  calibrada con los ~4600 códigos comunes entre droguerías y revisando
+  candidatos de códigos distintos (descarta otra dosis, otro empaque, otra
+  molécula y el mismo genérico de otro laboratorio). Genera en ~11 s; con un
+  catálogo simulado de 6600 productos, la parte de nombres tarda ~21 s.
+  Lección: en REPEATABLE READ, un índice creado sobre filas actualizadas en la
+  misma transacción no se usa (`indcheckxmin`); las temporales se crean de
+  una vez con `CREATE TABLE AS`. En la base local salen 154 posibles
+  presentaciones distintas (p. ej. «PINZA UMBILICAL X 1» a 0,30 frente a
+  «X 100» a 31,50 con el mismo código).
+
+- **Acceso** (2026-10-23, pedido del equipo): el módulo lo ven solo el
+  personal de compras y los administradores, automáticamente (el grupo del
+  asistente lo implican Compras / Usuario y Ajustes, y ya no es una casilla).
+  Las acciones de ventana tienen grupos (no se abren por URL) y el chat
+  rechaza con un mensaje claro a quien no tenga acceso. En el módulo FTP
+  (commit `98c0bee`), la pestaña *Configuración FTP* y sus botones son solo
+  de administradores; el botón *En oferta* sigue para todos. 76 tests en el
+  asistente y 25 en el módulo FTP.
+
 ## Decisiones
 
 - Módulo nuevo, separado del antiguo `ai_data_chat`.
@@ -74,8 +104,12 @@ El README explica cómo funciona lo que ya existe.
   por `company_id`.
 - Compra semanal: las órdenes se hacen lunes y martes.
 - `res_partner` queda fuera de la lista blanca SQL (mezcla clientes).
-- Credenciales FTP en la base (no en `.env`), restringidas a administradores.
-  Próximo paso: cifrarlas con una llave guardada fuera de la base.
+- Acceso al asistente = personal de compras + administradores, sin casilla
+  aparte (decisión del 2026-10-23; antes era una casilla en el usuario).
+- Credenciales FTP en la base, cifradas, restringidas a administradores. La
+  llave va por ahora en la variable de entorno `FTP_SECRET_KEY` (acordado
+  2026-10-23; se puede cambiar a `odoo.conf` u otra fuente si hace falta).
+  En local está en `env/bin/activate`.
 - En los inventarios de las droguerías, el costo que cuenta es el **precio
   final** (ya trae todos los descuentos).
 
@@ -108,19 +142,16 @@ descuentos encadenados = precio final en todas las filas.
 
 ## Siguiente
 
-1. **Cifrar las claves FTP** (falta decidir dónde vive la llave; hablarlo
-   con Daniel).
-2. **Reporte `ai.barcode.mismatch`** (`pg_trgm` 1.6 disponible), sobre
-   `ai_barcode_norm`. Incluir el caso «mismo código, otra presentación»: ~120
-   códigos con un precio más del triple que en otra droguería (p. ej.
-   INSUAMINCA vende «X 10 TAB CAJA X 30 BLISTER» con el código de la caja
-   de un blíster). Hoy solo lo maneja el prompt.
-3. **Con la base multisucursal de Daniel:**
-   - vistas `ai_v_rotacion`, `ai_v_stock`, `ai_v_pendiente` y `ai_v_faltantes`
-     por sucursal;
-   - `ai.purchase.proposal` y sus líneas, cron del lunes, herramientas
-     `get_proposal` / `update_proposal_line` y botón para crear la solicitud de
-     presupuesto.
+1. **Permisos de la oferta** en el módulo FTP: hoy cualquier usuario interno
+   puede editar y borrar `supplier.product.staging`; dejarla de solo lectura.
+   Quitar el código muerto (`ftp.connector`, wizard vacío, `views/views.xml`).
+2. **Flujo de propuestas** con datos de prueba (no hace falta esperar a la
+   base de Daniel para construirlo; sí para validarlo): vistas
+   `ai_v_rotacion`, `ai_v_stock`, `ai_v_pendiente`, `ai_v_faltantes`,
+   `ai.purchase.proposal`, herramientas y botón de solicitud de presupuesto.
+3. **Con la base multisucursal de Daniel:** validar y calibrar las vistas y
+   las propuestas por sucursal con ventas reales, conectar el campo
+   laboratorio y revisar el reporte de códigos de barras con el catálogo real.
 
 ## Preguntas abiertas para Daniel
 
@@ -137,5 +168,7 @@ descuentos encadenados = precio final en todas las filas.
 - Entregar a Daniel el `.zip` del módulo FTP cuando lo pida (ver CLAUDE.md).
 - Usuario de prueba sin permisos de administración en `DROMAX_AI_DEV`:
   `comprador.prueba` (id 83; Compras, Inventario y Asistente de Compras IA).
+- Usuario de prueba sin compras ni administración: `empleado.prueba` (id 207;
+  Inventario, Ventas y contactos). No debe ver Compras IA ni la pestaña FTP.
 - Contactos de droguerías en `DROMAX_AI_DEV`: VITALCLINIC (69),
   INTERCONTINENTAL (70) e INSUAMINCA (71).

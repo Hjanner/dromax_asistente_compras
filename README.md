@@ -15,7 +15,10 @@ El avance, las decisiones y lo pendiente están en [ESTADO.md](ESTADO.md).
   rol `dromax_ai_ro`.
 - **Única escritura**: `purchase.order` en borrador, creada por un botón, nunca
   por el modelo.
-- **Acceso restringido** al grupo *Asistente de Compras IA / Usuario*.
+- **Acceso restringido** al personal de compras y a los administradores: el
+  grupo técnico *Asistente de Compras IA* lo implican *Compras / Usuario* y
+  *Ajustes* (no es una casilla de la ficha del usuario). La configuración y el
+  consumo de IA son solo para administradores.
 
 ## Plan
 
@@ -72,6 +75,30 @@ convierte los GTIN-14 con indicador de empaque (INTERCONTINENTAL) al artículo,
 recalculando el dígito de control. Se guarda en `ai_barcode_norm`, tanto en
 `product.product` como en la oferta. Si dos productos propios comparten
 código normalizado, la vista toma el más antiguo.
+
+## Reporte de códigos de barras (`ai.barcode.mismatch`)
+
+Menú *Compras IA → Códigos de barras*, botón **Actualizar reporte** (lo rehace
+completo; ~11 s con la oferta actual). Tipos de incoherencia:
+
+| Tipo | Qué es |
+|---|---|
+| Nombre parecido, código distinto | Producto propio (con o sin código) que se parece a una oferta cuyo código no casa con ningún producto propio; hasta 3 sugerencias por producto, con su similitud |
+| Sin oferta en droguerías | Producto propio con código que ninguna droguería ofrece |
+| Producto sin código de barras | Producto propio sin código |
+| Código sin producto propio | Código que ofrecen las droguerías y no tenemos (una fila por código) |
+| Posible otra presentación | Mismo código con un precio más del triple en otra droguería |
+| Código duplicado | Dos productos propios con el mismo código normalizado |
+
+Solo cuentan los productos activos, comprables y almacenables o consumibles.
+Los nombres se comparan normalizados (tildes, abreviaturas, unidades pegadas al
+número) con trigramas de `pg_trgm` y una regla calibrada con la oferta real:
+mismos números y dosis, misma cantidad de empaque y talla, y que coincidan la
+primera palabra y el laboratorio (última palabra no genérica). Así no casan
+«10 MG» con «18 MG», «X 10» con «X 30» ni el mismo genérico de otro laboratorio.
+
+Parámetros (`dromax_asistente_compras.*`): `barcode_similarity_threshold`
+(0,6) y `barcode_presentation_ratio` (3). El agente puede consultar la tabla.
 
 ## Chat del agente
 
