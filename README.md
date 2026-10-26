@@ -100,6 +100,36 @@ primera palabra y el laboratorio (última palabra no genérica). Así no casan
 Parámetros (`dromax_asistente_compras.*`): `barcode_similarity_threshold`
 (0,6) y `barcode_presentation_ratio` (3). El agente puede consultar la tabla.
 
+## Importar el inventario unificado (`scripts/import_inventory.py`)
+
+Carga el Excel de inventario unificado de las farmacias («INVENTARIO CON
+CANTIDAD FINAL.xlsx», una fila por producto y un bloque de columnas por
+farmacia) en una base con las sucursales de Dromax. El Excel no va en el repo.
+
+```bash
+cd ~/odoo-dev && source env/bin/activate
+INVENTORY_DB=<base> INVENTORY_XLSX="/ruta/INVENTARIO CON CANTIDAD FINAL.xlsx" \
+INVENTORY_DRY_RUN=1 INVENTORY_REPORT=/tmp/incidencias.csv \
+python3 odoo/odoo-bin shell -c odoo/debian/odoo.conf -d <base> --no-http \
+    < custom_addons/dromax_asistente_compras/scripts/import_inventory.py
+```
+
+- `INVENTORY_DB` tiene que ser el nombre de la base (protección).
+- `INVENTORY_DRY_RUN=1` solo informa; sin esa variable, carga.
+- `INVENTORY_REPORT` guarda en CSV las incidencias (códigos de barras no
+  válidos, repetidos o adicionales, filas con varias referencias, cantidades
+  negativas).
+
+Crea un producto por fila (clave: referencia interna, ID externo
+`dromax_inventario.producto_<REF>`), con el primer código de barras válido y
+libre, el precio de venta mediano y sin impuestos; y por sucursal, el costo y
+las existencias del almacén principal como ajuste de inventario. Bloques →
+sucursales: DROMAX, FARMAX → FARMACIA FARMAX, GANGA → FARMACIA FARMAGANGA,
+IDEAL, LA45 → FARMACIA LA 45, MANAL, SOLIDARIA → FARMARCIA FSC (diccionario
+`BRANCHES` del script). Se puede repetir: actualiza y solo ajusta las
+existencias que cambiaron. Con el Excel del 2026-10-26: 5008 productos y
+~441.000 unidades en ~6 min.
+
 ## Chat del agente
 
 Menú **Compras IA → Chat** (grupo *Asistente de Compras IA / Usuario*).

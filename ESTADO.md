@@ -94,6 +94,30 @@ El README explica cómo funciona lo que ya existe.
   de administradores; el botón *En oferta* sigue para todos. 76 tests en el
   asistente y 25 en el módulo FTP.
 
+- **Base multisucursal local** (2026-10-26): `dromax_ai_multi`, copia de la
+  base de Daniel (8 sucursales) con datos simulados: 881 productos, 1248
+  ventas POS semanales (723.098 líneas, nov 2023 a oct 2026), 3744 compras
+  (43 pendientes de recibir, 5 en borrador), 67 ventas B2B, 292 productos
+  agotados, 2271 reglas de reabastecimiento, 26 productos sin código y 6
+  códigos duplicados. Precios de droguerías en `product.supplierinfo`; **la
+  oferta FTP (`supplier_product_staging`) está vacía** en esa base, así que
+  *Oferta por producto*, la comparación de droguerías y la parte de oferta
+  del reporte de códigos de barras no muestran nada allí. Configuración del
+  asistente copiada de `DROMAX_AI_DEV`; acceso dado a `hanner.dev@gmail.com`.
+
+- **Import del inventario unificado** (2026-10-26):
+  `scripts/import_inventory.py` (ver README). Probado en `dromax_ai_inventario`
+  (copia de `dromax_ai_multi_base`): 5008 productos, 4304 con código de
+  barras, 12.619 ajustes de inventario en 7 sucursales (PROMEDICA no tiene
+  bloque), costos por sucursal. Segunda pasada: 0 cambios. Incidencias del
+  Excel: 704 productos sin código, 281 con códigos adicionales (Odoo admite uno
+  por producto), 35 cantidades negativas (se cargan en 0), 34 códigos no
+  válidos, 15 filas con varias referencias, 2 códigos repetidos. SOLIDARIA =
+  FARMARCIA FSC (confirmado por el usuario). Pendiente con Daniel: impuestos
+  (la base trae un 22 % por defecto; se importa sin impuestos), precio de venta
+  por sucursal (hoy uno solo, la mediana) y unidades de medida tipo
+  «UNIDAD (10 AMP)» (se importan como Unidades).
+
 ## Decisiones
 
 - Módulo nuevo, separado del antiguo `ai_data_chat`.
