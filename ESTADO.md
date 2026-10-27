@@ -1,6 +1,6 @@
 # Estado del proyecto
 
-Última actualización: 2026-10-26. Qué está hecho, qué decidimos y qué falta.
+Última actualización: 2026-10-27. Qué está hecho, qué decidimos y qué falta.
 El README explica cómo funciona lo que ya existe.
 
 ## Hecho
@@ -139,6 +139,17 @@ El README explica cómo funciona lo que ya existe.
   simular: `dromax_ai_inventario_base`. En `dromax_ai_multi` los productos
   simulados no coinciden con la oferta: para propuestas, usar esta base.
 
+- **Vista de faltantes** (versión `17.0.0.8.0`, 94 tests, 2026-10-27):
+  `ai_v_faltantes` (ver README), menú *Compras IA → Análisis → Faltantes*,
+  catálogo y prompt (el agente parte de ahí para armar compras). Cantidad
+  sugerida = ⌈demanda depurada × cobertura − stock − pendiente⌉; stock
+  negativo = 0; droguería sugerida con precio coherente con el costo,
+  stock suficiente y menor precio; aviso `revisar_presentacion` si el
+  precio pasa del triple del costo (dispensadores con el mismo código);
+  excedente en otras farmacias por encima de 4 semanas de su demanda
+  (ajuste nuevo `excess_weeks`), informativo. En `dromax_ai_inventario`:
+  1412 faltantes, 1004 con droguería, 41 a revisar por presentación, ~2 s.
+
 ## Decisiones
 
 - Módulo nuevo, separado del antiguo `ai_data_chat`.
@@ -148,6 +159,9 @@ El README explica cómo funciona lo que ya existe.
 - **Cada farmacia es una sucursal** (`res.company`), no un almacén. Se agrupa
   por `company_id`.
 - Compra semanal: las órdenes se hacen lunes y martes.
+- **La compra no es estricta por farmacia** (2026-10-27): un comprador de
+  cualquier farmacia puede comprar para otra. Por eso el chat no se filtra
+  por farmacia y los faltantes informan el excedente de las demás.
 - `res_partner` queda fuera de la lista blanca SQL (mezcla clientes).
 - Acceso al asistente = personal de compras + administradores, sin casilla
   aparte (decisión del 2026-10-23; antes era una casilla en el usuario).
@@ -191,21 +205,18 @@ descuentos encadenados = precio final en todas las filas.
    puede editar y borrar `supplier.product.staging`; dejarla de solo lectura.
    Quitar el código muerto (`ftp.connector`, wizard vacío, `views/views.xml`).
 2. **Flujo de propuestas** con datos de prueba (no hace falta esperar a la
-   base de Daniel para construirlo; sí para validarlo): `ai_v_faltantes`,
-   `ai.purchase.proposal`, herramientas y botón de solicitud de presupuesto.
-   Probarlo en `dromax_ai_inventario` (productos reales, oferta e historial
-   simulado).
-3. **Filtro por farmacia en el chat**, si la compra no es centralizada: hoy el
-   rol de solo lectura ve todas las farmacias (seguridad por filas de
-   PostgreSQL limitada a `dromax_ai_ro` y vistas `security_invoker`).
-4. **Con la base multisucursal de Daniel:** validar y calibrar las vistas y
+   base de Daniel para construirlo; sí para validarlo): `ai.purchase.proposal`
+   a partir de `ai_v_faltantes`, cron del lunes, herramienta de ajuste en el
+   chat y botón de borradores (una orden por droguería y farmacia). Probarlo
+   en `dromax_ai_inventario` (productos reales, oferta e historial simulado).
+3. **Con la base multisucursal de Daniel:** validar y calibrar las vistas y
    las propuestas por sucursal con ventas reales, conectar el campo
    laboratorio y revisar el reporte de códigos de barras con el catálogo real.
 
 ## Preguntas abiertas para Daniel
 
-- ¿La compra es centralizada o cada farmacia compra lo suyo? (define si el
-  chat debe filtrar por farmacia).
+- Respuestas sugeridas a estas preguntas, para que Daniel solo diga cuál no
+  le sirve: `~/odoo-dev/respuestas_sugeridas_daniel.txt` (fuera del repo).
 - Ventana de semanas de historial para la rotación (provisional: 8).
 - Campo laboratorio: ¿many2one o many2many? ¿Coincide con el de los archivos
   de las droguerías?

@@ -62,6 +62,7 @@ class TestUi(HttpCase):
                               groups="base.group_user,dromax_asistente_compras.group_ai_purchase_user")
         buyer.password = buyer.login
         product = self.env["product.product"].create({"name": "ZQX UI ANALISIS", "detailed_type": "product"})
+        agotado = self.env["product.product"].create({"name": "ZQX UI AGOTADO", "detailed_type": "product"})
         warehouse = self.env["stock.warehouse"].search([("company_id", "=", self.env.company.id)], limit=1)
         self.env["stock.quant"].with_context(inventory_mode=True).create({
             "product_id": product.id, "location_id": warehouse.lot_stock_id.id, "inventory_quantity": 5,
@@ -74,12 +75,13 @@ class TestUi(HttpCase):
         session = self.env["pos.session"].create({
             "config_id": self.env["pos.config"].create({"name": "ZQX TPV UI"}).id, "user_id": self.env.uid})
         order = self.env["pos.order"].create({
-            "session_id": session.id, "amount_tax": 0, "amount_total": 2, "amount_paid": 2, "amount_return": 0,
-            "lines": [(0, 0, {"product_id": product.id, "qty": 2, "price_unit": 1,
-                              "price_subtotal": 2, "price_subtotal_incl": 2})],
+            "session_id": session.id, "amount_tax": 0, "amount_total": 4, "amount_paid": 4, "amount_return": 0,
+            "lines": [(0, 0, {"product_id": p.id, "qty": 2, "price_unit": 1,
+                              "price_subtotal": 2, "price_subtotal_incl": 2}) for p in (product, agotado)],
         })
         order.write({"state": "paid", "date_order": order.date_order - timedelta(weeks=1)})
-        for action, column in (("action_ai_v_rotacion", "demanda_depurada"),
+        for action, column in (("action_ai_v_faltantes", "cantidad_sugerida"),
+                               ("action_ai_v_rotacion", "demanda_depurada"),
                                ("action_ai_v_stock", "disponible"),
                                ("action_ai_v_pendiente", "proxima_llegada")):
             self._open("action=dromax_asistente_compras." + action,

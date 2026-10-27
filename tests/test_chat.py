@@ -156,13 +156,17 @@ class TestChat(TransactionCase):
         self.assertIn("product_template", text)
         self.assertIn("res_company", text)
         self.assertNotIn("res_partner", text.split("Tablas que puedes consultar")[1])
-        # Las vistas de la lista blanca que aún no existen no se anuncian.
-        self.assertNotIn("ai_v_faltantes", text)
+        self.assertIn("ai_v_faltantes", text)
         self.assertIn("últimas 8 semanas", text)
         self.assertIn("como máximo 8 consultas", text)
         self.assertIn("presentación distinta", text)
         self.env["ir.config_parameter"].sudo().set_param(P + "rotation_window_weeks", "12")
         self.assertIn("últimas 12 semanas", build_system_prompt(self.env))
+        # Las tablas de la lista blanca que no existen en la base no se anuncian.
+        self.env["ir.config_parameter"].sudo().set_param(P + "sql_whitelist", "product_template,ai_v_inexistente")
+        text = build_system_prompt(self.env)
+        self.assertIn("product_template", text)
+        self.assertNotIn("ai_v_inexistente", text)
 
     # --- Conversaciones ------------------------------------------------------
     def test_send_free_text(self):

@@ -1,6 +1,86 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
 
+    <!-- Faltantes -->
+    <record id="view_ai_v_faltantes_tree" model="ir.ui.view">
+        <field name="name">ai.v.faltantes.tree</field>
+        <field name="model">ai.v.faltantes</field>
+        <field name="arch" type="xml">
+            <tree create="0" edit="0" delete="0" decoration-danger="stock == 0 and pendiente == 0">
+                <field name="company_id" groups="base.group_multi_company"/>
+                <field name="product_id"/>
+                <field name="codigo" optional="hide"/>
+                <field name="demanda_semanal"/>
+                <field name="semanas_cobertura" optional="hide"/>
+                <field name="necesidad" optional="hide"/>
+                <field name="stock"/>
+                <field name="pendiente" optional="show"/>
+                <field name="atrasado" optional="hide"/>
+                <field name="en_solicitud" optional="show" decoration-warning="en_solicitud &gt; 0"/>
+                <field name="cobertura_actual" optional="show"/>
+                <field name="cantidad_sugerida" sum="Total"/>
+                <field name="excedente_otras" optional="show" decoration-info="excedente_otras &gt; 0"/>
+                <field name="farmacias_con_excedente" optional="hide"/>
+                <field name="drogueria_id" optional="show"/>
+                <field name="precio" optional="show"
+                       decoration-danger="revisar_presentacion"/>
+                <field name="costo" optional="hide"/>
+                <field name="revisar_presentacion" optional="show"/>
+                <field name="mejor_precio" optional="hide"/>
+                <field name="monto" optional="show" sum="Total"/>
+                <field name="stock_drogueria" optional="hide"/>
+                <field name="stock_drogueria_suficiente" optional="hide"/>
+                <field name="droguerias_con_oferta" optional="hide"/>
+                <field name="fecha_vencimiento" optional="hide"/>
+                <field name="laboratorio" optional="show"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_ai_v_faltantes_search" model="ir.ui.view">
+        <field name="name">ai.v.faltantes.search</field>
+        <field name="model">ai.v.faltantes</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="product_id"/>
+                <field name="codigo"/>
+                <field name="company_id" groups="base.group_multi_company"/>
+                <field name="drogueria_id"/>
+                <field name="laboratorio"/>
+                <filter name="agotados" string="Agotados" domain="[('stock', '=', 0), ('pendiente', '=', 0)]"/>
+                <filter name="con_oferta" string="Con oferta" domain="[('drogueria_id', '!=', False)]"/>
+                <filter name="sin_oferta" string="Sin oferta" domain="[('drogueria_id', '=', False)]"/>
+                <filter name="revisar_presentacion" string="Revisar presentación"
+                        domain="[('revisar_presentacion', '=', True)]"/>
+                <filter name="stock_drogueria_corto" string="La droguería no tiene toda la cantidad"
+                        domain="[('drogueria_id', '!=', False), ('stock_drogueria_suficiente', '=', False)]"/>
+                <separator/>
+                <filter name="excedente" string="Con excedente en otras farmacias"
+                        domain="[('excedente_otras', '>', 0)]"/>
+                <filter name="en_solicitud" string="En solicitudes sin confirmar" domain="[('en_solicitud', '>', 0)]"/>
+                <group expand="0" string="Agrupar por">
+                    <filter name="group_company" string="Farmacia" context="{'group_by': 'company_id'}"/>
+                    <filter name="group_drogueria" string="Droguería" context="{'group_by': 'drogueria_id'}"/>
+                    <filter name="group_laboratorio" string="Laboratorio" context="{'group_by': 'laboratorio'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_ai_v_faltantes" model="ir.actions.act_window">
+        <field name="name">Faltantes</field>
+        <field name="res_model">ai.v.faltantes</field>
+        <field name="groups_id" eval="[(6, 0, [ref('group_ai_purchase_user')])]"/>
+        <field name="view_mode">tree</field>
+        <field name="search_view_id" ref="view_ai_v_faltantes_search"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_empty_folder">No falta nada para cubrir la demanda</p>
+            <p>Demanda semanal × semanas de cobertura − stock − pendiente de recibir, por producto
+               y farmacia, con la droguería más barata que tiene la cantidad. Las semanas de
+               cobertura se ajustan en Compras IA → Configuración → Ajustes.</p>
+        </field>
+    </record>
+
     <!-- Rotación -->
     <record id="view_ai_v_rotacion_tree" model="ir.ui.view">
         <field name="name">ai.v.rotacion.tree</field>

@@ -40,7 +40,9 @@ por pedidos de venta (sale_order, clientes especiales como la alcaldía o el \
 personal, a veces con volúmenes o descuentos atípicos). La demanda real es la \
 suma de ambos; menciona por separado los pedidos de venta cuando pesen mucho.
 - Las farmacias se reabastecen cada semana y las órdenes de compra se hacen \
-los lunes y martes.
+los lunes y martes. La compra no es estricta por farmacia: un comprador de \
+cualquier farmacia puede comprar para otra, y entre farmacias se puede trasladar \
+mercancía.
 - Las propuestas se organizan por laboratorio del producto. Ese dato todavía \
 no está en la ficha del producto: usa el laboratorio que informan las droguerías \
 en ai_v_oferta y, si falta, agrupa por categoría.
@@ -61,11 +63,16 @@ Reglas para sugerir cantidades (evitar el sobre-stock):
 de la mediana más de {mad} veces la desviación absoluta mediana, MAD). Ya está \
 calculada en ai_v_rotacion.demanda_depurada: úsala, no la recalcules.
 2. Cantidad sugerida = demanda depurada × {coverage} semana(s) de cobertura \
-− stock actual (ai_v_stock.stock) − pendiente de recibir (ai_v_pendiente.pendiente). \
-Si sale ≤ 0, no se pide. Si el producto ya está en solicitudes sin confirmar \
-(ai_v_pendiente.en_solicitud), avísalo.
+− stock actual − pendiente de recibir, redondeada hacia arriba. Ya está calculada \
+en ai_v_faltantes (cantidad_sugerida, con la droguería sugerida y su precio): \
+para armar una compra, parte de ahí. Si un producto no está en ai_v_faltantes, \
+no se pide. Si ya está en solicitudes sin confirmar (en_solicitud), avísalo. \
+Si revisar_presentacion es TRUE, la droguería podría vender otro empaque con el \
+mismo código: no lo incluyas en la compra sin señalarlo.
 3. Descuenta siempre lo pendiente de recibir de órdenes confirmadas.
-4. Un descuento por volumen solo justifica pedir más si la rotación vende el \
+4. Si otra farmacia tiene excedente del producto (excedente_otras, \
+farmacias_con_excedente), sugiere trasladarlo antes de comprarlo.
+5. Un descuento por volumen solo justifica pedir más si la rotación vende el \
 exceso antes del vencimiento del lote (ai_v_oferta.fecha_vencimiento).
 Explica en una frase el motivo de cada cantidad que sugieras."""
 
@@ -85,9 +92,11 @@ Notas para el SQL (PostgreSQL, Odoo 17):
 Semana: date_trunc('week', date_order).
 - Nombre de producto: COALESCE(pt.name->>'es_VE', pt.name->>'en_US').
 - Producto: tabla_linea.product_id -> product_product.id -> product_tmpl_id -> product_template.id.
-- Demanda, stock y pendiente por producto y farmacia: ai_v_rotacion, ai_v_stock y \
-ai_v_pendiente, unidas por (company_id, product_id) con LEFT JOIN (sin fila = 0). \
-Ya vienen en la unidad del producto.
+- Qué comprar: ai_v_faltantes (una fila por producto y farmacia con faltante; \
+ordena por cobertura_actual para lo más urgente y agrupa por drogueria o \
+laboratorio). Para el detalle: ai_v_rotacion, ai_v_stock y ai_v_pendiente, unidas \
+por (company_id, product_id) con LEFT JOIN (sin fila = 0). Todo viene en la unidad \
+del producto.
 - Ventas de un periodo distinto de la ventana de rotación: pos_order_line + \
 sale_order_line con sus filtros de estado.
 - Comparar droguerías en una sola consulta: la fila con orden_precio = 1 es la droguería \
@@ -113,6 +122,8 @@ def _schema_text(env):
 DEFAULT_WINDOW_WEEKS = 8
 DEFAULT_OUTLIER_MAD = 3
 DEFAULT_COVERAGE_WEEKS = 1
+# Stock que otra farmacia puede ceder: lo que pasa de estas semanas de su propia demanda.
+DEFAULT_EXCESS_WEEKS = 4
 
 
 def build_system_prompt(env):

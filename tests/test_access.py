@@ -49,7 +49,7 @@ class TestAccess(TransactionCase):
         ai_group = self.env.ref(AI_GROUP)
         admin_group = self.env.ref("base.group_system")
         for xmlid in ("action_ai_v_oferta", "action_ai_barcode_mismatch", "action_ai_v_rotacion",
-                      "action_ai_v_stock", "action_ai_v_pendiente"):
+                      "action_ai_v_stock", "action_ai_v_pendiente", "action_ai_v_faltantes"):
             self.assertEqual(self.env.ref("dromax_asistente_compras." + xmlid).groups_id, ai_group, xmlid)
         for xmlid in ("action_ai_usage_log", "action_ai_purchase_settings"):
             self.assertEqual(self.env.ref("dromax_asistente_compras." + xmlid).groups_id, admin_group, xmlid)
@@ -65,7 +65,7 @@ class TestAccess(TransactionCase):
 
     def test_data_for_outsiders(self):
         for model in ("ai.v.oferta", "ai.barcode.mismatch", "ai.purchase.chat.session",
-                      "ai.v.rotacion", "ai.v.stock", "ai.v.pendiente"):
+                      "ai.v.rotacion", "ai.v.stock", "ai.v.pendiente", "ai.v.faltantes"):
             with self.assertRaises(AccessError, msg=model):
                 self.env[model].with_user(self.empleado).search([], limit=1)
             self.env[model].with_user(self.comprador).search([], limit=1)

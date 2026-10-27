@@ -58,6 +58,10 @@
                                     <label for="ai_purchase_coverage_weeks" class="col-lg-6 o_light_label"/>
                                     <field name="ai_purchase_coverage_weeks" class="col-lg-3"/>
                                 </div>
+                                <div class="row">
+                                    <label for="ai_purchase_excess_weeks" class="col-lg-6 o_light_label"/>
+                                    <field name="ai_purchase_excess_weeks" class="col-lg-3"/>
+                                </div>
                             </div>
                         </setting>
                     </block>

@@ -19,7 +19,7 @@ rol de solo lectura. La única escritura es la orden de compra en borrador.
     """,
     'author': "Hjanner",
     'category': 'Inventory/Purchase',
-    'version': '17.0.0.7.0',
+    'version': '17.0.0.8.0',
     'license': 'LGPL-3',
     'application': True,
     'installable': True,

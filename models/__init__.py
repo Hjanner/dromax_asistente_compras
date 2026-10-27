@@ -9,4 +9,5 @@ from . import ai_v_oferta
 from . import ai_v_rotacion
 from . import ai_v_stock
 from . import ai_v_pendiente
+from . import ai_v_faltantes
 from . import ai_barcode_mismatch

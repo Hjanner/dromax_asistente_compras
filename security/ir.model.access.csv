@@ -7,3 +7,4 @@ access_ai_barcode_mismatch_user,ai.barcode.mismatch compradores,model_ai_barcode
 access_ai_v_rotacion_user,ai.v.rotacion compradores,model_ai_v_rotacion,group_ai_purchase_user,1,0,0,0
 access_ai_v_stock_user,ai.v.stock compradores,model_ai_v_stock,group_ai_purchase_user,1,0,0,0
 access_ai_v_pendiente_user,ai.v.pendiente compradores,model_ai_v_pendiente,group_ai_purchase_user,1,0,0,0
+access_ai_v_faltantes_user,ai.v.faltantes compradores,model_ai_v_faltantes,group_ai_purchase_user,1,0,0,0

@@ -63,7 +63,8 @@ Vistas SQL por producto y farmacia (`company_id`), en la unidad del producto,
 en el menú *Compras IA → Análisis* y consultables por el agente. Las
 pantallas muestran solo las farmacias permitidas del usuario (regla por
 empresa, como el resto de Odoo); el chat, que consulta con el rol de solo
-lectura, las ve todas.
+lectura, las ve todas (a propósito: cualquier farmacia puede comprar para
+otra).
 
 - **Rotación** (`ai_v_rotacion`): demanda de las últimas N semanas
   **completas** (lunes a domingo en la hora de la sucursal, `res_partner.tz`
@@ -88,6 +89,35 @@ lectura, las ve todas.
 
 En `dromax_ai_multi` (3 años simulados): 5186 filas de rotación (~3,5 s),
 5576 de stock y 1613 de pendientes (~0,6 s cada una).
+
+## Faltantes (`ai_v_faltantes`)
+
+Lo que hace falta comprar: una fila por producto y farmacia con faltante > 0,
+en *Compras IA → Análisis → Faltantes*. Es la base de la propuesta.
+
+- **Cantidad sugerida** = ⌈demanda depurada × semanas de cobertura − stock −
+  pendiente⌉. El stock negativo cuenta como 0 (no se compra para tapar ventas
+  sin existencia); las solicitudes sin confirmar no se restan (`en_solicitud`
+  avisa). `cobertura_actual` = (stock + pendiente) / demanda: menor = más
+  urgente, y es el orden de la lista.
+- **Droguería sugerida**, entre las ofertas disponibles (`ai_v_oferta`):
+  primero las de precio coherente con el costo de la farmacia (hasta el
+  triple), luego las que tienen stock para toda la cantidad, y entre ellas la
+  más barata. `revisar_presentacion` avisa si la elegida pasa del triple del
+  costo: algunas droguerías usan el mismo código de barras para un empaque
+  mayor (p. ej. un dispensador de 50 blísteres frente al blíster que vende la
+  farmacia). También trae precio, mejor precio, monto, stock de la droguería,
+  vencimiento y laboratorio según la droguería.
+- **Excedente en otras farmacias** (informativo, no se resta): el stock de
+  cada otra farmacia que pasa de N semanas de su propia demanda, contando lo
+  que tiene pendiente (`excess_weeks`, por defecto 4, nunca menos que la
+  cobertura), con el detalle por farmacia. Sirve para trasladar en vez de
+  comprar.
+- Ajustes: semanas de cobertura (`coverage_weeks`, 1) y de excedente
+  (`excess_weeks`, 4), leídos en cada consulta.
+
+En `dromax_ai_inventario` (inventario real + 26 semanas simuladas): 1412
+faltantes, 1004 con droguería, 41 a revisar por presentación, ~2 s.
 
 ## Oferta de droguerías (`ai_v_oferta`)
 

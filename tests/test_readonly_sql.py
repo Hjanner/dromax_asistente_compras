@@ -118,4 +118,4 @@ class TestReadonlySql(TransactionCase):
         self.assertIn("stock_quant", spec["description"])
         self.assertIn("ai_v_oferta", spec["description"])
         self.assertIn("ai_v_rotacion", spec["description"])
-        self.assertNotIn("ai_v_faltantes", spec["description"], "todavía no existe")
+        self.assertIn("ai_v_faltantes", spec["description"])

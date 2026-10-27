@@ -39,6 +39,11 @@ class ResConfigSettings(models.TransientModel):
     ai_purchase_coverage_weeks = fields.Integer(
         "Semanas de cobertura", config_parameter=PARAM_PREFIX + "coverage_weeks",
         default=prompt.DEFAULT_COVERAGE_WEEKS)
+    ai_purchase_excess_weeks = fields.Integer(
+        "Excedente a partir de (semanas)", config_parameter=PARAM_PREFIX + "excess_weeks",
+        default=prompt.DEFAULT_EXCESS_WEEKS,
+        help="Otra farmacia tiene excedente de un producto si su stock pasa de estas semanas "
+             "de su propia demanda.")
 
     def action_ai_purchase_test_openrouter(self):
         """Comprueba la llave guardada y muestra su tope de crédito y consumo."""

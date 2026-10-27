@@ -11,6 +11,8 @@
 
     <menuitem id="menu_ai_analisis" name="Análisis" parent="menu_ai_purchase_root" sequence="15"
               groups="dromax_asistente_compras.group_ai_purchase_user"/>
+    <menuitem id="menu_ai_v_faltantes" name="Faltantes" parent="menu_ai_analisis"
+              action="action_ai_v_faltantes" sequence="5"/>
     <menuitem id="menu_ai_v_rotacion" name="Rotación" parent="menu_ai_analisis"
               action="action_ai_v_rotacion" sequence="10"/>
     <menuitem id="menu_ai_v_stock" name="Stock por farmacia" parent="menu_ai_analisis"

@@ -9,6 +9,7 @@ from odoo.tests import Form
 from odoo.tests.common import TransactionCase, new_test_user, tagged
 
 from ..services.prompt import build_system_prompt
+from .test_oferta import _ean
 
 TZ = "America/Caracas"
 
@@ -24,6 +25,8 @@ class TestAnalisis(TransactionCase):
         ICP = cls.env["ir.config_parameter"].sudo()
         ICP.set_param("dromax_asistente_compras.rotation_window_weeks", "8")
         ICP.set_param("dromax_asistente_compras.outlier_mad_factor", "3")
+        ICP.set_param("dromax_asistente_compras.coverage_weeks", "1")
+        ICP.set_param("dromax_asistente_compras.excess_weeks", "4")
         Product = cls.env["product.product"]
         cls.ibuprofeno = Product.create({"name": "ZQX IBUPROFENO 400MG", "detailed_type": "product",
                                          "default_code": "ZQX1"})
@@ -88,7 +91,9 @@ class TestAnalisis(TransactionCase):
         wizard.process() if backorder else wizard.process_cancel_backorder()
 
     def _row(self, model, product, company=None):
+        # Las vistas reutilizan los mismos ids: sin vaciar la caché se leerían valores viejos.
         self.env.flush_all()
+        self.env.invalidate_all()
         rows = self.env[model].search([("product_id", "=", product.id),
                                        ("company_id", "=", (company or self.company).id)])
         self.assertLessEqual(len(rows), 1)
@@ -190,6 +195,109 @@ class TestAnalisis(TransactionCase):
         row = self._row("ai.v.pendiente", self.ibuprofeno)
         self.assertEqual((row.pendiente, row.atrasado, row.en_solicitud), (7, 7, 5))
 
+    # -- faltantes ------------------------------------------------------------
+
+    def _weekly_sales(self, product, qty, weeks=8):
+        for weeks_ago in range(1, weeks + 1):
+            self._pos_sale(product, qty, self._week_date(weeks_ago))
+
+    def _set_stock(self, product, qty, company=None):
+        warehouse = self.env["stock.warehouse"].search([("company_id", "=", (company or self.company).id)], limit=1)
+        self.env["stock.quant"]._update_available_quantity(product, warehouse.lot_stock_id, qty)
+
+    def test_shortage_formula(self):
+        self._weekly_sales(self.ibuprofeno, 10)
+        self._set_stock(self.ibuprofeno, 3)
+        self._purchase(self.ibuprofeno, 2)                        # pendiente: se resta
+        self._purchase(self.ibuprofeno, 4, confirm=False)         # solicitud: solo avisa
+        row = self._row("ai.v.faltantes", self.ibuprofeno)
+        self.assertEqual((row.demanda_semanal, row.semanas_cobertura, row.necesidad), (10, 1, 10))
+        self.assertEqual((row.stock, row.pendiente, row.en_solicitud), (3, 2, 4))
+        self.assertEqual((row.faltante, row.cantidad_sugerida), (5, 5))
+        self.assertAlmostEqual(row.cobertura_actual, 0.5)
+        self.assertFalse(row.drogueria_id)
+        self.env["ir.config_parameter"].sudo().set_param("dromax_asistente_compras.coverage_weeks", "2")
+        self.assertEqual(self._row("ai.v.faltantes", self.ibuprofeno).cantidad_sugerida, 15)
+
+    def test_shortage_rounds_up_and_ignores_negative_stock(self):
+        self._pos_sale(self.vitamina, 2, self._week_date(3))      # demanda depurada 0,25
+        self._set_stock(self.vitamina, -4)
+        row = self._row("ai.v.faltantes", self.vitamina)
+        self.assertEqual((row.stock, row.faltante, row.cantidad_sugerida), (0, 0.25, 1))
+
+    def test_no_shortage_when_covered(self):
+        self._weekly_sales(self.ibuprofeno, 10)
+        self._set_stock(self.ibuprofeno, 8)
+        self._purchase(self.ibuprofeno, 2)
+        self.assertFalse(self._row("ai.v.faltantes", self.ibuprofeno))
+
+    def test_shortage_picks_cheapest_drugstore_with_enough_stock(self):
+        self.ibuprofeno.barcode = _ean("759999900091")
+        Partner = self.env["res.partner"]
+        cara, media, barata = (Partner.create({"name": "ZQX DROG %s" % n, "is_company": True})
+                               for n in ("CARA", "MEDIA", "BARATA"))
+        for partner, price, stock in ((cara, 2.0, 100), (media, 1.5, 100), (barata, 1.0, 4)):
+            self.env["supplier.product.staging"].create({
+                "partner_id": partner.id, "codigo_barras": self.ibuprofeno.barcode,
+                "descripcion_producto": "IBUPROFENO", "fecha_lote": "30/01/2031", "laboratorio": "LAB ZQX",
+                "precio_unitario": price, "porcentaje_oferta_vigente": 0.0,
+                "precio_unitario_final": price, "stock_disponible": stock,
+            })
+        self._weekly_sales(self.ibuprofeno, 10)
+        row = self._row("ai.v.faltantes", self.ibuprofeno)
+        self.assertEqual(row.cantidad_sugerida, 10)
+        self.assertEqual(row.drogueria_id, media)                 # la barata solo tiene 4
+        self.assertEqual((row.precio, row.mejor_precio, row.monto), (1.5, 1.0, 15))
+        self.assertTrue(row.stock_drogueria_suficiente)
+        self.assertEqual((row.droguerias_con_oferta, row.laboratorio), (3, "LAB ZQX"))
+        # Si ninguna tiene toda la cantidad, la más barata.
+        self.env["ir.config_parameter"].sudo().set_param("dromax_asistente_compras.coverage_weeks", "20")
+        row = self._row("ai.v.faltantes", self.ibuprofeno)
+        self.assertEqual((row.cantidad_sugerida, row.drogueria_id), (200, barata))
+        self.assertFalse(row.stock_drogueria_suficiente)
+
+    def test_shortage_flags_other_presentations(self):
+        # Costo 1: la oferta de 45 es un dispensador de 50 blísteres con el mismo código.
+        self.ibuprofeno.barcode = _ean("759999900092")
+        self.ibuprofeno.with_company(self.company).standard_price = 1.0
+        staging = self.env["supplier.product.staging"]
+        blister, dispensador = (staging.create({
+            "partner_id": self.env["res.partner"].create({"name": "ZQX DROG %s" % name, "is_company": True}).id,
+            "codigo_barras": self.ibuprofeno.barcode, "descripcion_producto": name, "fecha_lote": "30/01/2031",
+            "precio_unitario": price, "porcentaje_oferta_vigente": 0.0,
+            "precio_unitario_final": price, "stock_disponible": stock,
+        }) for name, price, stock in (("BLISTER", 1.2, 4), ("DISPENSADOR X 50", 45.0, 100)))
+        self._weekly_sales(self.ibuprofeno, 10)
+        row = self._row("ai.v.faltantes", self.ibuprofeno)
+        self.assertEqual(row.drogueria_id, blister.partner_id)    # aunque no tenga toda la cantidad
+        self.assertFalse(row.stock_drogueria_suficiente)
+        self.assertFalse(row.revisar_presentacion)
+        self.assertEqual(row.costo, 1.0)
+        blister.unlink()
+        row = self._row("ai.v.faltantes", self.ibuprofeno)
+        self.assertEqual(row.drogueria_id, dispensador.partner_id)
+        self.assertTrue(row.revisar_presentacion)
+
+    def test_shortage_reports_excess_in_other_pharmacies(self):
+        otra = self.env["res.company"].create({"name": "ZQX FARMACIA 2"})
+        self._weekly_sales(self.ibuprofeno, 10)
+        self._set_stock(self.ibuprofeno, 30, company=otra)         # sin ventas allí: le sobra todo
+        row = self._row("ai.v.faltantes", self.ibuprofeno)
+        self.assertEqual((row.cantidad_sugerida, row.excedente_otras), (10, 30))
+        self.assertEqual(row.farmacias_con_excedente, "ZQX FARMACIA 2 (30)")
+        self.assertFalse(self._row("ai.v.faltantes", self.ibuprofeno, company=otra))
+        # Si la otra farmacia también lo vende, se queda con 4 semanas de su demanda.
+        for weeks_ago in range(1, 9):
+            order = self.env["sale.order"].with_company(otra).create({
+                "partner_id": self.cliente.id, "company_id": otra.id,
+                "order_line": [Command.create({"product_id": self.ibuprofeno.id, "product_uom_qty": 2})],
+            })
+            order.action_confirm()
+            order.date_order = self._week_date(weeks_ago)
+        self.assertEqual(self._row("ai.v.faltantes", self.ibuprofeno).excedente_otras, 22)   # 30 − 2 × 4
+        self.env["ir.config_parameter"].sudo().set_param("dromax_asistente_compras.excess_weeks", "10")
+        self.assertEqual(self._row("ai.v.faltantes", self.ibuprofeno).excedente_otras, 10)   # 30 − 2 × 10
+
     # -- farmacias y agente ---------------------------------------------------
 
     def test_branch_rule(self):
@@ -213,5 +321,6 @@ class TestAnalisis(TransactionCase):
 
     def test_prompt_uses_views(self):
         prompt = build_system_prompt(self.env)
-        for name in ("ai_v_rotacion", "demanda_depurada", "ai_v_stock", "ai_v_pendiente", "en_solicitud"):
+        for name in ("ai_v_rotacion", "demanda_depurada", "ai_v_stock", "ai_v_pendiente", "en_solicitud",
+                     "ai_v_faltantes", "cantidad_sugerida", "excedente_otras", "revisar_presentacion"):
             self.assertIn(name, prompt)

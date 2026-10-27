@@ -71,6 +71,47 @@ CATALOG = {
                              "pero indican que ya se está pidiendo"),
         ],
     ),
+    "ai_v_faltantes": (
+        "Lo que hace falta comprar: una fila por producto y farmacia con faltante > 0 "
+        "(demanda depurada × semanas de cobertura − stock − pendiente). Si no hay fila, no "
+        "hace falta pedirlo. Trae la droguería sugerida: la más barata que tiene toda la "
+        "cantidad (o la más barata si ninguna alcanza), prefiriendo precios coherentes con el "
+        "costo. Es la base de la propuesta de compra.",
+        [
+            ("company_id", "sucursal (farmacia) que necesita el producto"),
+            ("farmacia", "nombre de la farmacia"),
+            ("product_id", "product_product.id"),
+            ("product_tmpl_id", "product_template.id"),
+            ("producto", "nombre del producto"),
+            ("codigo", "código interno"),
+            ("demanda_semanal", "demanda depurada (ai_v_rotacion)"),
+            ("semanas_cobertura", "semanas de cobertura configuradas"),
+            ("necesidad", "demanda_semanal × semanas_cobertura"),
+            ("stock", "existencia actual; la negativa cuenta como 0"),
+            ("pendiente", "pendiente de recibir de órdenes confirmadas (ya restado)"),
+            ("atrasado", "parte de lo pendiente con la fecha prevista vencida"),
+            ("en_solicitud", "unidades en solicitudes sin confirmar (no restadas): avisar"),
+            ("cobertura_actual", "semanas que cubren stock + pendiente: menor = más urgente"),
+            ("faltante", "necesidad − stock − pendiente, con decimales"),
+            ("cantidad_sugerida", "faltante redondeado hacia arriba: la cantidad a pedir"),
+            ("excedente_otras", "stock de otras farmacias que pasa de varias semanas de su propia "
+                                "demanda: se podría trasladar en vez de comprar"),
+            ("farmacias_con_excedente", "qué farmacias tienen ese excedente y cuánto"),
+            ("drogueria_id", "droguería sugerida (id del contacto); NULL si ninguna lo ofrece"),
+            ("drogueria", "nombre de la droguería sugerida"),
+            ("precio", "precio final de la droguería sugerida"),
+            ("mejor_precio", "precio final más bajo entre droguerías con stock"),
+            ("monto", "cantidad_sugerida × precio"),
+            ("stock_drogueria", "stock de la droguería sugerida"),
+            ("stock_drogueria_suficiente", "TRUE si la droguería sugerida tiene toda la cantidad"),
+            ("droguerias_con_oferta", "cuántas droguerías tienen el producto disponible"),
+            ("fecha_vencimiento", "vencimiento del lote ofrecido"),
+            ("laboratorio", "laboratorio según la droguería sugerida (texto)"),
+            ("costo", "costo actual del producto en la farmacia"),
+            ("revisar_presentacion", "TRUE si el precio de la droguería pasa del triple del costo: "
+                                     "posible empaque distinto con el mismo código; no comprar sin revisar"),
+        ],
+    ),
     "ai_v_oferta": (
         "Oferta vigente de las droguerías (inventarios que publican por FTP), una fila por "
         "producto y droguería, ya cruzada con los productos propios por código de barras "
