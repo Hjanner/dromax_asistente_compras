@@ -37,5 +37,10 @@
             <field name="model_id" ref="model_ai_v_faltantes"/>
             <field name="domain_force">[('company_id', 'in', company_ids)]</field>
         </record>
+        <record id="rule_ai_purchase_proposal_line_company" model="ir.rule">
+            <field name="name">Líneas de propuesta: farmacias permitidas</field>
+            <field name="model_id" ref="model_ai_purchase_proposal_line"/>
+            <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        </record>
     </data>
 </odoo>

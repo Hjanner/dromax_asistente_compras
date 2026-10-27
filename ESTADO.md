@@ -150,6 +150,16 @@ El README explica cómo funciona lo que ya existe.
   (ajuste nuevo `excess_weeks`), informativo. En `dromax_ai_inventario`:
   1412 faltantes, 1004 con droguería, 41 a revisar por presentación, ~2 s.
 
+- **Propuesta de compra** (versión `17.0.0.9.0`, 102 tests, 2026-10-27):
+  `ai.purchase.proposal` y sus líneas (ver README), menú *Compras IA →
+  Propuestas*, tarea programada del lunes 03:00 y botón *Calcular
+  propuesta*. **Una propuesta semanal agrupada por laboratorio**, no una por
+  laboratorio como decía el diseño (decidido con el usuario: ~190
+  laboratorios con mediana de 3 líneas). Laboratorio: campo configurable →
+  corchetes del nombre → droguería. Cantidad y droguería sugeridas fijas;
+  métrica de ajuste del comprador. En `dromax_ai_inventario`: 1412 líneas,
+  187 laboratorios, ~12 s.
+
 ## Decisiones
 
 - Módulo nuevo, separado del antiguo `ai_data_chat`.
@@ -204,11 +214,11 @@ descuentos encadenados = precio final en todas las filas.
 1. **Permisos de la oferta** en el módulo FTP: hoy cualquier usuario interno
    puede editar y borrar `supplier.product.staging`; dejarla de solo lectura.
    Quitar el código muerto (`ftp.connector`, wizard vacío, `views/views.xml`).
-2. **Flujo de propuestas** con datos de prueba (no hace falta esperar a la
-   base de Daniel para construirlo; sí para validarlo): `ai.purchase.proposal`
-   a partir de `ai_v_faltantes`, cron del lunes, herramienta de ajuste en el
-   chat y botón de borradores (una orden por droguería y farmacia). Probarlo
-   en `dromax_ai_inventario` (productos reales, oferta e historial simulado).
+2. **Resto del flujo de propuestas** (probarlo en `dromax_ai_inventario`):
+   botón de borradores (una orden por droguería y farmacia, sumando a un
+   borrador abierto si existe) y, en el chat, `get_proposal` y
+   `update_proposal_line` para leer y ajustar la propuesta en lenguaje
+   natural.
 3. **Con la base multisucursal de Daniel:** validar y calibrar las vistas y
    las propuestas por sucursal con ventas reales, conectar el campo
    laboratorio y revisar el reporte de códigos de barras con el catálogo real.

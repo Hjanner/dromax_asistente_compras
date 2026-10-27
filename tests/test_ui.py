@@ -87,6 +87,27 @@ class TestUi(HttpCase):
             self._open("action=dromax_asistente_compras." + action,
                        ".o_list_view .o_data_row td[name='%s']" % column, login=buyer.login)
 
+    def test_proposal_screens(self):
+        buyer = new_test_user(self.env, login="ai_proposal_buyer_ui",
+                              groups="base.group_user,dromax_asistente_compras.group_ai_purchase_user")
+        buyer.password = buyer.login
+        product = self.env["product.product"].create({"name": "ZQX UI PROPUESTA [LAB UI]", "detailed_type": "product"})
+        session = self.env["pos.session"].create({
+            "config_id": self.env["pos.config"].create({"name": "ZQX TPV UI"}).id, "user_id": self.env.uid})
+        order = self.env["pos.order"].create({
+            "session_id": session.id, "amount_tax": 0, "amount_total": 2, "amount_paid": 2, "amount_return": 0,
+            # 2 unidades en una semana: no es atípica (con 5 sería venta esporádica y no habría faltante).
+            "lines": [(0, 0, {"product_id": product.id, "qty": 2, "price_unit": 1,
+                              "price_subtotal": 2, "price_subtotal_incl": 2})],
+        })
+        order.write({"state": "paid", "date_order": order.date_order - timedelta(weeks=1)})
+        self.env.flush_all()
+        proposal = self.env["ai.purchase.proposal"]._generate()
+        self._open("action=dromax_asistente_compras.action_ai_purchase_proposal&id=%d&view_type=form" % proposal.id,
+                   ".o_form_view .o_field_one2many .o_data_row td[name='cantidad_final']", login=buyer.login)
+        self._open("action=dromax_asistente_compras.action_ai_purchase_proposal_line",
+                   ".o_list_view .o_group_header", login=buyer.login)
+
     def test_barcode_report(self):
         buyer = new_test_user(self.env, login="ai_bm_buyer_ui",
                               groups="base.group_user,dromax_asistente_compras.group_ai_purchase_user")

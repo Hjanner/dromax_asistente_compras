@@ -9,6 +9,10 @@
               action="action_ai_purchase_chat" sequence="10"
               groups="dromax_asistente_compras.group_ai_purchase_user"/>
 
+    <menuitem id="menu_ai_purchase_proposal" name="Propuestas" parent="menu_ai_purchase_root"
+              action="action_ai_purchase_proposal" sequence="12"
+              groups="dromax_asistente_compras.group_ai_purchase_user"/>
+
     <menuitem id="menu_ai_analisis" name="Análisis" parent="menu_ai_purchase_root" sequence="15"
               groups="dromax_asistente_compras.group_ai_purchase_user"/>
     <menuitem id="menu_ai_v_faltantes" name="Faltantes" parent="menu_ai_analisis"

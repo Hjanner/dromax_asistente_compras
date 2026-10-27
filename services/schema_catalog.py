@@ -100,6 +100,7 @@ CATALOG = {
             ("drogueria_id", "droguería sugerida (id del contacto); NULL si ninguna lo ofrece"),
             ("drogueria", "nombre de la droguería sugerida"),
             ("precio", "precio final de la droguería sugerida"),
+            ("descuento", "descuento total en % de la droguería sugerida (ya incluido en precio)"),
             ("mejor_precio", "precio final más bajo entre droguerías con stock"),
             ("monto", "cantidad_sugerida × precio"),
             ("stock_drogueria", "stock de la droguería sugerida"),

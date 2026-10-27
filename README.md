@@ -119,6 +119,38 @@ en *Compras IA → Análisis → Faltantes*. Es la base de la propuesta.
 En `dromax_ai_inventario` (inventario real + 26 semanas simuladas): 1412
 faltantes, 1004 con droguería, 41 a revisar por presentación, ~2 s.
 
+## Propuesta de compra (`ai.purchase.proposal`)
+
+Menú *Compras IA → Propuestas*. **Una propuesta por semana con todas las
+farmacias**, organizada por laboratorio en las líneas (no una propuesta por
+laboratorio: con datos reales saldrían ~190 por semana con una mediana de 3
+líneas).
+
+- **Cálculo:** la tarea programada *Compras IA: propuesta de compra
+  semanal* (lunes 03:00 de Caracas, 07:00 UTC; `noupdate`, se ajusta en
+  producción) o el botón *Calcular propuesta* de la lista. Copia
+  `ai_v_faltantes` como foto: una línea por producto y farmacia, con demanda,
+  stock, pendiente, excedente en otras farmacias, droguería, precio,
+  descuento, vencimiento y un **motivo** legible («Demanda 10/sem × 1 sem −
+  stock 3 − pendiente 0 = 7. …»). No llama a la IA ni crea órdenes. Las
+  propuestas del mismo modo que seguían abiertas pasan a *Descartada*.
+- **Laboratorio** de cada línea: el campo del producto indicado en Ajustes
+  (*Campo de laboratorio*, para el módulo de laboratorios de Dromax); si no
+  hay, el texto entre corchetes al final del nombre («… [LETI]»); si no, el
+  que informa la droguería; si no, «SIN LABORATORIO».
+- **Revisión:** el comprador cambia la cantidad final (0 = no pedir), la
+  droguería (entre las que tienen oferta del producto; el precio, descuento,
+  stock y vencimiento se actualizan solos) y el motivo. La cantidad y la
+  droguería sugeridas no cambian: *Líneas ajustadas* y *Ajuste del
+  comprador (%)* (Σ |final − sugerida| / Σ sugerida) miden cuánto corrige al
+  agente. Al primer cambio la propuesta pasa a *En revisión*.
+- Estados: *Lista* → *En revisión* → *Convertida en borradores* (con el botón
+  de borradores, pendiente) o *Descartada*; cerrada no se modifica.
+- Permisos: compradores leen, calculan y ajustan; borrar, solo
+  administradores. Las líneas siguen la regla por farmacia de las pantallas.
+
+En `dromax_ai_inventario`: 1412 líneas de 187 laboratorios, ~12 s.
+
 ## Oferta de droguerías (`ai_v_oferta`)
 
 La oferta llega del módulo FTP (`advanced_interbranch_transfer`, dependencia

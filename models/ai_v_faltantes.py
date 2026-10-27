@@ -64,6 +64,8 @@ class AiVFaltantes(models.Model):
     drogueria_id = fields.Many2one("res.partner", "Droguería sugerida", readonly=True)
     drogueria = fields.Char("Nombre de la droguería", readonly=True)
     precio = fields.Float("Precio final", readonly=True, help="Precio con descuentos de la droguería sugerida.")
+    descuento = fields.Float("% Descuento", readonly=True,
+                             help="Descuento de la droguería sugerida, ya incluido en el precio final.")
     mejor_precio = fields.Float("Mejor precio", readonly=True,
                                 help="Precio final más bajo entre las droguerías con stock.")
     monto = fields.Float("Monto", readonly=True, help="Cantidad sugerida × precio final.")
@@ -136,7 +138,7 @@ class AiVFaltantes(models.Model):
             ),
             ofertas AS (
                 SELECT f.company_id, f.product_id, o.partner_id, o.drogueria, o.precio_final,
-                       o.stock_drogueria, o.fecha_vencimiento, o.laboratorio,
+                       o.descuento_pct, o.stock_drogueria, o.fecha_vencimiento, o.laboratorio,
                        o.stock_drogueria >= f.cantidad AS suficiente,
                        o.precio_final > 3 * k.costo AS revisar,
                        o.mejor_precio, o.droguerias_con_stock AS droguerias,
@@ -170,6 +172,7 @@ class AiVFaltantes(models.Model):
                    o.partner_id AS drogueria_id,
                    o.drogueria,
                    o.precio_final AS precio,
+                   o.descuento_pct AS descuento,
                    o.mejor_precio,
                    round((f.cantidad * o.precio_final)::numeric, 2) AS monto,
                    o.stock_drogueria,

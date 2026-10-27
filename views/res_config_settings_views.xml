@@ -62,6 +62,11 @@
                                     <label for="ai_purchase_excess_weeks" class="col-lg-6 o_light_label"/>
                                     <field name="ai_purchase_excess_weeks" class="col-lg-3"/>
                                 </div>
+                                <div class="row">
+                                    <label for="ai_purchase_laboratory_field" class="col-lg-6 o_light_label"/>
+                                    <field name="ai_purchase_laboratory_field" class="col-lg-6"
+                                           placeholder="Del nombre del producto"/>
+                                </div>
                             </div>
                         </setting>
                     </block>

@@ -1,0 +1,198 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- Propuesta -->
+    <record id="view_ai_purchase_proposal_tree" model="ir.ui.view">
+        <field name="name">ai.purchase.proposal.tree</field>
+        <field name="model">ai.purchase.proposal</field>
+        <field name="arch" type="xml">
+            <tree create="0" decoration-muted="state == 'discarded'">
+                <header>
+                    <button name="action_generate" type="object" string="Calcular propuesta"
+                            class="btn-primary" display="always"/>
+                </header>
+                <field name="name"/>
+                <field name="mode" optional="hide"/>
+                <field name="date_computed"/>
+                <field name="line_count"/>
+                <field name="lines_changed" optional="show"/>
+                <field name="adjustment_pct" optional="show" widget="float" digits="[16, 1]"/>
+                <field name="amount_suggested" optional="hide"/>
+                <field name="amount_total"/>
+                <field name="state" widget="badge" decoration-info="state == 'ready'"
+                       decoration-warning="state == 'in_review'" decoration-success="state == 'done'"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_ai_purchase_proposal_form" model="ir.ui.view">
+        <field name="name">ai.purchase.proposal.form</field>
+        <field name="model">ai.purchase.proposal</field>
+        <field name="arch" type="xml">
+            <form create="0" delete="0">
+                <header>
+                    <button name="action_discard" type="object" string="Descartar"
+                            invisible="state in ('done', 'discarded')"
+                            confirm="¿Descartar esta propuesta? Ya no se podrá modificar."/>
+                    <field name="state" widget="statusbar" statusbar_visible="ready,in_review,done"/>
+                </header>
+                <sheet>
+                    <div class="oe_button_box" name="button_box">
+                        <button name="action_open_lines" type="object" class="oe_stat_button" icon="fa-list">
+                            <field name="line_count" widget="statinfo" string="Líneas"/>
+                        </button>
+                    </div>
+                    <div class="oe_title">
+                        <h1><field name="name"/></h1>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="date_computed"/>
+                            <field name="offer_date"/>
+                            <field name="mode" invisible="mode == 'daily'"/>
+                            <field name="window_weeks"/>
+                            <field name="coverage_weeks"/>
+                        </group>
+                        <group>
+                            <field name="amount_suggested"/>
+                            <field name="amount_total"/>
+                            <field name="lines_changed"/>
+                            <field name="adjustment_pct" widget="float" digits="[16, 1]"/>
+                            <field name="purchase_order_ids" widget="many2many_tags"
+                                   invisible="not purchase_order_ids"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Líneas" name="lines">
+                            <field name="line_ids" readonly="state in ('done', 'discarded')">
+                                <tree editable="bottom" create="0" delete="0"
+                                      decoration-danger="revisar_presentacion"
+                                      decoration-muted="cantidad_final == 0">
+                                    <field name="state" column_invisible="1"/>
+                                    <field name="drogueria_opciones_ids" column_invisible="1"/>
+                                    <field name="laboratorio"/>
+                                    <field name="company_id" groups="base.group_multi_company"/>
+                                    <field name="product_id"/>
+                                    <field name="demanda" optional="show"/>
+                                    <field name="stock" optional="show"/>
+                                    <field name="pendiente" optional="show"/>
+                                    <field name="cantidad_sugerida"/>
+                                    <field name="cantidad_final" decoration-bf="ajustada"/>
+                                    <field name="drogueria_id" options="{'no_create': True, 'no_open': True}"/>
+                                    <field name="precio"/>
+                                    <field name="monto" sum="Total"/>
+                                    <field name="revisar_presentacion" optional="show"/>
+                                    <field name="ajustada" optional="hide"/>
+                                    <field name="motivo" optional="hide"/>
+                                </tree>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+                <div class="oe_chatter">
+                    <field name="message_ids"/>
+                </div>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_ai_purchase_proposal_search" model="ir.ui.view">
+        <field name="name">ai.purchase.proposal.search</field>
+        <field name="model">ai.purchase.proposal</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="name"/>
+                <filter name="open" string="Abiertas" domain="[('state', 'in', ('ready', 'in_review'))]"/>
+                <filter name="done" string="Convertidas en borradores" domain="[('state', '=', 'done')]"/>
+                <filter name="discarded" string="Descartadas" domain="[('state', '=', 'discarded')]"/>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_ai_purchase_proposal" model="ir.actions.act_window">
+        <field name="name">Propuestas de compra</field>
+        <field name="res_model">ai.purchase.proposal</field>
+        <field name="groups_id" eval="[(6, 0, [ref('group_ai_purchase_user')])]"/>
+        <field name="view_mode">tree,form</field>
+        <field name="search_view_id" ref="view_ai_purchase_proposal_search"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">Todavía no hay propuestas</p>
+            <p>Cada lunes en la madrugada se calcula la compra de la semana a partir de los
+               faltantes; también se puede calcular ahora con el botón <b>Calcular propuesta</b>.</p>
+        </field>
+    </record>
+
+    <!-- Líneas -->
+    <record id="view_ai_purchase_proposal_line_tree" model="ir.ui.view">
+        <field name="name">ai.purchase.proposal.line.tree</field>
+        <field name="model">ai.purchase.proposal.line</field>
+        <field name="arch" type="xml">
+            <tree editable="bottom" create="0" delete="0"
+                  decoration-danger="revisar_presentacion" decoration-muted="cantidad_final == 0">
+                <field name="state" column_invisible="1"/>
+                <field name="drogueria_opciones_ids" column_invisible="1"/>
+                <field name="proposal_id" optional="hide"/>
+                <field name="laboratorio" optional="hide"/>
+                <field name="company_id" groups="base.group_multi_company"/>
+                <field name="product_id"/>
+                <field name="demanda" optional="show"/>
+                <field name="stock" optional="show"/>
+                <field name="pendiente" optional="show"/>
+                <field name="en_solicitud" optional="hide"/>
+                <field name="cobertura_actual" optional="hide"/>
+                <field name="excedente_otras" optional="show" decoration-info="excedente_otras &gt; 0"/>
+                <field name="farmacias_con_excedente" optional="hide"/>
+                <field name="cantidad_sugerida" sum="Total"/>
+                <field name="cantidad_final" sum="Total" decoration-bf="ajustada"
+                       readonly="state in ('done', 'discarded')"/>
+                <field name="drogueria_sugerida_id" optional="hide"/>
+                <field name="drogueria_id" options="{'no_create': True, 'no_open': True}"
+                       readonly="state in ('done', 'discarded')"/>
+                <field name="precio"/>
+                <field name="descuento" optional="hide"/>
+                <field name="stock_drogueria" optional="hide"/>
+                <field name="fecha_vencimiento" optional="hide"/>
+                <field name="monto" sum="Total"/>
+                <field name="revisar_presentacion" optional="show"/>
+                <field name="ajustada" optional="hide"/>
+                <field name="motivo" optional="show" readonly="state in ('done', 'discarded')"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_ai_purchase_proposal_line_search" model="ir.ui.view">
+        <field name="name">ai.purchase.proposal.line.search</field>
+        <field name="model">ai.purchase.proposal.line</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="product_id"/>
+                <field name="laboratorio"/>
+                <field name="company_id" groups="base.group_multi_company"/>
+                <field name="drogueria_id"/>
+                <field name="proposal_id"/>
+                <filter name="a_pedir" string="A pedir" domain="[('cantidad_final', '>', 0)]"/>
+                <filter name="ajustadas" string="Ajustadas" domain="[('ajustada', '=', True)]"/>
+                <filter name="revisar_presentacion" string="Revisar presentación"
+                        domain="[('revisar_presentacion', '=', True)]"/>
+                <filter name="sin_drogueria" string="Sin droguería" domain="[('drogueria_id', '=', False)]"/>
+                <filter name="excedente" string="Con excedente en otras farmacias"
+                        domain="[('excedente_otras', '>', 0)]"/>
+                <group expand="0" string="Agrupar por">
+                    <filter name="group_laboratorio" string="Laboratorio" context="{'group_by': 'laboratorio'}"/>
+                    <filter name="group_company" string="Farmacia" context="{'group_by': 'company_id'}"/>
+                    <filter name="group_drogueria" string="Droguería" context="{'group_by': 'drogueria_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_ai_purchase_proposal_line" model="ir.actions.act_window">
+        <field name="name">Líneas de propuesta</field>
+        <field name="res_model">ai.purchase.proposal.line</field>
+        <field name="groups_id" eval="[(6, 0, [ref('group_ai_purchase_user')])]"/>
+        <field name="view_mode">tree</field>
+        <field name="search_view_id" ref="view_ai_purchase_proposal_line_search"/>
+        <field name="context">{'search_default_group_laboratorio': 1}</field>
+    </record>
+
+</odoo>

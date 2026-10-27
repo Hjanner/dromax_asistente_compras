@@ -39,6 +39,11 @@ class ResConfigSettings(models.TransientModel):
     ai_purchase_coverage_weeks = fields.Integer(
         "Semanas de cobertura", config_parameter=PARAM_PREFIX + "coverage_weeks",
         default=prompt.DEFAULT_COVERAGE_WEEKS)
+    ai_purchase_laboratory_field = fields.Char(
+        "Campo de laboratorio", config_parameter=PARAM_PREFIX + "laboratory_field",
+        help="Nombre técnico del campo del producto con el laboratorio (p. ej. el del módulo de "
+             "laboratorios de Dromax). Vacío: se toma del texto entre corchetes al final del "
+             "nombre o, si no hay, del que informa la droguería.")
     ai_purchase_excess_weeks = fields.Integer(
         "Excedente a partir de (semanas)", config_parameter=PARAM_PREFIX + "excess_weeks",
         default=prompt.DEFAULT_EXCESS_WEEKS,

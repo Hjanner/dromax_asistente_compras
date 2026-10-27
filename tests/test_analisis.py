@@ -14,8 +14,9 @@ from .test_oferta import _ean
 TZ = "America/Caracas"
 
 
-@tagged("post_install", "-at_install", "dromax_asistente_compras")
-class TestAnalisis(TransactionCase):
+class AnalisisCase(TransactionCase):
+    """Datos y utilidades comunes: dos productos, un cliente, una droguería y
+    una caja de TPV en la empresa actual (Caracas)."""
 
     @classmethod
     def setUpClass(cls):
@@ -98,6 +99,25 @@ class TestAnalisis(TransactionCase):
                                        ("company_id", "=", (company or self.company).id)])
         self.assertLessEqual(len(rows), 1)
         return rows
+
+    def _weekly_sales(self, product, qty, weeks=8):
+        for weeks_ago in range(1, weeks + 1):
+            self._pos_sale(product, qty, self._week_date(weeks_ago))
+
+    def _set_stock(self, product, qty, company=None):
+        warehouse = self.env["stock.warehouse"].search([("company_id", "=", (company or self.company).id)], limit=1)
+        self.env["stock.quant"]._update_available_quantity(product, warehouse.lot_stock_id, qty)
+
+    def _offer(self, partner, product, price, stock, lab="", discount=0.0):
+        return self.env["supplier.product.staging"].create({
+            "partner_id": partner.id, "codigo_barras": product.barcode, "descripcion_producto": product.name,
+            "fecha_lote": "30/01/2031", "laboratorio": lab, "precio_unitario": price,
+            "porcentaje_oferta_vigente": discount, "precio_unitario_final": price, "stock_disponible": stock,
+        })
+
+
+@tagged("post_install", "-at_install", "dromax_asistente_compras")
+class TestAnalisis(AnalisisCase):
 
     # -- rotación -----------------------------------------------------------
 
@@ -196,14 +216,6 @@ class TestAnalisis(TransactionCase):
         self.assertEqual((row.pendiente, row.atrasado, row.en_solicitud), (7, 7, 5))
 
     # -- faltantes ------------------------------------------------------------
-
-    def _weekly_sales(self, product, qty, weeks=8):
-        for weeks_ago in range(1, weeks + 1):
-            self._pos_sale(product, qty, self._week_date(weeks_ago))
-
-    def _set_stock(self, product, qty, company=None):
-        warehouse = self.env["stock.warehouse"].search([("company_id", "=", (company or self.company).id)], limit=1)
-        self.env["stock.quant"]._update_available_quantity(product, warehouse.lot_stock_id, qty)
 
     def test_shortage_formula(self):
         self._weekly_sales(self.ibuprofeno, 10)

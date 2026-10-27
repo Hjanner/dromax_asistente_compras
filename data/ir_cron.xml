@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Propuesta semanal: lunes 03:00 en Caracas (07:00 UTC). noupdate: la hora
+         o la frecuencia que se cambien en producción no las pisa una actualización. -->
+    <data noupdate="1">
+        <record id="cron_ai_purchase_proposal" model="ir.cron">
+            <field name="name">Compras IA: propuesta de compra semanal</field>
+            <field name="model_id" ref="model_ai_purchase_proposal"/>
+            <field name="state">code</field>
+            <field name="code">model._cron_generate()</field>
+            <field name="user_id" ref="base.user_root"/>
+            <field name="interval_number">1</field>
+            <field name="interval_type">weeks</field>
+            <field name="numbercall">-1</field>
+            <field name="nextcall" eval="(DateTime.now() + relativedelta(weekday=0, days=1, hour=7, minute=0, second=0)).strftime('%Y-%m-%d %H:%M:%S')"/>
+            <field name="active" eval="True"/>
+        </record>
+    </data>
+</odoo>
