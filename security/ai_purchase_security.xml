@@ -14,5 +14,23 @@
             <field name="domain_force">[('user_id', '=', user.id)]</field>
             <field name="groups" eval="[(4, ref('group_ai_purchase_user'))]"/>
         </record>
+
+        <!-- Vistas de análisis: solo las farmacias (empresas) permitidas del usuario,
+             como el stock, las ventas y las compras estándar de Odoo. -->
+        <record id="rule_ai_v_rotacion_company" model="ir.rule">
+            <field name="name">Rotación: farmacias permitidas</field>
+            <field name="model_id" ref="model_ai_v_rotacion"/>
+            <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        </record>
+        <record id="rule_ai_v_stock_company" model="ir.rule">
+            <field name="name">Stock: farmacias permitidas</field>
+            <field name="model_id" ref="model_ai_v_stock"/>
+            <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        </record>
+        <record id="rule_ai_v_pendiente_company" model="ir.rule">
+            <field name="name">Pendientes: farmacias permitidas</field>
+            <field name="model_id" ref="model_ai_v_pendiente"/>
+            <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        </record>
     </data>
 </odoo>

@@ -57,6 +57,38 @@ Se puede volver a ejecutar cuando se añadan tablas o vistas a la lista blanca.
 Las vistas `ai_v_*` del módulo no lo necesitan: se recrean al actualizar el
 módulo y su `init()` vuelve a dar el permiso al rol configurado en `ro_user`.
 
+## Rotación, stock y pendientes (`ai_v_rotacion`, `ai_v_stock`, `ai_v_pendiente`)
+
+Vistas SQL por producto y farmacia (`company_id`), en la unidad del producto,
+en el menú *Compras IA → Análisis* y consultables por el agente. Las
+pantallas muestran solo las farmacias permitidas del usuario (regla por
+empresa, como el resto de Odoo); el chat, que consulta con el rol de solo
+lectura, las ve todas.
+
+- **Rotación** (`ai_v_rotacion`): demanda de las últimas N semanas
+  **completas** (lunes a domingo en la hora de la sucursal, `res_partner.tz`
+  de la empresa o `America/Caracas`; la semana en curso no entra). Demanda =
+  TPV (pedidos pagados; sin los tickets que liquidan un pedido de venta) +
+  pedidos de venta confirmados. Las semanas sin venta cuentan como 0. Trae
+  media, mediana, desviación, MAD y la **demanda depurada**: la media sin las
+  semanas que se alejan de la mediana más de *factor × MAD*. Si el MAD es
+  menor que 1 se usa 1; si no, con ventas esporádicas (MAD = 0) toda semana
+  con venta sería atípica. Consecuencia: un producto vendido en una sola
+  semana, en más de *factor* unidades, queda con demanda depurada 0 (venta
+  esporádica, filtro *Venta esporádica*). N (`rotation_window_weeks`, 8) y el
+  factor (`outlier_mad_factor`, 3) se leen de Ajustes en cada consulta.
+- **Stock** (`ai_v_stock`): suma de los quants de las ubicaciones internas;
+  incluye las existencias en 0 y negativas.
+- **Pendiente** (`ai_v_pendiente`): órdenes confirmadas con la recepción sin
+  completar. Por línea, lo que falta por entrar en sus movimientos de stock;
+  si la línea no tiene movimientos (compras importadas o simuladas), pedido −
+  recibido. Lo que se cierra sin pendiente al recibir no cuenta. Aparte,
+  `atrasado` (fecha prevista vencida) y `en_solicitud` (solicitudes de
+  presupuesto sin confirmar, que no se restan).
+
+En `dromax_ai_multi` (3 años simulados): 5186 filas de rotación (~3,5 s),
+5576 de stock y 1613 de pendientes (~0,6 s cada una).
+
 ## Oferta de droguerías (`ai_v_oferta`)
 
 La oferta llega del módulo FTP (`advanced_interbranch_transfer`, dependencia
@@ -129,6 +161,31 @@ IDEAL, LA45 → FARMACIA LA 45, MANAL, SOLIDARIA → FARMARCIA FSC (diccionario
 `BRANCHES` del script). Se puede repetir: actualiza y solo ajusta las
 existencias que cambiaron. Con el Excel del 2026-10-26: 5008 productos y
 ~441.000 unidades en ~6 min.
+
+## Historial simulado sobre el inventario real (`scripts/simulate_history.py`)
+
+Para probar el agente con productos que coinciden con la oferta de las
+droguerías: sobre una base con el inventario ya importado (y la oferta FTP
+copiada, sin conectarse a los FTP), inventa ventas y compras coherentes con
+las existencias de cada farmacia. No toca el stock.
+
+```bash
+SIM_DB=<base> python3 odoo/odoo-bin shell -c odoo/debian/odoo.conf -d <base> --no-http \
+    < custom_addons/dromax_asistente_compras/scripts/simulate_history.py
+```
+
+- `SIM_DB` tiene que ser el nombre de la base (protección); `SIM_SEED`
+  (17) y `SIM_WEEKS` (26 semanas completas) son opcionales.
+- La demanda semanal sale del stock real: la mayoría con 1 a 6 semanas de
+  cobertura, y además productos cortos, sobrados, sin movimiento, nuevos y
+  agotados (con stock en otras farmacias). Semanas atípicas por arriba y en
+  cero.
+- Ventas por TPV (un ticket por farmacia y día) y pedidos de venta grandes en
+  la farmacia con más productos; compras recibidas cada lunes, pendientes
+  (algunas atrasadas o parciales) y solicitudes en borrador, con la droguería
+  y el precio de la oferta cuando el producto la tiene.
+- Se escribe con SQL (sin movimientos de inventario ni contabilidad) y no se
+  puede repetir sobre la misma base: hay que restaurarla.
 
 ## Chat del agente
 

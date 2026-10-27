@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- Rotación -->
+    <record id="view_ai_v_rotacion_tree" model="ir.ui.view">
+        <field name="name">ai.v.rotacion.tree</field>
+        <field name="model">ai.v.rotacion</field>
+        <field name="arch" type="xml">
+            <tree create="0" edit="0" delete="0">
+                <field name="company_id" groups="base.group_multi_company"/>
+                <field name="product_id"/>
+                <field name="demanda_depurada"/>
+                <field name="demanda_media" optional="show"/>
+                <field name="demanda_mediana" optional="hide"/>
+                <field name="desviacion" optional="hide"/>
+                <field name="mad" optional="hide"/>
+                <field name="semanas_atipicas" optional="show"
+                       decoration-warning="semanas_atipicas &gt; 0"/>
+                <field name="semanas_con_venta" optional="show"/>
+                <field name="semanas" optional="hide"/>
+                <field name="venta_total" sum="Total"/>
+                <field name="venta_tpv" optional="hide" sum="Total"/>
+                <field name="venta_pedidos" optional="show" sum="Total"/>
+                <field name="desde" optional="hide"/>
+                <field name="hasta" optional="hide"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_ai_v_rotacion_search" model="ir.ui.view">
+        <field name="name">ai.v.rotacion.search</field>
+        <field name="model">ai.v.rotacion</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="product_id"/>
+                <field name="codigo"/>
+                <field name="company_id" groups="base.group_multi_company"/>
+                <filter name="atipicas" string="Con semanas atípicas" domain="[('semanas_atipicas', '>', 0)]"/>
+                <filter name="pedidos" string="Con pedidos de venta" domain="[('venta_pedidos', '!=', 0)]"/>
+                <filter name="esporadicos" string="Venta esporádica"
+                        domain="[('demanda_depurada', '=', 0)]"
+                        help="Vendidos en la ventana, pero sin demanda depurada: solo semanas atípicas."/>
+                <group expand="0" string="Agrupar por">
+                    <filter name="group_company" string="Farmacia" context="{'group_by': 'company_id'}"/>
+                    <filter name="group_product" string="Producto" context="{'group_by': 'product_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_ai_v_rotacion" model="ir.actions.act_window">
+        <field name="name">Rotación</field>
+        <field name="res_model">ai.v.rotacion</field>
+        <field name="groups_id" eval="[(6, 0, [ref('group_ai_purchase_user')])]"/>
+        <field name="view_mode">tree</field>
+        <field name="search_view_id" ref="view_ai_v_rotacion_search"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_empty_folder">No hay ventas en la ventana de rotación</p>
+            <p>Demanda semanal por producto y farmacia (TPV + pedidos de venta) en las últimas
+               semanas completas, sin las semanas atípicas. La ventana y el umbral se ajustan en
+               Compras IA → Configuración → Ajustes.</p>
+        </field>
+    </record>
+
+    <!-- Stock -->
+    <record id="view_ai_v_stock_tree" model="ir.ui.view">
+        <field name="name">ai.v.stock.tree</field>
+        <field name="model">ai.v.stock</field>
+        <field name="arch" type="xml">
+            <tree create="0" edit="0" delete="0" decoration-danger="stock &lt; 0"
+                  decoration-muted="stock == 0">
+                <field name="company_id" groups="base.group_multi_company"/>
+                <field name="product_id"/>
+                <field name="codigo" optional="hide"/>
+                <field name="stock" sum="Total"/>
+                <field name="reservado" optional="show" sum="Total"/>
+                <field name="disponible" optional="show" sum="Total"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_ai_v_stock_search" model="ir.ui.view">
+        <field name="name">ai.v.stock.search</field>
+        <field name="model">ai.v.stock</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="product_id"/>
+                <field name="codigo"/>
+                <field name="company_id" groups="base.group_multi_company"/>
+                <filter name="con_stock" string="Con stock" domain="[('stock', '>', 0)]"/>
+                <filter name="sin_stock" string="Sin stock" domain="[('stock', '&lt;=', 0)]"/>
+                <filter name="negativo" string="Negativo" domain="[('stock', '&lt;', 0)]"/>
+                <group expand="0" string="Agrupar por">
+                    <filter name="group_company" string="Farmacia" context="{'group_by': 'company_id'}"/>
+                    <filter name="group_product" string="Producto" context="{'group_by': 'product_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_ai_v_stock" model="ir.actions.act_window">
+        <field name="name">Stock por farmacia</field>
+        <field name="res_model">ai.v.stock</field>
+        <field name="groups_id" eval="[(6, 0, [ref('group_ai_purchase_user')])]"/>
+        <field name="view_mode">tree</field>
+        <field name="search_view_id" ref="view_ai_v_stock_search"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_empty_folder">No hay existencias registradas</p>
+            <p>Existencia actual por producto y farmacia, sumando las ubicaciones internas.</p>
+        </field>
+    </record>
+
+    <!-- Pendiente de recibir -->
+    <record id="view_ai_v_pendiente_tree" model="ir.ui.view">
+        <field name="name">ai.v.pendiente.tree</field>
+        <field name="model">ai.v.pendiente</field>
+        <field name="arch" type="xml">
+            <tree create="0" edit="0" delete="0" decoration-warning="atrasado &gt; 0">
+                <field name="company_id" groups="base.group_multi_company"/>
+                <field name="product_id"/>
+                <field name="codigo" optional="hide"/>
+                <field name="pendiente" sum="Total"/>
+                <field name="atrasado" optional="show" sum="Total"/>
+                <field name="ordenes" optional="show"/>
+                <field name="proxima_llegada"/>
+                <field name="en_solicitud" optional="show" sum="Total"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_ai_v_pendiente_search" model="ir.ui.view">
+        <field name="name">ai.v.pendiente.search</field>
+        <field name="model">ai.v.pendiente</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="product_id"/>
+                <field name="codigo"/>
+                <field name="company_id" groups="base.group_multi_company"/>
+                <filter name="pendiente" string="Pendiente de recibir" domain="[('pendiente', '>', 0)]"/>
+                <filter name="atrasado" string="Atrasado" domain="[('atrasado', '>', 0)]"/>
+                <filter name="en_solicitud" string="En solicitudes sin confirmar" domain="[('en_solicitud', '>', 0)]"/>
+                <group expand="0" string="Agrupar por">
+                    <filter name="group_company" string="Farmacia" context="{'group_by': 'company_id'}"/>
+                    <filter name="group_product" string="Producto" context="{'group_by': 'product_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_ai_v_pendiente" model="ir.actions.act_window">
+        <field name="name">Pendiente de recibir</field>
+        <field name="res_model">ai.v.pendiente</field>
+        <field name="groups_id" eval="[(6, 0, [ref('group_ai_purchase_user')])]"/>
+        <field name="view_mode">tree</field>
+        <field name="search_view_id" ref="view_ai_v_pendiente_search"/>
+        <field name="context">{'search_default_pendiente': 1}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_empty_folder">No hay compras pendientes de recibir</p>
+            <p>Unidades de órdenes de compra confirmadas que aún no han llegado, por producto y
+               farmacia, y lo que está en solicitudes de presupuesto sin confirmar.</p>
+        </field>
+    </record>
+
+</odoo>

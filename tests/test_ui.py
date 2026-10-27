@@ -5,6 +5,8 @@ El servidor no valida que los campos de una vista existan; eso lo hace el
 cliente web al dibujarla. Por eso se abren de verdad: cualquier error en la
 consola del navegador hace fallar el test.
 """
+from datetime import timedelta
+
 from odoo.tests.common import HttpCase, new_test_user, tagged
 
 WAIT_FOR = """
@@ -54,6 +56,34 @@ class TestUi(HttpCase):
         })
         self._open("action=dromax_asistente_compras.action_ai_v_oferta",
                    ".o_list_view .o_data_row", login=buyer.login)
+
+    def test_analysis_lists(self):
+        buyer = new_test_user(self.env, login="ai_analisis_buyer_ui",
+                              groups="base.group_user,dromax_asistente_compras.group_ai_purchase_user")
+        buyer.password = buyer.login
+        product = self.env["product.product"].create({"name": "ZQX UI ANALISIS", "detailed_type": "product"})
+        warehouse = self.env["stock.warehouse"].search([("company_id", "=", self.env.company.id)], limit=1)
+        self.env["stock.quant"].with_context(inventory_mode=True).create({
+            "product_id": product.id, "location_id": warehouse.lot_stock_id.id, "inventory_quantity": 5,
+        }).action_apply_inventory()
+        drogueria = self.env["res.partner"].create({"name": "DROGUERÍA UI", "is_company": True})
+        self.env["purchase.order"].create({
+            "partner_id": drogueria.id,
+            "order_line": [(0, 0, {"product_id": product.id, "product_qty": 3, "price_unit": 1})],
+        }).button_confirm()
+        session = self.env["pos.session"].create({
+            "config_id": self.env["pos.config"].create({"name": "ZQX TPV UI"}).id, "user_id": self.env.uid})
+        order = self.env["pos.order"].create({
+            "session_id": session.id, "amount_tax": 0, "amount_total": 2, "amount_paid": 2, "amount_return": 0,
+            "lines": [(0, 0, {"product_id": product.id, "qty": 2, "price_unit": 1,
+                              "price_subtotal": 2, "price_subtotal_incl": 2})],
+        })
+        order.write({"state": "paid", "date_order": order.date_order - timedelta(weeks=1)})
+        for action, column in (("action_ai_v_rotacion", "demanda_depurada"),
+                               ("action_ai_v_stock", "disponible"),
+                               ("action_ai_v_pendiente", "proxima_llegada")):
+            self._open("action=dromax_asistente_compras." + action,
+                       ".o_list_view .o_data_row td[name='%s']" % column, login=buyer.login)
 
     def test_barcode_report(self):
         buyer = new_test_user(self.env, login="ai_bm_buyer_ui",

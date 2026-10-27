@@ -19,14 +19,15 @@ rol de solo lectura. La única escritura es la orden de compra en borrador.
     """,
     'author': "Hjanner",
     'category': 'Inventory/Purchase',
-    'version': '17.0.0.6.0',
+    'version': '17.0.0.7.0',
     'license': 'LGPL-3',
     'application': True,
     'installable': True,
     'depends': [
         'base',
-        'purchase',
-        'stock',
+        'purchase_stock',
+        # Ventas del TPV (pos_sale: liquidación de pedidos de venta en el TPV) y pedidos de venta.
+        'pos_sale',
         # Oferta de las droguerías (tabla supplier_product_staging) cargada por FTP.
         'advanced_interbranch_transfer',
     ],
@@ -40,6 +41,7 @@ rol de solo lectura. La única escritura es la orden de compra en borrador.
         'views/ai_purchase_chat_views.xml',
         'views/ai_v_oferta_views.xml',
         'views/ai_barcode_mismatch_views.xml',
+        'views/ai_v_analisis_views.xml',
         'views/menus.xml',
     ],
     'assets': {

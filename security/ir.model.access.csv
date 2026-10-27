@@ -4,3 +4,6 @@ access_ai_purchase_chat_session_user,ai.purchase.chat.session compradores,model_
 access_ai_purchase_chat_message_user,ai.purchase.chat.message compradores,model_ai_purchase_chat_message,group_ai_purchase_user,1,0,1,0
 access_ai_v_oferta_user,ai.v.oferta compradores,model_ai_v_oferta,group_ai_purchase_user,1,0,0,0
 access_ai_barcode_mismatch_user,ai.barcode.mismatch compradores,model_ai_barcode_mismatch,group_ai_purchase_user,1,0,0,0
+access_ai_v_rotacion_user,ai.v.rotacion compradores,model_ai_v_rotacion,group_ai_purchase_user,1,0,0,0
+access_ai_v_stock_user,ai.v.stock compradores,model_ai_v_stock,group_ai_purchase_user,1,0,0,0
+access_ai_v_pendiente_user,ai.v.pendiente compradores,model_ai_v_pendiente,group_ai_purchase_user,1,0,0,0

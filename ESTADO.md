@@ -1,6 +1,6 @@
 # Estado del proyecto
 
-Última actualización: 2026-10-23. Qué está hecho, qué decidimos y qué falta.
+Última actualización: 2026-10-26. Qué está hecho, qué decidimos y qué falta.
 El README explica cómo funciona lo que ya existe.
 
 ## Hecho
@@ -118,6 +118,27 @@ El README explica cómo funciona lo que ya existe.
   por sucursal (hoy uno solo, la mediana) y unidades de medida tipo
   «UNIDAD (10 AMP)» (se importan como Unidades).
 
+- **Vistas de rotación, stock y pendiente** (versión `17.0.0.7.0`, 88 tests,
+  2026-10-26): `ai_v_rotacion`, `ai_v_stock` y `ai_v_pendiente` (ver
+  README), menú *Compras IA → Análisis*, regla por empresa en las pantallas,
+  catálogo y prompt del agente (usa la demanda depurada ya calculada). El
+  módulo ahora depende de `purchase_stock` y `pos_sale`. Decisiones propias,
+  a validar con compras: semanas completas en hora local; atípicas por ambos
+  lados (también las semanas bajas, p. ej. por quiebre de stock); MAD mínimo
+  de 1 unidad, así que la venta esporádica de una sola semana queda con
+  demanda depurada 0; pendiente por movimientos de stock y, sin ellos, pedido
+  − recibido.
+
+- **Historial simulado sobre el inventario real** (2026-10-26):
+  `scripts/simulate_history.py` (ver README) en `dromax_ai_inventario`, con
+  la oferta FTP copiada de `dromax_ai_multi` (15.305 filas; 2349 de los 3642
+  productos con stock tienen oferta). 26 semanas: 1274 tickets de TPV
+  (364.278 líneas), 8 pedidos de venta, 550 compras (21 pendientes, 4
+  solicitudes). Resultado: 11.905 filas de rotación, 1166 de pendientes y
+  ~1100 faltantes a una semana de cobertura, 772 con oferta. Copia sin
+  simular: `dromax_ai_inventario_base`. En `dromax_ai_multi` los productos
+  simulados no coinciden con la oferta: para propuestas, usar esta base.
+
 ## Decisiones
 
 - Módulo nuevo, separado del antiguo `ai_data_chat`.
@@ -170,15 +191,21 @@ descuentos encadenados = precio final en todas las filas.
    puede editar y borrar `supplier.product.staging`; dejarla de solo lectura.
    Quitar el código muerto (`ftp.connector`, wizard vacío, `views/views.xml`).
 2. **Flujo de propuestas** con datos de prueba (no hace falta esperar a la
-   base de Daniel para construirlo; sí para validarlo): vistas
-   `ai_v_rotacion`, `ai_v_stock`, `ai_v_pendiente`, `ai_v_faltantes`,
+   base de Daniel para construirlo; sí para validarlo): `ai_v_faltantes`,
    `ai.purchase.proposal`, herramientas y botón de solicitud de presupuesto.
-3. **Con la base multisucursal de Daniel:** validar y calibrar las vistas y
+   Probarlo en `dromax_ai_inventario` (productos reales, oferta e historial
+   simulado).
+3. **Filtro por farmacia en el chat**, si la compra no es centralizada: hoy el
+   rol de solo lectura ve todas las farmacias (seguridad por filas de
+   PostgreSQL limitada a `dromax_ai_ro` y vistas `security_invoker`).
+4. **Con la base multisucursal de Daniel:** validar y calibrar las vistas y
    las propuestas por sucursal con ventas reales, conectar el campo
    laboratorio y revisar el reporte de códigos de barras con el catálogo real.
 
 ## Preguntas abiertas para Daniel
 
+- ¿La compra es centralizada o cada farmacia compra lo suyo? (define si el
+  chat debe filtrar por farmacia).
 - Ventana de semanas de historial para la rotación (provisional: 8).
 - Campo laboratorio: ¿many2one o many2many? ¿Coincide con el de los archivos
   de las droguerías?

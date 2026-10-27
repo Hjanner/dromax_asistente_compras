@@ -56,11 +56,14 @@ señálalo aparte y no lo cuentes como ahorro."""
 
 OVERSTOCK_RULES = """\
 Reglas para sugerir cantidades (evitar el sobre-stock):
-1. Demanda depurada: calcula la demanda semanal por producto y farmacia en las \
-últimas {window} semanas y descarta las semanas atípicas (las que se alejan de \
-la mediana más de {mad} veces la desviación absoluta mediana, MAD) antes de promediar.
+1. Demanda depurada: la demanda semanal por producto y farmacia en las \
+últimas {window} semanas completas, sin las semanas atípicas (las que se alejan \
+de la mediana más de {mad} veces la desviación absoluta mediana, MAD). Ya está \
+calculada en ai_v_rotacion.demanda_depurada: úsala, no la recalcules.
 2. Cantidad sugerida = demanda depurada × {coverage} semana(s) de cobertura \
-− stock actual (ubicaciones internas) − pendiente de recibir. Si sale ≤ 0, no se pide.
+− stock actual (ai_v_stock.stock) − pendiente de recibir (ai_v_pendiente.pendiente). \
+Si sale ≤ 0, no se pide. Si el producto ya está en solicitudes sin confirmar \
+(ai_v_pendiente.en_solicitud), avísalo.
 3. Descuenta siempre lo pendiente de recibir de órdenes confirmadas.
 4. Un descuento por volumen solo justifica pedir más si la rotación vende el \
 exceso antes del vencimiento del lote (ai_v_oferta.fecha_vencimiento).
@@ -82,7 +85,11 @@ Notas para el SQL (PostgreSQL, Odoo 17):
 Semana: date_trunc('week', date_order).
 - Nombre de producto: COALESCE(pt.name->>'es_VE', pt.name->>'en_US').
 - Producto: tabla_linea.product_id -> product_product.id -> product_tmpl_id -> product_template.id.
-- Stock actual: SUM(stock_quant.quantity) uniendo stock_location con usage = 'internal'.
+- Demanda, stock y pendiente por producto y farmacia: ai_v_rotacion, ai_v_stock y \
+ai_v_pendiente, unidas por (company_id, product_id) con LEFT JOIN (sin fila = 0). \
+Ya vienen en la unidad del producto.
+- Ventas de un periodo distinto de la ventana de rotación: pos_order_line + \
+sale_order_line con sus filtros de estado.
 - Comparar droguerías en una sola consulta: la fila con orden_precio = 1 es la droguería \
 más barata de ese codigo_barras y ya trae mejor_precio y segundo_precio (el de la siguiente \
 droguería); no hace falta unir la vista consigo misma.

@@ -10,6 +10,67 @@ base multisucursal de producción puede diferir de la de desarrollo.
 
 # tabla -> (descripción, [(columna, descripción), ...])
 CATALOG = {
+    "ai_v_rotacion": (
+        "Demanda semanal por producto y farmacia en las últimas semanas completas (lunes a "
+        "domingo, sin la semana en curso): TPV + pedidos de venta, semanas sin venta = 0. Una "
+        "fila por producto y farmacia con alguna venta en la ventana; si no hay fila, no se "
+        "vendió. Úsala en vez de calcular la demanda a mano.",
+        [
+            ("company_id", "sucursal (farmacia)"),
+            ("farmacia", "nombre de la farmacia"),
+            ("product_id", "product_product.id"),
+            ("product_tmpl_id", "product_template.id"),
+            ("producto", "nombre del producto"),
+            ("codigo", "código interno"),
+            ("semanas", "semanas de la ventana"),
+            ("desde", "lunes de la primera semana de la ventana"),
+            ("hasta", "domingo de la última semana completa"),
+            ("semanas_con_venta", "semanas con venta distinta de 0"),
+            ("venta_total", "unidades vendidas en la ventana (TPV + pedidos)"),
+            ("venta_tpv", "unidades vendidas por TPV"),
+            ("venta_pedidos", "unidades de pedidos de venta (clientes especiales)"),
+            ("demanda_media", "media semanal con todas las semanas, atípicas incluidas"),
+            ("demanda_mediana", "mediana semanal"),
+            ("desviacion", "desviación estándar semanal"),
+            ("mad", "desviación absoluta mediana"),
+            ("semanas_atipicas", "semanas descartadas por alejarse de la mediana más de factor × MAD"),
+            ("demanda_depurada", "media semanal sin las semanas atípicas: la demanda para la propuesta"),
+        ],
+    ),
+    "ai_v_stock": (
+        "Existencia actual por producto y farmacia (ubicaciones internas). Si no hay fila, "
+        "el producto nunca tuvo stock en esa farmacia: cuenta como 0.",
+        [
+            ("company_id", "sucursal (farmacia)"),
+            ("farmacia", "nombre de la farmacia"),
+            ("product_id", "product_product.id"),
+            ("product_tmpl_id", "product_template.id"),
+            ("producto", "nombre del producto"),
+            ("codigo", "código interno"),
+            ("stock", "unidades en existencia (puede ser negativo)"),
+            ("reservado", "unidades reservadas para salidas"),
+            ("disponible", "stock menos reservado"),
+        ],
+    ),
+    "ai_v_pendiente": (
+        "Compras pendientes de recibir por producto y farmacia (órdenes confirmadas que aún no "
+        "han llegado). Si no hay fila, no hay nada pendiente. Para el detalle por orden, usa "
+        "purchase_order_line.",
+        [
+            ("company_id", "sucursal (farmacia)"),
+            ("farmacia", "nombre de la farmacia"),
+            ("product_id", "product_product.id"),
+            ("product_tmpl_id", "product_template.id"),
+            ("producto", "nombre del producto"),
+            ("codigo", "código interno"),
+            ("pendiente", "unidades confirmadas que faltan por llegar: se restan en la propuesta"),
+            ("atrasado", "parte de lo pendiente cuya fecha prevista ya pasó"),
+            ("ordenes", "órdenes confirmadas con algo pendiente"),
+            ("proxima_llegada", "fecha prevista más cercana de lo pendiente (UTC)"),
+            ("en_solicitud", "unidades en solicitudes de presupuesto sin confirmar: no se restan, "
+                             "pero indican que ya se está pidiendo"),
+        ],
+    ),
     "ai_v_oferta": (
         "Oferta vigente de las droguerías (inventarios que publican por FTP), una fila por "
         "producto y droguería, ya cruzada con los productos propios por código de barras "

@@ -156,8 +156,8 @@ class TestChat(TransactionCase):
         self.assertIn("product_template", text)
         self.assertIn("res_company", text)
         self.assertNotIn("res_partner", text.split("Tablas que puedes consultar")[1])
-        # Las vistas ai_v_* aún no existen: no se anuncian.
-        self.assertNotIn("ai_v_rotacion", text)
+        # Las vistas de la lista blanca que aún no existen no se anuncian.
+        self.assertNotIn("ai_v_faltantes", text)
         self.assertIn("últimas 8 semanas", text)
         self.assertIn("como máximo 8 consultas", text)
         self.assertIn("presentación distinta", text)
