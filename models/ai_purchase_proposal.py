@@ -11,6 +11,15 @@ El comprador solo cambia la cantidad final, la droguería y el motivo. La
 cantidad y la droguería sugeridas quedan fijas, para medir cuánto corrige el
 comprador al agente.
 
+Borradores (action_create_rfq, botón del comprador, nunca del modelo): una
+orden de compra en borrador por farmacia y droguería, con las líneas que
+tienen cantidad final y droguería. Se puede hacer por partes (p. ej. un
+laboratorio el lunes y otro el martes): lo nuevo se suma al borrador que esta
+misma propuesta ya creó para esa farmacia y droguería; los borradores hechos a
+mano no se tocan. Las líneas marcadas para revisar la presentación no entran
+hasta que el comprador cambie su cantidad o su droguería. Cuando no queda
+nada por pedir, la propuesta pasa a "Convertida en borradores".
+
 Laboratorio de cada línea, en este orden:
 1. el campo del producto indicado en Ajustes (laboratory_field), para el
    módulo de laboratorios de Dromax cuando esté instalado;
@@ -79,8 +88,12 @@ class AiPurchaseProposal(models.Model):
     @api.depends("line_ids.cantidad_sugerida", "line_ids.cantidad_final", "line_ids.ajustada",
                  "line_ids.monto", "line_ids.monto_sugerido")
     def _compute_totals(self):
+        Line = self.env["ai.purchase.proposal.line"].sudo()
         for proposal in self:
-            lines = proposal.line_ids
+            # Todas las líneas, no solo las de las farmacias del usuario: line_ids puede venir
+            # en caché leído por el usuario, ya filtrado por la regla de farmacias.
+            lines = Line.search([("proposal_id", "=", proposal._origin.id)]) if proposal._origin.id \
+                else proposal.line_ids
             suggested = sum(lines.mapped("cantidad_sugerida"))
             diff = sum(abs(l.cantidad_final - l.cantidad_sugerida) for l in lines)
             proposal.line_count = len(lines)
@@ -172,6 +185,17 @@ class AiPurchaseProposal(models.Model):
 
     # -- acciones ---------------------------------------------------------------
 
+    def action_create_rfq(self):
+        self.ensure_one()
+        # search y no line_ids: solo las líneas de las farmacias del usuario (regla), sin caché de otro usuario.
+        return self.env["ai.purchase.proposal.line"].search([("proposal_id", "=", self.id)]).action_create_rfq()
+
+    def _pending_lines(self):
+        """Líneas por pedir de todas las farmacias, aunque el usuario no las vea."""
+        return self.env["ai.purchase.proposal.line"].sudo().search([
+            ("proposal_id", "=", self.id), ("cantidad_final", ">", 0),
+            ("drogueria_id", "!=", False), ("purchase_line_id", "=", False)])
+
     def action_discard(self):
         if any(p.state == "done" for p in self):
             raise UserError(_("Una propuesta ya convertida en borradores no se puede descartar."))
@@ -224,6 +248,9 @@ class AiPurchaseProposalLine(models.Model):
         help="El precio de la droguería pasa del triple del costo: puede ser otro empaque con el "
              "mismo código de barras.")
     motivo = fields.Text("Motivo")
+    purchase_line_id = fields.Many2one("purchase.order.line", "Línea de compra", readonly=True, copy=False,
+                                       index="btree_not_null")
+    purchase_order_id = fields.Many2one(related="purchase_line_id.order_id", string="Orden de compra")
     monto = fields.Float("Monto", compute="_compute_montos", store=True)
     monto_sugerido = fields.Float("Monto sugerido", compute="_compute_montos", store=True)
     ajustada = fields.Boolean("Ajustada", compute="_compute_montos", store=True,
@@ -324,6 +351,8 @@ class AiPurchaseProposalLine(models.Model):
     def write(self, vals):
         if any(line.state in CLOSED_STATES for line in self):
             raise UserError(_("La propuesta ya está cerrada: no se puede modificar."))
+        if {"cantidad_final", "drogueria_id"} & set(vals) and self.filtered("purchase_line_id"):
+            raise UserError(_("La línea ya está en una orden de compra: cámbiala en la orden."))
         if "drogueria_id" in vals:
             partner = self.env["res.partner"].browse(vals["drogueria_id"])
             for line in self:
@@ -339,3 +368,83 @@ class AiPurchaseProposalLine(models.Model):
     def _check_cantidad_final(self):
         if any(line.cantidad_final < 0 for line in self):
             raise ValidationError(_("La cantidad final no puede ser negativa."))
+
+    # -- borradores -------------------------------------------------------------
+
+    @api.model
+    def _purchase_description(self, product, partner):
+        product = product.with_context(lang=partner.lang or self.env.lang, partner_id=partner.id)
+        name = product.display_name
+        if product.description_purchase:
+            name += "\n" + product.description_purchase
+        return name
+
+    def action_create_rfq(self):
+        """Crea las órdenes de compra en borrador de estas líneas y las abre."""
+        if not self.env.user.has_group("purchase.group_purchase_user"):
+            raise AccessError(_("Para generar órdenes de compra hace falta el permiso de Compras."))
+        if any(p.state in CLOSED_STATES for p in self.proposal_id):
+            raise UserError(_("La propuesta ya está cerrada."))
+        lines = self.filtered(lambda l: l.cantidad_final > 0 and l.drogueria_id and not l.purchase_line_id)
+        review = lines.filtered(lambda l: l.revisar_presentacion and not l.ajustada)
+        lines -= review
+        if not lines:
+            raise UserError(_(
+                "No hay nada que pedir: hacen falta líneas con cantidad final y droguería que no estén "
+                "ya en una orden. Las marcadas para revisar la presentación (%s) entran cuando se cambia "
+                "su cantidad o su droguería.", len(review)))
+        missing = lines.company_id - self.env.user.company_ids
+        if missing:
+            raise UserError(_("No tienes acceso a: %s. Pide acceso a esas farmacias o quita sus líneas.",
+                              ", ".join(missing.mapped("name"))))
+
+        groups = {}
+        for line in lines:
+            groups.setdefault((line.proposal_id, line.company_id, line.drogueria_id), self.browse())
+            groups[(line.proposal_id, line.company_id, line.drogueria_id)] |= line
+        orders = self.env["purchase.order"]
+        for (proposal, company, partner), group in groups.items():
+            order = proposal.purchase_order_ids.filtered(
+                lambda o: o.state == "draft" and o.company_id == company and o.partner_id == partner)[:1]
+            if not order:
+                order = self.env["purchase.order"].with_company(company).create({
+                    "partner_id": partner.id,
+                    "company_id": company.id,
+                    "origin": proposal.name,
+                    "user_id": self.env.uid,
+                })
+                proposal.purchase_order_ids = [Command.link(order.id)]
+            POLine = self.env["purchase.order.line"].with_company(company)
+            fpos = order.fiscal_position_id or order.fiscal_position_id._get_fiscal_position(partner)
+            date_planned = POLine._get_date_planned(False, po=order)
+            # Con todos los campos dados, Odoo no ejecuta el onchange de producto por línea
+            # (lo más lento). Mismos valores que ese onchange, salvo el precio: el precio
+            # final de la oferta, que ya trae los descuentos de la droguería.
+            po_lines = POLine.create([{
+                "order_id": order.id,
+                "product_id": line.product_id.id,
+                "name": self._purchase_description(line.product_id, partner),
+                "product_qty": line.cantidad_final,
+                "product_uom": line.product_id.uom_id.id,
+                "price_unit": line.precio,
+                "taxes_id": [Command.set(fpos.map_tax(
+                    line.product_id.supplier_taxes_id._filter_taxes_by_company(company)).ids)],
+                "date_planned": date_planned,
+            } for line in group])
+            for line, po_line in zip(group, po_lines):
+                line.purchase_line_id = po_line
+            orders |= order
+
+        for proposal in lines.proposal_id:
+            done = not proposal._pending_lines()
+            proposal.state = "done" if done else "in_review"
+            proposal.message_post(body=_(
+                "%(user)s generó %(lines)s líneas en borradores: %(orders)s.",
+                user=self.env.user.name, lines=len(lines.filtered(lambda l: l.proposal_id == proposal)),
+                orders=", ".join(orders.filtered(lambda o: o in proposal.purchase_order_ids).mapped("name"))))
+        action = self.env["ir.actions.act_window"]._for_xml_id("purchase.purchase_rfq")
+        action["domain"] = [("id", "in", orders.ids)]
+        action["context"] = {}
+        if len(orders) == 1:
+            action.update({"view_mode": "form", "views": [(False, "form")], "res_id": orders.id})
+        return action

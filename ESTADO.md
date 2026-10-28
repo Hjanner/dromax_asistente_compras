@@ -160,6 +160,19 @@ El README explica cómo funciona lo que ya existe.
   métrica de ajuste del comprador. En `dromax_ai_inventario`: 1412 líneas,
   187 laboratorios, ~12 s.
 
+- **Botón de borradores** (versión `17.0.0.10.0`, 106 tests, 2026-10-27):
+  *Generar borradores* en la propuesta y como acción sobre líneas
+  seleccionadas: una orden en borrador por farmacia y droguería, por partes
+  (suma al borrador de la misma propuesta, nunca a uno hecho a mano), sin las
+  líneas a revisar por presentación que el comprador no tocó. Precio = precio
+  final de la oferta; impuestos y descripción como Odoo, pero sin su onchange
+  por línea (43 s → 12 s para 963 líneas en `dromax_ai_inventario`).
+  Corregido de paso: los totales de la propuesta (líneas, ajustadas, montos)
+  se calculaban solo con las farmacias seleccionadas por el usuario que
+  ajustaba una línea (caché de `line_ids` filtrado por la regla); ahora
+  cuentan todas las líneas, y la propuesta solo se cierra cuando no queda nada
+  por pedir en ninguna farmacia.
+
 ## Decisiones
 
 - Módulo nuevo, separado del antiguo `ai_data_chat`.
@@ -214,11 +227,10 @@ descuentos encadenados = precio final en todas las filas.
 1. **Permisos de la oferta** en el módulo FTP: hoy cualquier usuario interno
    puede editar y borrar `supplier.product.staging`; dejarla de solo lectura.
    Quitar el código muerto (`ftp.connector`, wizard vacío, `views/views.xml`).
-2. **Resto del flujo de propuestas** (probarlo en `dromax_ai_inventario`):
-   botón de borradores (una orden por droguería y farmacia, sumando a un
-   borrador abierto si existe) y, en el chat, `get_proposal` y
-   `update_proposal_line` para leer y ajustar la propuesta en lenguaje
-   natural.
+2. **Propuesta en el chat** (probarlo en `dromax_ai_inventario`):
+   `get_proposal` y `update_proposal_line` para leer y ajustar la propuesta
+   en lenguaje natural; que «Arma la compra de esta semana» parta de la
+   propuesta guardada.
 3. **Con la base multisucursal de Daniel:** validar y calibrar las vistas y
    las propuestas por sucursal con ventas reales, conectar el campo
    laboratorio y revisar el reporte de códigos de barras con el catálogo real.

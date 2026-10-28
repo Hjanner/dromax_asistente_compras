@@ -144,12 +144,27 @@ líneas).
   droguería sugeridas no cambian: *Líneas ajustadas* y *Ajuste del
   comprador (%)* (Σ |final − sugerida| / Σ sugerida) miden cuánto corrige al
   agente. Al primer cambio la propuesta pasa a *En revisión*.
-- Estados: *Lista* → *En revisión* → *Convertida en borradores* (con el botón
-  de borradores, pendiente) o *Descartada*; cerrada no se modifica.
+- **Generar borradores** (botón de la propuesta, o *Acción → Generar
+  borradores* sobre las líneas seleccionadas de la lista, p. ej. un
+  laboratorio): una orden de compra en borrador por farmacia y droguería
+  (`origin` = nombre de la propuesta), con la cantidad final y el precio final
+  de la oferta (ya con descuentos), en la unidad del producto; impuestos,
+  descripción y fecha prevista como los pondría Odoo al elegir el producto. Se
+  puede hacer por partes: lo nuevo se suma al borrador que la misma propuesta
+  ya creó para esa farmacia y droguería; los borradores hechos a mano no se
+  tocan. No entran las líneas sin droguería, con cantidad 0, ya pedidas o
+  marcadas *Revisar presentación* que el comprador no cambió. Cada línea
+  guarda su línea de compra y ya no se puede modificar. Hace falta el permiso
+  de Compras y solo se piden las líneas de las farmacias a las que el usuario
+  tiene acceso. Lo creado aparece en `ai_v_pendiente.en_solicitud`. La
+  propuesta pasa a *Convertida en borradores* cuando no queda nada por pedir.
+- Estados: *Lista* → *En revisión* → *Convertida en borradores* o
+  *Descartada*; cerrada no se modifica.
 - Permisos: compradores leen, calculan y ajustan; borrar, solo
   administradores. Las líneas siguen la regla por farmacia de las pantallas.
 
-En `dromax_ai_inventario`: 1412 líneas de 187 laboratorios, ~12 s.
+En `dromax_ai_inventario`: 1412 líneas de 187 laboratorios, ~12 s. Generar
+todos los borradores: 21 órdenes con 963 líneas, ~12 s.
 
 ## Oferta de droguerías (`ai_v_oferta`)
 

@@ -89,7 +89,7 @@ class TestUi(HttpCase):
 
     def test_proposal_screens(self):
         buyer = new_test_user(self.env, login="ai_proposal_buyer_ui",
-                              groups="base.group_user,dromax_asistente_compras.group_ai_purchase_user")
+                              groups="base.group_user,purchase.group_purchase_user")
         buyer.password = buyer.login
         product = self.env["product.product"].create({"name": "ZQX UI PROPUESTA [LAB UI]", "detailed_type": "product"})
         session = self.env["pos.session"].create({
@@ -105,6 +105,8 @@ class TestUi(HttpCase):
         proposal = self.env["ai.purchase.proposal"]._generate()
         self._open("action=dromax_asistente_compras.action_ai_purchase_proposal&id=%d&view_type=form" % proposal.id,
                    ".o_form_view .o_field_one2many .o_data_row td[name='cantidad_final']", login=buyer.login)
+        self._open("action=dromax_asistente_compras.action_ai_purchase_proposal&id=%d&view_type=form" % proposal.id,
+                   ".o_form_view .o_statusbar_buttons button[name='action_create_rfq']", login=buyer.login)
         self._open("action=dromax_asistente_compras.action_ai_purchase_proposal_line",
                    ".o_list_view .o_group_header", login=buyer.login)
 
