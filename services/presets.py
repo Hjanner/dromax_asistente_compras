@@ -3,7 +3,8 @@
 
 Son el disparador habitual del agente: el comprador pulsa un botón y se envía
 un prompt fijo. Cada una fija su nivel de modelo; la de armar la compra lleva
-además la tarea purchase_proposal, que la manda siempre al nivel avanzado.
+además la tarea purchase_proposal, que la manda siempre al nivel avanzado, y
+ensure_proposal: calcula la propuesta de la semana si todavía no existe.
 """
 
 PRESETS = [
@@ -12,11 +13,13 @@ PRESETS = [
         "label": "Arma la compra de esta semana",
         "level": "advanced",
         "task": "purchase_proposal",
+        "ensure_proposal": True,
         "prompt": (
-            "Arma la propuesta de compra de esta semana para cada farmacia: los productos "
-            "cuya demanda depurada de la próxima semana supera el stock actual más lo "
-            "pendiente de recibir. Aplica las reglas contra el sobre-stock y ordena por "
-            "farmacia y cantidad sugerida."
+            "Muéstrame la propuesta de compra de esta semana con su resumen (get_proposal sin "
+            "filtros; no hace falta consultar nada más): monto, líneas y farmacias, los "
+            "laboratorios de mayor monto y lo que necesita mi atención antes de generar los "
+            "borradores: productos a revisar por presentación, productos sin droguería y "
+            "traslados entre farmacias que eviten comprar. Sé breve y termina diciéndome cómo seguir."
         ),
     },
     {

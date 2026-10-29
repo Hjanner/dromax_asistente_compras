@@ -1,6 +1,6 @@
 # Estado del proyecto
 
-Última actualización: 2026-10-27. Qué está hecho, qué decidimos y qué falta.
+Última actualización: 2026-10-29. Qué está hecho, qué decidimos y qué falta.
 El README explica cómo funciona lo que ya existe.
 
 ## Hecho
@@ -173,6 +173,19 @@ El README explica cómo funciona lo que ya existe.
   cuentan todas las líneas, y la propuesta solo se cierra cuando no queda nada
   por pedir en ninguna farmacia.
 
+- **Propuesta en el chat** (versión `17.0.0.11.0`, 116 tests, 2026-10-29):
+  herramientas `get_proposal` y `update_proposal_lines` (ver README; el diseño
+  decía `update_proposal_line`, en plural para ajustar varias líneas en una
+  llamada), botones *Generar borradores* y *Abrir propuesta* bajo la
+  respuesta, y *Arma la compra de esta semana* que parte de la propuesta
+  guardada (la calcula si no hay una de esta semana). El agente solo ajusta
+  lo que pide el comprador y lo deja anotado en el motivo y en el historial de
+  la propuesta. Probado en vivo con Claude Opus en `dromax_ai_inventario`
+  (con rollback): el resumen pasó de 7 consultas, 0,95 USD y 92 s a una
+  consulta, 0,17 USD y 29 s al incluir en el resumen las líneas de mayor monto
+  a revisar y los traslados posibles; «del DIGLET en DROMAX pide 3» ubicó la
+  línea y la cambió (0,20 USD, 19 s).
+
 ## Decisiones
 
 - Módulo nuevo, separado del antiguo `ai_data_chat`.
@@ -224,13 +237,12 @@ descuentos encadenados = precio final en todas las filas.
 
 ## Siguiente
 
-1. **Permisos de la oferta** en el módulo FTP: hoy cualquier usuario interno
+1. **Validar el chat con el comprador**: probar con el encargado de compras el
+   flujo completo (resumen → ajustes en el chat → borradores) y medir costo y
+   tiempo con uso real.
+2. **Permisos de la oferta** en el módulo FTP: hoy cualquier usuario interno
    puede editar y borrar `supplier.product.staging`; dejarla de solo lectura.
    Quitar el código muerto (`ftp.connector`, wizard vacío, `views/views.xml`).
-2. **Propuesta en el chat** (probarlo en `dromax_ai_inventario`):
-   `get_proposal` y `update_proposal_line` para leer y ajustar la propuesta
-   en lenguaje natural; que «Arma la compra de esta semana» parta de la
-   propuesta guardada.
 3. **Con la base multisucursal de Daniel:** validar y calibrar las vistas y
    las propuestas por sucursal con ventas reales, conectar el campo
    laboratorio y revisar el reporte de códigos de barras con el catálogo real.
@@ -242,8 +254,15 @@ descuentos encadenados = precio final en todas las filas.
 - Ventana de semanas de historial para la rotación (provisional: 8).
 - Campo laboratorio: ¿many2one o many2many? ¿Coincide con el de los archivos
   de las droguerías?
-- Significado de la 10.ª columna de INSUAMINCA (`INDEXADO` / `MONTO FACTURA`)
-  y de las columnas 9 a 11 de VITALCLINIC.
+- 10.ª columna de INSUAMINCA (`INDEXADO` en 3675 productos / `MONTO FACTURA`
+  en 1352): creemos que es la condición de pago (deuda ajustada a la tasa del
+  día de pago o monto en bolívares de la factura). Hoy se guarda como dato
+  extra y no cambia el precio ni la droguería elegida; si INDEXADO encarece,
+  habría que tenerlo en cuenta. Lo puede confirmar el vendedor de INSUAMINCA o
+  el encargado de compras.
+- 9.ª columna de VITALCLINIC: siempre viene en 0 o vacía; sugerencia, ignorarla.
+  (Las columnas 10 y 11 ya están resueltas: descuentos en cascada con la 6.ª,
+  comprobados fila por fila contra el precio final.)
 - Datos FTP de COBECA (vacíos en la planilla) y de las demás droguerías.
 - Frecuencia deseada del cron de inventarios.
 

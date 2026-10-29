@@ -4,6 +4,7 @@ from odoo.exceptions import AccessError, UserError
 
 from ..services import presets
 from ..services.agent import run_agent
+from ..services.proposal_tools import all_companies_env
 from ..services.tools import GROUP_XMLID
 
 MAX_USER_TEXT = 4000
@@ -45,6 +46,7 @@ class AiPurchaseChatSession(models.Model):
             "sessions": [s._chat_session_dict() for s in sessions],
             "presets": presets.public_presets(),
             "levels": [{"key": k, "label": v} for k, v in LEVELS],
+            "can_create_rfq": self.env.user.has_group("purchase.group_purchase_user"),
         }
 
     @api.model
@@ -87,6 +89,9 @@ class AiPurchaseChatSession(models.Model):
             title = preset_def["label"] if preset_def else text
             self.name = title if len(title) <= 60 else title[:57] + "…"
 
+        if preset_def and preset_def.get("ensure_proposal"):
+            # El agente lee la propuesta guardada: si el cron de esta semana no la calculó, se calcula ya.
+            self.env["ai.purchase.proposal"]._ensure_week_proposal()
         result = run_agent(self.env, text, history=history, level=level, task=task)
         answer = Message.create({
             "session_id": self.id,
@@ -100,12 +105,23 @@ class AiPurchaseChatSession(models.Model):
             "completion_tokens": result["completion_tokens"],
             "cost": result["cost"],
             "duration_ms": result["duration_ms"],
+            "proposal_id": result.get("proposal_id") or False,
         })
         self.last_message_date = fields.Datetime.now()
         return {
             "session": self._chat_session_dict(),
             "messages": [user_msg._chat_message_dict(), answer._chat_message_dict()],
         }
+
+    def chat_create_rfq(self, proposal_id):
+        """Botón «Generar borradores» bajo una respuesta: con las líneas de todas las
+        farmacias del usuario, las mismas que leyó el agente."""
+        self.ensure_one()
+        self._check_ai_access()
+        proposal = all_companies_env(self.env)["ai.purchase.proposal"].browse(proposal_id).exists()
+        if not proposal:
+            raise UserError(_("La propuesta ya no existe."))
+        return proposal.action_create_rfq()
 
     def chat_delete(self):
         self.unlink()
@@ -138,6 +154,8 @@ class AiPurchaseChatMessage(models.Model):
     completion_tokens = fields.Integer("Tokens de salida")
     cost = fields.Float("Costo (USD)", digits=(12, 6))
     duration_ms = fields.Integer("Duración (ms)")
+    proposal_id = fields.Many2one("ai.purchase.proposal", "Propuesta", ondelete="set null",
+                                  help="Propuesta que leyó o ajustó el agente en esta respuesta.")
 
     def _chat_message_dict(self):
         self.ensure_one()
@@ -154,4 +172,7 @@ class AiPurchaseChatMessage(models.Model):
             "completion_tokens": self.completion_tokens,
             "cost": self.cost,
             "duration_ms": self.duration_ms,
+            "proposal": self.proposal_id and {
+                "id": self.proposal_id.id, "name": self.proposal_id.name, "state": self.proposal_id.state,
+            },
         }

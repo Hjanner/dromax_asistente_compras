@@ -59,6 +59,16 @@
                              t-att-class="{'o_ai_msg_error': msg.state === 'error'}">
                             <div class="o_ai_bubble">
                                 <div class="o_ai_content" t-out="renderMarkdown(msg.content)"/>
+                                <div t-if="showProposalButtons(msg)" class="o_ai_proposal d-flex flex-wrap gap-2 mt-2">
+                                    <button t-if="canGenerate(msg.proposal)" class="btn btn-sm btn-primary o_ai_generate_drafts"
+                                            t-on-click="() => this.generateDrafts(msg.proposal)">
+                                        <i class="fa fa-file-text-o me-1"/>Generar borradores
+                                    </button>
+                                    <button class="btn btn-sm btn-secondary o_ai_open_proposal"
+                                            t-on-click="() => this.openProposal(msg.proposal)">
+                                        <i class="fa fa-external-link me-1"/>Abrir propuesta
+                                    </button>
+                                </div>
                                 <div class="o_ai_meta text-muted small mt-2">
                                     <span t-if="msg.level" t-esc="levelLabel(msg.level)"/>
                                     <span t-if="msg.model"> · <t t-esc="msg.model"/></span>
@@ -78,7 +88,7 @@
                                                 <span t-if="step.error" class="text-danger" t-esc="step.error"/>
                                                 <span t-else="" class="text-muted">
                                                     <t t-esc="step.row_count"/> fila(s)<t t-if="step.truncated"> (recortado)</t>
-                                                    · <t t-esc="step.elapsed_ms"/> ms
+                                                    <t t-if="step.elapsed_ms"> · <t t-esc="step.elapsed_ms"/> ms</t>
                                                 </span>
                                             </div>
                                         </div>

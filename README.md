@@ -13,8 +13,9 @@ El avance, las decisiones y lo pendiente están en [ESTADO.md](ESTADO.md).
 - **Solo lectura** sobre Postgres: SQL validado (una sola sentencia
   `SELECT`/`WITH … SELECT`, lista blanca de tablas y vistas) ejecutado con el
   rol `dromax_ai_ro`.
-- **Única escritura**: `purchase.order` en borrador, creada por un botón, nunca
-  por el modelo.
+- **Escrituras acotadas**: el modelo solo ajusta líneas de la propuesta de
+  compra cuando el comprador se lo pide (`update_proposal_lines`). Las
+  `purchase.order` en borrador las crea un botón, nunca el modelo.
 - **Acceso restringido** al personal de compras y a los administradores: el
   grupo técnico *Asistente de Compras IA* lo implican *Compras / Usuario* y
   *Ajustes* (no es una casilla de la ficha del usuario). La configuración y el
@@ -273,10 +274,35 @@ Menú **Compras IA → Chat** (grupo *Asistente de Compras IA / Usuario*).
   agotarse*, *Más vendidos de las últimas 4 semanas*, *Compras pendientes de
   recibir*, *Compara precios entre droguerías* y *Stock sin rotación*. También se puede escribir libremente
   eligiendo el nivel.
-- El agente (`services/agent.py`) llama a OpenRouter con la herramienta
-  `run_readonly_sql` hasta tener respuesta (tope `agent_max_steps`, 8 por
-  defecto). Bajo cada respuesta se ven el modelo, el costo, la duración y las
-  consultas SQL que hizo.
+- El agente (`services/agent.py`) llama a OpenRouter con sus herramientas
+  hasta tener respuesta (tope `agent_max_steps`, 8 por defecto). Bajo cada
+  respuesta se ven el modelo, el costo, la duración y las consultas que hizo.
+- Herramientas (`services/tools.py`):
+  - `run_readonly_sql`: SQL de solo lectura (ver arriba).
+  - `get_proposal` (`services/proposal_tools.py`): la propuesta semanal
+    guardada (la vigente o la que se indique). Sin filtros devuelve el
+    resumen: totales, farmacias, laboratorios de mayor monto, cuántas líneas
+    necesitan atención y las de mayor monto a revisar por presentación o que
+    se cubren con un traslado. Con filtros (laboratorio, producto, farmacia o
+    por pedir / ajustadas / revisar presentación / sin droguería / con
+    excedente / en solicitud / pedidas) devuelve hasta 80 líneas con su
+    `linea_id`, el motivo y las ofertas de las demás droguerías.
+  - `update_proposal_lines`: hasta 50 cambios de cantidad final, droguería
+    (por nombre, entre las que ofertan el producto; el precio sale de su
+    oferta) o nota (se agrega al motivo). Pasa por el `write` de la línea, con
+    sus mismas reglas (propuesta cerrada, línea ya pedida). Aplica los cambios
+    válidos, devuelve el antes y el después y los errores, y deja en el
+    historial de la propuesta quién cambió qué desde el chat.
+  - Las dos ven todas las farmacias del usuario, no solo las marcadas en el
+    selector de empresas (la compra no es estricta por farmacia).
+- *Arma la compra de esta semana* parte de la propuesta guardada: si no hay
+  una calculada esta semana (lunes 00:00 hora local), la calcula antes de
+  preguntar. Con la propuesta real de `dromax_ai_inventario` (1412 líneas):
+  una llamada a `get_proposal`, ~0,17 USD y ~30 s con Claude Opus.
+- Bajo la última respuesta que leyó o ajustó una propuesta aparecen los
+  botones **Generar borradores** (con permiso de Compras; pide confirmación y
+  usa las líneas de todas las farmacias del usuario, las mismas que leyó el
+  agente) y **Abrir propuesta**.
 - El system prompt (`services/prompt.py`) lleva el contexto del negocio, las
   reglas contra el sobre-stock y el esquema de las tablas permitidas, filtrado
   contra las columnas que existen en la base (`services/schema_catalog.py`).

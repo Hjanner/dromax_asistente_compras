@@ -30,7 +30,9 @@ Laboratorio de cada línea, en este orden:
 """
 import logging
 import re
-from datetime import timedelta
+from datetime import datetime, time, timedelta
+
+import pytz
 
 from odoo import Command, _, api, fields, models
 from odoo.exceptions import AccessError, UserError, ValidationError
@@ -182,6 +184,30 @@ class AiPurchaseProposal(models.Model):
                 lab = match and match.group(1)
             labs[product.id] = lab.strip().upper() if lab and lab.strip() else None
         return labs
+
+    @api.model
+    def _current(self):
+        """Propuesta semanal vigente para el chat: la más reciente que no se descartó."""
+        return self.search([("mode", "=", "daily"), ("state", "!=", "discarded")], limit=1)
+
+    @api.model
+    def _week_start(self):
+        """Lunes de esta semana a las 00:00 en la zona del usuario, en UTC sin zona."""
+        today = fields.Date.context_today(self)
+        monday = datetime.combine(today - timedelta(days=today.weekday()), time.min)
+        tz = pytz.timezone(self.env.context.get("tz") or self.env.user.tz or "UTC")
+        return tz.localize(monday).astimezone(pytz.utc).replace(tzinfo=None)
+
+    @api.model
+    def _ensure_week_proposal(self):
+        """La propuesta de esta semana; si el cron no la calculó, la calcula ahora."""
+        self._check_buyer()
+        current = self._current()
+        if current and current.date_computed >= self._week_start():
+            return current
+        proposal = self.sudo()._generate().sudo(False)
+        proposal.message_post(body=_("Calculada desde el chat a pedido de %s.", self.env.user.name))
+        return proposal
 
     # -- acciones ---------------------------------------------------------------
 

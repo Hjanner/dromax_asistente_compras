@@ -7,11 +7,16 @@ Completions, el que habla OpenRouter) y su implementación. `call_tool` es la
 fallo en un resultado {'error': ...} que el modelo puede leer y corregir, en
 vez de una excepción que cortaría la conversación.
 
+La única escritura es ajustar líneas de la propuesta (update_proposal_lines).
 Crear la orden de compra en borrador NO es una herramienta: lo hace el botón
 del comprador.
 """
 import logging
 
+from odoo.exceptions import AccessError, UserError, ValidationError
+
+from .proposal_tools import (GET_PROPOSAL, UPDATE_PROPOSAL_LINES, ProposalToolError, get_proposal,
+                             update_proposal_lines)
 from .readonly_sql import ReadonlySqlError, get_whitelist, run_readonly_sql
 from .sql_validator import SqlValidationError
 
@@ -46,6 +51,8 @@ RUN_READONLY_SQL = {
 
 _IMPLEMENTATIONS = {
     "run_readonly_sql": lambda env, args: run_readonly_sql(env, args.get("query")),
+    "get_proposal": get_proposal,
+    "update_proposal_lines": update_proposal_lines,
 }
 
 
@@ -67,7 +74,7 @@ def tool_definitions(env):
     spec = {**RUN_READONLY_SQL, "function": dict(RUN_READONLY_SQL["function"])}
     tables = _existing_relations(env, get_whitelist(env))
     spec["function"]["description"] += " Tablas permitidas: %s." % ", ".join(sorted(tables))
-    return [spec]
+    return [spec, GET_PROPOSAL, UPDATE_PROPOSAL_LINES]
 
 
 def call_tool(env, name, args):
@@ -85,6 +92,8 @@ def call_tool(env, name, args):
         return {"error": "Consulta rechazada: %s" % exc}
     except ReadonlySqlError as exc:
         return {"error": str(exc)}
+    except (ProposalToolError, UserError, ValidationError, AccessError) as exc:
+        return {"error": str(exc.args[0] if exc.args else exc)}
     except Exception:
         _logger.exception("Fallo inesperado en la herramienta %s", name)
         return {"error": "Error interno al ejecutar la herramienta."}

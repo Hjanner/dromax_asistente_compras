@@ -45,6 +45,8 @@ def _tool_content(result):
 def _trace_entry(name, args, result):
     """Lo que se guarda para que el comprador vea qué consultó el modelo."""
     entry = {"tool": name, "query": args.get("query") if isinstance(args, dict) else None}
+    if name != "run_readonly_sql":
+        entry["query"] = "%s(%s)" % (name, json.dumps(args, ensure_ascii=False) if args else "")
     if "error" in result:
         entry["error"] = result["error"]
     else:
@@ -87,7 +89,8 @@ def run_agent(env, user_text, history=(), level=None, task=None, transport=None)
 
     history: [{'role': 'user'|'assistant', 'content': str}, ...] en orden.
     Devuelve {'state', 'content', 'level', 'model', 'tool_trace', 'prompt_tokens',
-    'completion_tokens', 'cost', 'duration_ms'}.
+    'completion_tokens', 'cost', 'duration_ms', 'proposal_id'} (la propuesta que
+    leyó o ajustó, para mostrar sus botones bajo la respuesta).
     """
     started = time.monotonic()
     level = resolve_level(level, task)
@@ -103,7 +106,7 @@ def run_agent(env, user_text, history=(), level=None, task=None, transport=None)
     turn_start = len(messages)
 
     out = {"state": "ok", "content": "", "level": level, "model": False, "tool_trace": [],
-           "prompt_tokens": 0, "completion_tokens": 0, "cost": 0.0}
+           "prompt_tokens": 0, "completion_tokens": 0, "cost": 0.0, "proposal_id": False}
 
     def ask(msgs, **kw):
         data = client.chat(msgs, level=level, task=task, **kw)
@@ -132,6 +135,8 @@ def run_agent(env, user_text, history=(), level=None, task=None, transport=None)
                 result = (call_tool(env, fn.get("name"), args) if args is not None
                           else {"error": "Los argumentos no son JSON válido."})
                 out["tool_trace"].append(_trace_entry(fn.get("name"), args, result))
+                if isinstance(result.get("propuesta"), dict):
+                    out["proposal_id"] = result["propuesta"].get("id") or out["proposal_id"]
                 content = _tool_content(result)
                 if step == max_steps - 2:
                     content += LAST_STEP_NOTE

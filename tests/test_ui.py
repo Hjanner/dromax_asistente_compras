@@ -177,6 +177,33 @@ const until = (sel, text) => new Promise((resolve, reject) => {
 })();
 """
 
+CHAT_PROPOSAL = """
+const until = (sel, text) => new Promise((resolve, reject) => {
+    let n = 0;
+    const t = setInterval(() => {
+        const el = [...document.querySelectorAll(sel)].find(e => !text || e.textContent.includes(text));
+        if (el) { clearInterval(t); resolve(el); }
+        else if (++n > 150) { clearInterval(t); reject(new Error("No apareció " + sel + " " + (text || ""))); }
+    }, 100);
+});
+(async () => {
+    try {
+        const input = await until(".o_ai_input");
+        input.value = "Muéstrame la propuesta";
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        (await until(".o_ai_send:not([disabled])")).click();
+        await until(".o_ai_msg_assistant", "Propuesta lista.");
+        await until(".o_ai_open_proposal");
+        (await until(".o_ai_generate_drafts")).click();
+        (await until(".modal-footer .btn-primary", "Generar borradores")).click();
+        await until(".o_form_view .o_data_row", "ZQX UI CHAT");
+        console.log("test successful");
+    } catch (e) {
+        console.error(e.message);
+    }
+})();
+"""
+
 
 @tagged("post_install", "-at_install", "dromax_asistente_compras")
 class TestChatUi(HttpCase):
@@ -203,3 +230,31 @@ class TestChatUi(HttpCase):
                 patch.object(agent_mod, "call_tool", fake_tool):
             self.browser_js("/web#action=dromax_asistente_compras.action_ai_purchase_chat",
                             CHAT_FLOW, login="ai_chat_ui_buyer")
+
+    def test_chat_proposal_buttons(self):
+        """Bajo la respuesta que trató la propuesta: Abrir propuesta y Generar borradores."""
+        from unittest.mock import patch
+
+        from ..services import agent as agent_mod
+        from ..services import openrouter
+        from .test_chat import ScriptedTransport, text_response
+        from .test_proposal_chat import call_response
+
+        new_test_user(self.env, login="ai_chat_ui_proposal",
+                      groups="base.group_user,purchase.group_purchase_user")
+        self.env["ir.config_parameter"].sudo().set_param(
+            "dromax_asistente_compras.openrouter_api_key", "sk-or-test")
+        product = self.env["product.product"].create({"name": "ZQX UI CHAT [LAB UI]", "detailed_type": "product"})
+        drogueria = self.env["res.partner"].create({"name": "ZQX DROG UI", "is_company": True})
+        proposal = self.env["ai.purchase.proposal"].create({"name": "ZQX Propuesta UI", "line_ids": [(0, 0, {
+            "company_id": self.env.company.id, "product_id": product.id, "cantidad_sugerida": 2,
+            "cantidad_final": 2, "drogueria_id": drogueria.id, "drogueria_sugerida_id": drogueria.id,
+            "precio": 1.0, "precio_sugerido": 1.0})]})
+        transport = ScriptedTransport(call_response("get_proposal", {}), text_response("Propuesta lista."))
+        fake_tool = lambda env, name, args: {"propuesta": {"id": proposal.id}, "row_count": 1}
+        with patch.object(openrouter, "Transport", lambda: transport), \
+                patch.object(agent_mod, "call_tool", fake_tool):
+            self.browser_js("/web#action=dromax_asistente_compras.action_ai_purchase_chat",
+                            CHAT_PROPOSAL, login="ai_chat_ui_proposal")
+        self.assertEqual(proposal.state, "done")
+        self.assertEqual(proposal.purchase_order_ids.partner_id, drogueria)
