@@ -186,6 +186,14 @@ El README explica cómo funciona lo que ya existe.
   a revisar y los traslados posibles; «del DIGLET en DROMAX pide 3» ubicó la
   línea y la cambió (0,20 USD, 19 s).
 
+- **Módulo FTP 1.3** (commit `928509d` del repo local, 2026-10-29): la oferta
+  (`supplier.product.staging`) es de solo lectura para los usuarios internos;
+  la cambian las cargas (con `sudo()`) y los administradores. Fuera el código
+  muerto: `ftp.connector` (no se cargaba), el asistente vacío de traslados
+  (`interbranch.transfer.wizard`, con migración que borra su tabla), el
+  controlador y las vistas de plantilla. 27 tests en el módulo FTP; 143 entre
+  los dos módulos.
+
 ## Decisiones
 
 - Módulo nuevo, separado del antiguo `ai_data_chat`.
@@ -250,9 +258,8 @@ descuentos encadenados = precio final en todas las filas.
 1. **Validar el chat con el comprador**: probar con el encargado de compras el
    flujo completo (resumen → ajustes en el chat → borradores) y medir costo y
    tiempo con uso real.
-2. **Permisos de la oferta** en el módulo FTP: hoy cualquier usuario interno
-   puede editar y borrar `supplier.product.staging`; dejarla de solo lectura.
-   Quitar el código muerto (`ftp.connector`, wizard vacío, `views/views.xml`).
+2. **Guía de instalación** para el servidor de Daniel: rol `dromax_ai_ro`,
+   `FTP_SECRET_KEY`, OpenRouter, crons e IVA en los productos gravados.
 3. **Con la base multisucursal de Daniel:** validar y calibrar las vistas y
    las propuestas por sucursal con ventas reales, conectar el campo
    laboratorio y revisar el reporte de códigos de barras con el catálogo real.
