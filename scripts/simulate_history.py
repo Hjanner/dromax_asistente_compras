@@ -268,8 +268,10 @@ for branch in branches:
             price = sale_price(branch.id, pid)
             lines.append(dict(product_id=pid, qty=qty, price=price, cost=unit_cost(branch.id, pid)))
         total = round(sum(l['qty'] * l['price'] for l in lines), 2)
+        # pos_reference debe contener 14+ dígitos/guiones (como «Order 00012-001-0003»):
+        # el TPV extrae de ahí el uid y, si no lo encuentra, la lista de órdenes pagadas falla.
         order_rows.append(dict(
-            name='SIM%s/%05d' % (branch.id, n), pos_reference='Simulado %s-%05d' % (cfg.id, n),
+            name='SIM%s/%05d' % (branch.id, n), pos_reference='Simulado %05d-999-%05d' % (cfg.id, n),
             company_id=branch.id, session_id=session_id, config_id=cfg.id, user_id=ADMIN,
             date_order=dt, state='done', amount_tax=0.0, amount_total=total, amount_paid=total,
             amount_return=0.0, sequence_number=n, uuid=str(uuid.uuid4()), **audit(dt)))
