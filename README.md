@@ -6,6 +6,8 @@ presupuesto (`purchase.order`) en borrador.
 
 El avance, las decisiones y lo pendiente están en [ESTADO.md](ESTADO.md).
 
+Instalación en el servidor de Dromax: ver [INSTALACION.md](INSTALACION.md).
+
 ## Principios
 
 - **Reactivo, no autónomo**: el comprador dispara el análisis con preguntas

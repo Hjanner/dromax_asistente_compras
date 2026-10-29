@@ -258,8 +258,9 @@ descuentos encadenados = precio final en todas las filas.
 1. **Validar el chat con el comprador**: probar con el encargado de compras el
    flujo completo (resumen → ajustes en el chat → borradores) y medir costo y
    tiempo con uso real.
-2. **Guía de instalación** para el servidor de Daniel: rol `dromax_ai_ro`,
-   `FTP_SECRET_KEY`, OpenRouter, crons e IVA en los productos gravados.
+2. **Instalar en el servidor de Daniel** siguiendo `INSTALACION.md` (guía
+   redactada el 2026-10-29: módulos, `FTP_SECRET_KEY`, rol `dromax_ai_ro`,
+   OpenRouter, droguerías, crons, usuarios e IVA).
 3. **Con la base multisucursal de Daniel:** validar y calibrar las vistas y
    las propuestas por sucursal con ventas reales, conectar el campo
    laboratorio y revisar el reporte de códigos de barras con el catálogo real.
