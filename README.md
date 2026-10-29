@@ -232,8 +232,9 @@ python3 odoo/odoo-bin shell -c odoo/debian/odoo.conf -d <base> --no-http \
 
 Crea un producto por fila (clave: referencia interna, ID externo
 `dromax_inventario.producto_<REF>`), con el primer código de barras válido y
-libre, el precio de venta mediano y sin impuestos; y por sucursal, el costo y
-las existencias del almacén principal como ajuste de inventario. Bloques →
+libre, en Unidades (todo se trabaja por unidad), el precio de venta mediano y
+sin impuestos (el IVA del 16 % se configura en producción); y por sucursal, el
+costo y las existencias del almacén principal como ajuste de inventario. Bloques →
 sucursales: DROMAX, FARMAX → FARMACIA FARMAX, GANGA → FARMACIA FARMAGANGA,
 IDEAL, LA45 → FARMACIA LA 45, MANAL, SOLIDARIA → FARMARCIA FSC (diccionario
 `BRANCHES` del script). Se puede repetir: actualiza y solo ajusta las

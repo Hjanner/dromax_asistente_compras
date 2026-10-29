@@ -20,7 +20,8 @@ Qué hace (se puede repetir: actualiza en vez de duplicar):
   REF_*), que se guarda como código interno y como ID externo
   dromax_inventario.producto_<REF>. Nombre = columna NOMBRE (ya lleva el
   laboratorio entre corchetes). Almacenable, se compra y se vende en el TPV,
-  sin impuestos (la base trae un 22 % por defecto que no corresponde).
+  sin impuestos: Dromax usa IVA 16 %, que se configura en producción (la base
+  trae un 22 % por defecto que no corresponde).
 - Código de barras: el primero válido (8 a 14 dígitos) de UPC1..UPC8 que no
   tenga ya otro producto. Los demás se informan como incidencias.
 - Precio de venta: mediana de los VENTA_* mayores que cero.

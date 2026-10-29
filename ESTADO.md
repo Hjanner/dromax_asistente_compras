@@ -113,10 +113,10 @@ El README explica cómo funciona lo que ya existe.
   Excel: 704 productos sin código, 281 con códigos adicionales (Odoo admite uno
   por producto), 35 cantidades negativas (se cargan en 0), 34 códigos no
   válidos, 15 filas con varias referencias, 2 códigos repetidos. SOLIDARIA =
-  FARMARCIA FSC (confirmado por el usuario). Pendiente con Daniel: impuestos
-  (la base trae un 22 % por defecto; se importa sin impuestos), precio de venta
-  por sucursal (hoy uno solo, la mediana) y unidades de medida tipo
-  «UNIDAD (10 AMP)» (se importan como Unidades).
+  FARMARCIA FSC (confirmado por el usuario). Impuestos y unidades, respondidos
+  por Daniel el 2026-10-29 (ver Decisiones): se importa sin impuestos y todo en
+  Unidades. Sigue pendiente el precio de venta por sucursal (hoy uno solo, la
+  mediana).
 
 - **Vistas de rotación, stock y pendiente** (versión `17.0.0.7.0`, 88 tests,
   2026-10-26): `ai_v_rotacion`, `ai_v_stock` y `ai_v_pendiente` (ver
@@ -207,6 +207,16 @@ El README explica cómo funciona lo que ya existe.
   En local está en `env/bin/activate`.
 - En los inventarios de las droguerías, el costo que cuenta es el **precio
   final** (ya trae todos los descuentos).
+- **Todo se trabaja por unidad** (Daniel, 2026-10-29): el paréntesis de
+  unidades como «UNIDAD (10 AMP)» solo avisa a quien administra el sistema que
+  existe una caja de 10; inventario, ventas y compras van por unidad. El
+  import los deja en Unidades y el módulo no redondea a cajas.
+- **IVA 16 %** (Daniel, 2026-10-29), pero **~90 % de los productos son
+  exentos** (sector farmacéutico): el 16 % solo va en los gravados. La base
+  trae un 22 % por defecto que no corresponde. Los impuestos se configuran en
+  producción, no en este repo: el import carga los productos sin impuestos y
+  los borradores toman los impuestos de compra del producto.
+- La 9.ª columna de VITALCLINIC (siempre 0 o vacía) **se ignora**.
 
 ## Formatos de los inventarios FTP
 
@@ -218,7 +228,7 @@ descuento, precio final y stock.
 |---|---|---|---|---|
 | INTERCONTINENTAL | Latin-1 | 9 | `15+0+0+7` | 9.ª = laboratorio; códigos de barras de 14 dígitos (GTIN-14) |
 | INSUAMINCA | UTF-8 | 10 | `15+5` | 9.ª = laboratorio; 10.ª = `INDEXADO` / `MONTO FACTURA` |
-| VITALCLINIC | UTF-8 con NUL | 11 | `10.0000` | 10.ª y 11.ª = descuentos extra en cascada con la 6.ª; trae «„» en lugar de «Ñ» en el propio archivo |
+| VITALCLINIC | UTF-8 con NUL | 11 | `10.0000` | 9.ª siempre 0 o vacía (se ignora); 10.ª y 11.ª = descuentos extra en cascada con la 6.ª; trae «„» en lugar de «Ñ» en el propio archivo |
 
 En los tres casos, precio final = precio × Π(1 − descuento). En VITALCLINIC
 entran en el producto los descuentos de las columnas 6, 10 y 11.
@@ -260,9 +270,12 @@ descuentos encadenados = precio final en todas las filas.
   extra y no cambia el precio ni la droguería elegida; si INDEXADO encarece,
   habría que tenerlo en cuenta. Lo puede confirmar el vendedor de INSUAMINCA o
   el encargado de compras.
-- 9.ª columna de VITALCLINIC: siempre viene en 0 o vacía; sugerencia, ignorarla.
-  (Las columnas 10 y 11 ya están resueltas: descuentos en cascada con la 6.ª,
-  comprobados fila por fila contra el precio final.)
+- ¿El precio final de las droguerías viene con o sin IVA? Daniel no lo sabe.
+  Solo afecta a los productos gravados (~10 %): los borradores suman el IVA de
+  compra del producto sobre ese precio, así que si ya lo trae se cobraría dos
+  veces, y si una droguería lo incluye y otra no, la comparación de precios de
+  esos productos no es pareja. Se resuelve comparando una factura real de cada
+  droguería con su archivo FTP del mismo día (encargado de compras).
 - Datos FTP de COBECA (vacíos en la planilla) y de las demás droguerías.
 - Frecuencia deseada del cron de inventarios.
 
