@@ -170,6 +170,9 @@ const until = (sel, text) => new Promise((resolve, reject) => {
         await until(".o_ai_session", "¿Cuántos productos hay?");
         document.querySelector(".o_ai_trace_toggle").click();
         await until(".o_ai_trace pre", "SELECT");
+        if (document.querySelector(".o_ai_proposal")) {
+            throw new Error("Botones de propuesta en una respuesta que no la trató");
+        }
         console.log("test successful");
     } catch (e) {
         console.error(e.message);

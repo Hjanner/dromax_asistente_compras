@@ -179,6 +179,7 @@ class TestChat(TransactionCase):
         self.assertEqual(answer["level"], "basic")
         self.assertAlmostEqual(answer["cost"], 0.003)
         self.assertEqual(session.name, "¿Qué se vendió ayer?")
+        self.assertIs(answer["proposal"], False)                       # sin botones de propuesta
         self.assertEqual(transport.payloads[0]["model"], openrouter.DEFAULT_MODELS["basic"])
 
     def test_preset_forces_level_and_prompt(self):

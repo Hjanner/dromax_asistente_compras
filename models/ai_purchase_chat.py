@@ -172,7 +172,8 @@ class AiPurchaseChatMessage(models.Model):
             "completion_tokens": self.completion_tokens,
             "cost": self.cost,
             "duration_ms": self.duration_ms,
-            "proposal": self.proposal_id and {
+            # False y no el recordset vacío: JSON-RPC lo convertiría en el texto "ai.purchase.proposal()".
+            "proposal": {
                 "id": self.proposal_id.id, "name": self.proposal_id.name, "state": self.proposal_id.state,
-            },
+            } if self.proposal_id else False,
         }
