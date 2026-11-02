@@ -31,6 +31,8 @@ export class AiPurchaseChat extends Component {
             pendingText: "",
             openTraces: {},
             canCreateRfq: false,
+            // Pregunta predefinida que espera un dato (p. ej. el laboratorio) en el cuadro de texto.
+            inputPreset: null,
         });
         // Bajar al final solo cuando cambia el hilo: si no, cualquier
         // repintado devolvería al fondo mientras se leen mensajes antiguos.
@@ -109,14 +111,39 @@ export class AiPurchaseChat extends Component {
         return this.state.activeId;
     }
 
+    /** Botón de pregunta predefinida: se envía ya, o primero pide su dato. */
+    onPreset(preset) {
+        if (this.state.loading) {
+            return;
+        }
+        if (preset.input) {
+            this.state.inputPreset = preset;
+            this.inputRef.el?.focus();
+        } else {
+            this.send({ preset: preset.key });
+        }
+    }
+
+    cancelInputPreset() {
+        this.state.inputPreset = null;
+        this.inputRef.el?.focus();
+    }
+
+    submitInput() {
+        const preset = this.state.inputPreset;
+        this.send(preset ? { text: this.state.input, preset: preset.key } : { text: this.state.input });
+    }
+
     async send({ text = null, preset = null } = {}) {
         if (this.state.loading) {
             return;
         }
-        if (!preset && !(text || "").trim()) {
+        const presetDef = preset && this.state.presets.find((p) => p.key === preset);
+        if ((!preset || presetDef?.input) && !(text || "").trim()) {
             return;
         }
-        const label = preset ? this.state.presets.find((p) => p.key === preset)?.label : text.trim();
+        const label = !presetDef ? text.trim()
+            : presetDef.input ? `${presetDef.label}: ${text.trim()}` : presetDef.label;
         this.state.loading = true;
         this.state.pendingText = label;
         this.state.input = "";
@@ -132,6 +159,9 @@ export class AiPurchaseChat extends Component {
                 this.state.sessions.splice(idx, 1);
             }
             this.state.sessions.unshift(res.session);
+            if (presetDef?.input) {
+                this.state.inputPreset = null;
+            }
         } catch (error) {
             this.state.input = text || "";
             throw error;
@@ -144,15 +174,23 @@ export class AiPurchaseChat extends Component {
 
     onSubmit(ev) {
         ev.preventDefault();
-        this.send({ text: this.state.input });
+        this.submitInput();
     }
 
     onKeydown(ev) {
-        // Enter envía; Mayús+Enter hace salto de línea.
+        // Enter envía; Mayús+Enter hace salto de línea; Escape quita la pregunta que esperaba un dato.
         if (ev.key === "Enter" && !ev.shiftKey) {
             ev.preventDefault();
-            this.send({ text: this.state.input });
+            this.submitInput();
+        } else if (ev.key === "Escape" && this.state.inputPreset) {
+            this.cancelInputPreset();
         }
+    }
+
+    get inputPlaceholder() {
+        return this.state.inputPreset
+            ? `${this.state.inputPreset.input} (Enter envía, Esc cancela)`
+            : "Escribe tu pregunta… (Enter envía, Mayús+Enter salto de línea)";
     }
 
     /** Solo bajo la última respuesta que trató cada propuesta, para no repetir los botones. */
@@ -177,14 +215,26 @@ export class AiPurchaseChat extends Component {
         });
     }
 
+    /** Con un solo laboratorio en la respuesta, el botón pide solo ese laboratorio. */
+    draftsLabel(proposal) {
+        return proposal.laboratorio
+            ? `Generar borradores de ${proposal.laboratorio}`
+            : "Generar todos los borradores";
+    }
+
     generateDrafts(proposal) {
+        const scope = proposal.laboratorio
+            ? `del laboratorio «${proposal.laboratorio}» en «${proposal.name}», de todas tus farmacias. ` +
+              `Los demás laboratorios no se piden.`
+            : `de todos los laboratorios de «${proposal.name}», de todas tus farmacias.`;
         this.dialog.add(ConfirmationDialog, {
-            title: "Generar borradores",
+            title: this.draftsLabel(proposal),
             body: `Se creará una orden de compra en borrador por farmacia y droguería con las ` +
-                `líneas por pedir de «${proposal.name}», de todas tus farmacias. ¿Continuar?`,
+                `líneas por pedir ${scope} ¿Continuar?`,
             confirmLabel: "Generar borradores",
             confirm: async () => {
-                const action = await this.orm.call(SESSION, "chat_create_rfq", [[this.state.activeId], proposal.id]);
+                const action = await this.orm.call(SESSION, "chat_create_rfq",
+                    [[this.state.activeId], proposal.id, proposal.laboratorio]);
                 await this.action.doAction(action);
             },
             cancel: () => {},

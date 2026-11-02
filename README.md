@@ -273,10 +273,12 @@ SIM_DB=<base> python3 odoo/odoo-bin shell -c odoo/debian/odoo.conf -d <base> --n
 Menú **Compras IA → Chat** (grupo *Asistente de Compras IA / Usuario*).
 
 - Preguntas predefinidas (`services/presets.py`), cada una con su nivel de
-  modelo: *Arma la compra de esta semana* (avanzado), *Productos por
-  agotarse*, *Más vendidos de las últimas 4 semanas*, *Compras pendientes de
-  recibir*, *Compara precios entre droguerías* y *Stock sin rotación*. También se puede escribir libremente
-  eligiendo el nivel.
+  modelo: *Arma la compra de esta semana* (avanzado), *Revisa un laboratorio*
+  (avanzado; pide el laboratorio en el cuadro de texto antes de enviarse),
+  *¿Qué conviene trasladar?* (medio), *Productos por agotarse*, *Más vendidos
+  de las últimas 4 semanas*, *Compras pendientes de recibir*, *Compara precios
+  entre droguerías* y *Stock sin rotación*. También se puede escribir
+  libremente eligiendo el nivel.
 - El agente (`services/agent.py`) llama a OpenRouter con sus herramientas
   hasta tener respuesta (tope `agent_max_steps`, 8 por defecto). Bajo cada
   respuesta se ven el modelo, el costo, la duración y las consultas que hizo.
@@ -288,8 +290,13 @@ Menú **Compras IA → Chat** (grupo *Asistente de Compras IA / Usuario*).
     necesitan atención y las de mayor monto a revisar por presentación o que
     se cubren con un traslado. Con filtros (laboratorio, producto, farmacia o
     por pedir / ajustadas / revisar presentación / sin droguería / con
-    excedente / en solicitud / pedidas) devuelve hasta 80 líneas con su
-    `linea_id`, el motivo y las ofertas de las demás droguerías.
+    excedente / se cubre con traslado / en solicitud / pedidas) devuelve hasta
+    80 líneas con su `linea_id`, el motivo y las ofertas de las demás
+    droguerías, más el total de líneas y el monto de todas las que coinciden.
+    Las líneas con excedente traen las farmacias de origen con su cantidad, la
+    que más tiene y si alcanza sola; el filtro de traslados suma además lo que
+    se deja de comprar por farmacia de origen. Un laboratorio sin líneas
+    devuelve los nombres parecidos (trigramas).
   - `update_proposal_lines`: hasta 50 cambios de cantidad final, droguería
     (por nombre, entre las que ofertan el producto; el precio sale de su
     oferta) o nota (se agrega al motivo). Pasa por el `write` de la línea, con
@@ -303,9 +310,12 @@ Menú **Compras IA → Chat** (grupo *Asistente de Compras IA / Usuario*).
   preguntar. Con la propuesta real de `dromax_ai_inventario` (1412 líneas):
   una llamada a `get_proposal`, ~0,17 USD y ~30 s con Claude Opus.
 - Bajo la última respuesta que leyó o ajustó una propuesta aparecen los
-  botones **Generar borradores** (con permiso de Compras; pide confirmación y
-  usa las líneas de todas las farmacias del usuario, las mismas que leyó el
-  agente) y **Abrir propuesta**.
+  botones de borradores (con permiso de Compras; pide confirmación y usa las
+  líneas de todas las farmacias del usuario, las mismas que leyó el agente) y
+  **Abrir propuesta**. Si la respuesta solo trató líneas de un laboratorio
+  (p. ej. *Revisa un laboratorio*), el botón es **Generar borradores de
+  LETI** y pide solo ese laboratorio; si no, **Generar todos los
+  borradores**. Si no encontró ninguna línea, no hay botones.
 - El system prompt (`services/prompt.py`) lleva el contexto del negocio, las
   reglas contra el sobre-stock y el esquema de las tablas permitidas, filtrado
   contra las columnas que existen en la base (`services/schema_catalog.py`).

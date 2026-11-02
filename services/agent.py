@@ -18,6 +18,7 @@ import time
 from .config import get_agent_max_steps
 from .openrouter import OpenRouterClient, OpenRouterError, resolve_level
 from .prompt import build_system_prompt
+from .proposal_tools import answer_laboratories
 from .tools import call_tool, tool_definitions
 
 _logger = logging.getLogger(__name__)
@@ -89,8 +90,9 @@ def run_agent(env, user_text, history=(), level=None, task=None, transport=None)
 
     history: [{'role': 'user'|'assistant', 'content': str}, ...] en orden.
     Devuelve {'state', 'content', 'level', 'model', 'tool_trace', 'prompt_tokens',
-    'completion_tokens', 'cost', 'duration_ms', 'proposal_id'} (la propuesta que
-    leyó o ajustó, para mostrar sus botones bajo la respuesta).
+    'completion_tokens', 'cost', 'duration_ms', 'proposal_id', 'laboratorio'} (la
+    propuesta que leyó o ajustó, para mostrar sus botones bajo la respuesta, y su
+    laboratorio si solo trató uno: el botón genera entonces solo esos borradores).
     """
     started = time.monotonic()
     level = resolve_level(level, task)
@@ -106,7 +108,9 @@ def run_agent(env, user_text, history=(), level=None, task=None, transport=None)
     turn_start = len(messages)
 
     out = {"state": "ok", "content": "", "level": level, "model": False, "tool_trace": [],
-           "prompt_tokens": 0, "completion_tokens": 0, "cost": 0.0, "proposal_id": False}
+           "prompt_tokens": 0, "completion_tokens": 0, "cost": 0.0, "proposal_id": False,
+           "laboratorio": False}
+    labs = set()  # laboratorios que trató la respuesta; None: la propuesta completa
 
     def ask(msgs, **kw):
         data = client.chat(msgs, level=level, task=task, **kw)
@@ -137,6 +141,8 @@ def run_agent(env, user_text, history=(), level=None, task=None, transport=None)
                 out["tool_trace"].append(_trace_entry(fn.get("name"), args, result))
                 if isinstance(result.get("propuesta"), dict):
                     out["proposal_id"] = result["propuesta"].get("id") or out["proposal_id"]
+                    found = answer_laboratories(result)
+                    labs = None if labs is None or found is None else labs | found
                 content = _tool_content(result)
                 if step == max_steps - 2:
                     content += LAST_STEP_NOTE
@@ -157,5 +163,9 @@ def run_agent(env, user_text, history=(), level=None, task=None, transport=None)
         _logger.exception("Fallo inesperado en el agente de compras")
         out.update(state="error", content="Error interno del asistente. Revisa el registro del servidor.")
 
+    if labs == set():
+        out["proposal_id"] = False  # no encontró ninguna línea: sin botones que confundan
+    elif labs and len(labs) == 1:
+        out["laboratorio"] = next(iter(labs)) or False
     out["duration_ms"] = int((time.monotonic() - started) * 1000)
     return out

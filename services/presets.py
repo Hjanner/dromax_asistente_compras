@@ -5,6 +5,9 @@ Son el disparador habitual del agente: el comprador pulsa un botón y se envía
 un prompt fijo. Cada una fija su nivel de modelo; la de armar la compra lleva
 además la tarea purchase_proposal, que la manda siempre al nivel avanzado, y
 ensure_proposal: calcula la propuesta de la semana si todavía no existe.
+
+Las que llevan "input" piden un dato antes de enviarse (p. ej. el laboratorio):
+la interfaz lo pide en el cuadro de texto y el servidor lo pone en {input}.
 """
 
 PRESETS = [
@@ -20,6 +23,39 @@ PRESETS = [
             "laboratorios de mayor monto y lo que necesita mi atención antes de generar los "
             "borradores: productos a revisar por presentación, productos sin droguería y "
             "traslados entre farmacias que eviten comprar. Sé breve y termina diciéndome cómo seguir."
+        ),
+    },
+    {
+        "key": "revisar_laboratorio",
+        "label": "Revisa un laboratorio",
+        "level": "advanced",
+        "task": "lab_review",
+        "ensure_proposal": True,
+        "input": "Laboratorio, p. ej. LETI",
+        "prompt": (
+            "Revisa el laboratorio «{input}» en la propuesta de compra de esta semana "
+            "(get_proposal con ese laboratorio). Muestra sus líneas por farmacia y el total. "
+            "Señala las que hay que revisar por presentación, las que no tienen droguería, "
+            "las que se pueden cubrir con un traslado, las que ya están en solicitudes sin "
+            "confirmar y las que tienen otra droguería más barata o con más stock. Si el "
+            "nombre no coincide con ningún laboratorio, dime los parecidos. No cambies nada: "
+            "sugiere y espera mi respuesta."
+        ),
+    },
+    {
+        "key": "traslados",
+        "label": "¿Qué conviene trasladar?",
+        "level": "medium",
+        "task": "transfer_check",
+        "ensure_proposal": True,
+        "prompt": (
+            "¿Qué compras de la propuesta de esta semana se pueden evitar trasladando "
+            "mercancía entre farmacias? Usa get_proposal con el filtro se_cubre_con_traslado. "
+            "Agrupa por farmacia de origen (el total por origen ya viene calculado), muestra "
+            "los de mayor monto de cada una y el monto total que se dejaría de comprar; aparte, "
+            "los que hay que juntar de varias farmacias. Señala aparte los excedentes "
+            "que parezcan errores de inventario por ser desproporcionados. No cambies nada: "
+            "si quiero, te pido poner esas líneas en cero."
         ),
     },
     {
@@ -88,4 +124,5 @@ def get_preset(key):
 
 def public_presets():
     """Lo que necesita la interfaz (sin el prompt completo)."""
-    return [{"key": p["key"], "label": p["label"], "level": p["level"]} for p in PRESETS]
+    return [{"key": p["key"], "label": p["label"], "level": p["level"], "input": p.get("input") or False}
+            for p in PRESETS]

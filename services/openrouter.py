@@ -40,6 +40,7 @@ DEFAULT_MODELS = {
 TASK_LEVELS = {
     "purchase_proposal": "advanced",
     "proposal_adjustment": "advanced",
+    "lab_review": "advanced",
     "dynamic_flow": "advanced",
 }
 

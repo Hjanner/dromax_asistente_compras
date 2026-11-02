@@ -5,10 +5,11 @@ from datetime import timedelta
 from unittest.mock import patch
 
 from odoo import fields
+from odoo.exceptions import UserError
 from odoo.tests.common import new_test_user, tagged
 
 from ..services import openrouter
-from ..services.proposal_tools import GET_PROPOSAL, UPDATE_PROPOSAL_LINES
+from ..services.proposal_tools import GET_PROPOSAL, UPDATE_PROPOSAL_LINES, answer_laboratories
 from ..services.tools import call_tool, tool_definitions
 from .test_analisis import AnalisisCase
 from .test_chat import ScriptedTransport, text_response
@@ -116,6 +117,7 @@ class TestProposalChat(AnalisisCase):
         self.assertEqual(res["revisar_presentacion_mayor_monto"][0]["costo"], 1.0)
         # Excedente 8 en otra farmacia frente a 5 por pedir: el traslado cubre todo.
         self.assertEqual(res["traslados_que_cubren_todo"], 1)
+        self.assertEqual(res["monto_que_cubren_los_traslados"], 7.5)
         self.assertEqual(res["traslados_mayor_monto"][0]["linea_id"], self.ibu_otra.id)
 
     def test_lines_filters(self):
@@ -138,6 +140,11 @@ class TestProposalChat(AnalisisCase):
         self.assertEqual([l["linea_id"] for l in res["lineas"]], [self.vit.id])
         res = self._tool("get_proposal", laboratorio="lab zqx", limite=1)
         self.assertEqual((res["lineas_encontradas"], res["row_count"], res["truncated"]), (2, 1, True))
+        self.assertEqual(res["monto_encontrado"], 7 * 1.5 + 5 * 1.5)                # de todas, no solo la página
+        # Un laboratorio mal escrito: sin líneas, con los nombres parecidos.
+        res = self._tool("get_proposal", laboratorio="lav zqx")
+        self.assertEqual(res["lineas"], [])
+        self.assertEqual(res["laboratorios_parecidos"][0], "LAB ZQX")
         res = self._tool("get_proposal", buscar="no existe zqx")
         self.assertEqual(res["lineas"], [])
         self.assertIn("Ninguna línea", res["nota"])
@@ -146,6 +153,30 @@ class TestProposalChat(AnalisisCase):
         # Una propuesta anterior, por su id.
         proposal.state = "discarded"
         self.assertEqual(self._tool("get_proposal", propuesta_id=proposal.id)["propuesta"]["estado"], "Descartada")
+
+    def test_transfer_filter(self):
+        self._proposal()
+        res = self._tool("get_proposal", filtro="se_cubre_con_traslado")
+        self.assertEqual([l["linea_id"] for l in res["lineas"]], [self.ibu_otra.id])
+        self.assertEqual((res["lineas_encontradas"], res["monto_encontrado"]), (1, 7.5))
+        line = res["lineas"][0]
+        self.assertEqual(line["origenes_excedente"], [{"farmacia": "X", "excedente": 8}])
+        self.assertEqual((line["origen_sugerido"], line["una_farmacia_alcanza"]), ("X", True))
+        self.assertEqual(res["por_farmacia_origen"], [{"farmacia": "X", "lineas": 1, "monto": 7.5}])
+        self.assertEqual(res["lineas_que_necesitan_varias_farmacias"], 0)
+        # Entre dos farmacias alcanza, pero ninguna sola.
+        self.ibu_otra.write({"farmacias_con_excedente": "FARMACIA (A) Y (3), FARMACIA B (5)", "cantidad_final": 7})
+        res = self._tool("get_proposal", filtro="se_cubre_con_traslado")
+        self.assertEqual(res["lineas"][0]["origenes_excedente"],
+                         [{"farmacia": "FARMACIA (A) Y", "excedente": 3}, {"farmacia": "FARMACIA B", "excedente": 5}])
+        self.assertFalse(res["lineas"][0]["una_farmacia_alcanza"])
+        self.assertEqual((res["por_farmacia_origen"], res["lineas_que_necesitan_varias_farmacias"]), ([], 1))
+        # Si se pide más de lo que sobra en otras farmacias, el traslado ya no alcanza.
+        self.ibu_otra.cantidad_final = 9
+        self.assertEqual(self._tool("get_proposal", filtro="se_cubre_con_traslado")["lineas"], [])
+        # En cero tampoco: no hay nada que trasladar.
+        self.ibu_otra.cantidad_final = 0
+        self.assertEqual(self._tool("get_proposal", filtro="se_cubre_con_traslado")["lineas_encontradas"], 0)
 
     def test_pharmacy_without_access(self):
         self._proposal()
@@ -227,7 +258,8 @@ class TestProposalChat(AnalisisCase):
         session = self.env["ai.purchase.chat.session"].with_env(self.uenv).create({})
         res = session.chat_send(text="del ibuprofeno pide 20", level="medium")
         answer = res["messages"][1]
-        self.assertEqual(answer["proposal"], {"id": proposal.id, "name": proposal.name, "state": "in_review"})
+        self.assertEqual(answer["proposal"], {"id": proposal.id, "name": proposal.name, "state": "in_review",
+                                              "laboratorio": "LAB ZQX"})
         self.assertEqual(answer["tool_trace"][0]["tool"], "update_proposal_lines")
         self.assertIn("update_proposal_lines(", answer["tool_trace"][0]["query"])
         self.assertEqual(self.ibu.cantidad_final, 20)
@@ -238,6 +270,61 @@ class TestProposalChat(AnalisisCase):
         self.assertEqual(proposal.purchase_order_ids.company_id, self.company | self.otra)
         self.assertEqual(set(action["domain"][0][2]), set(proposal.purchase_order_ids.ids))
         self.assertEqual(proposal.state, "done")
+
+    def test_drafts_of_one_lab(self):
+        proposal = self._proposal()
+        self.vit.cantidad_final = 2                                     # ajustada: entra con todo
+        self._transport(
+            call_response("get_proposal", {"laboratorio": "lab zqx"}), text_response("LAB ZQX revisado."),
+            call_response("get_proposal", {"laboratorio": "zqx"}), text_response("Dos laboratorios."),
+            call_response("get_proposal", {}), text_response("Resumen."),
+            call_response("get_proposal", {"laboratorio": "nada zqx"}), text_response("No hay."))
+        session = self.env["ai.purchase.chat.session"].with_env(self.uenv).create({})
+
+        def proposal_of(text):
+            return session.chat_send(text=text, level="medium")["messages"][1]["proposal"]
+
+        self.assertEqual(proposal_of("revisa lab zqx")["laboratorio"], "LAB ZQX")
+        self.assertFalse(proposal_of("revisa zqx")["laboratorio"])     # dos laboratorios
+        self.assertFalse(proposal_of("resumen")["laboratorio"])        # la propuesta completa
+        self.assertFalse(proposal_of("revisa nada zqx"))                # sin líneas: sin botones
+        # Solo el laboratorio de la respuesta, en las dos farmacias.
+        session.chat_create_rfq(proposal.id, "LAB ZQX")
+        self.assertTrue(self.ibu.purchase_line_id and self.ibu_otra.purchase_line_id)
+        self.assertFalse(self.vit.purchase_line_id)
+        self.assertEqual(proposal.state, "in_review")
+        with self.assertRaisesRegex(UserError, "no tiene líneas de NADA"):
+            session.chat_create_rfq(proposal.id, "NADA")
+        session.chat_create_rfq(proposal.id)
+        self.assertTrue(self.vit.purchase_line_id)
+        self.assertEqual(proposal.state, "done")
+
+    def test_answer_laboratories(self):
+        lines = {"lineas": [{"laboratorio": "A"}, {"laboratorio": "B"}]}
+        self.assertEqual(answer_laboratories(lines), {"A", "B"})
+        # Lista recortada: solo cuenta si el filtro fue de un laboratorio.
+        self.assertIsNone(answer_laboratories(dict(lines, truncated=True)))
+        self.assertEqual(answer_laboratories(dict(lines, truncated=True, laboratorio="A")), {"A"})
+        self.assertIsNone(answer_laboratories({"propuesta": {}, "lineas": 3}))   # resumen
+        self.assertEqual(answer_laboratories({"resultados": [
+            {"laboratorio": "A"}, {"linea_id": 9, "error": "no existe"}]}), {"A"})
+
+    def test_lab_preset(self):
+        self._proposal()
+        transport = self._transport(text_response("Revisado"))
+        session = self.env["ai.purchase.chat.session"].with_env(self.uenv).create({})
+        res = session.chat_send(preset="revisar_laboratorio", text="  lab   zqx ", level="basic")
+        self.assertEqual(res["messages"][0]["preset_label"], "Revisa un laboratorio: lab zqx")
+        self.assertEqual(res["messages"][1]["level"], "advanced")
+        self.assertEqual(session.name, "Revisa un laboratorio: lab zqx")
+        self.assertIn("«lab zqx»", transport.payloads[0]["messages"][-1]["content"])
+        with self.assertRaisesRegex(UserError, "Escribe el dato"):
+            session.chat_send(preset="revisar_laboratorio", text="   ")
+        with self.assertRaisesRegex(UserError, "demasiado largo"):
+            session.chat_send(preset="revisar_laboratorio", text="x" * 101)
+        presets = {p["key"]: p for p in session.chat_bootstrap()["presets"]}
+        self.assertTrue(presets["revisar_laboratorio"]["input"])
+        self.assertFalse(presets["traslados"]["input"])
 
     def test_preset_uses_week_proposal(self):
         self._weekly_sales(self.ibuprofeno, 10)

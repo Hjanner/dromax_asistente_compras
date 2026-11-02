@@ -194,6 +194,21 @@ El README explica cómo funciona lo que ya existe.
   controlador y las vistas de plantilla. 27 tests en el módulo FTP; 143 entre
   los dos módulos.
 
+- **Dos preguntas predefinidas nuevas** (versión `17.0.0.12.0`, 2026-11-02):
+  *Revisa un laboratorio* (pide el laboratorio en el cuadro de texto; si el
+  nombre no coincide, sugiere los parecidos) y *¿Qué conviene trasladar?*
+  (filtro `se_cubre_con_traslado` de `get_proposal`, con lo que se deja de
+  comprar por farmacia de origen). En vivo sobre `dromax_ai_inventario`
+  (rollback): Calox, 33 líneas, 0,31 USD y 67 s con Opus; traslados, 690
+  líneas y 12.183 evitables, 0,04 USD y 29 s con Gemini. La primera versión
+  de traslados agrupaba mal por origen (el modelo leía el texto «FARMAX (83),
+  …»); ahora la herramienta da el origen ya calculado.
+  El botón de borradores bajo una respuesta que trató un solo laboratorio
+  pasa a ser *Generar borradores de CALOX* y pide solo ese laboratorio (antes
+  pedía toda la propuesta); si trató varios o el resumen, *Generar todos los
+  borradores*, y si no encontró líneas, no hay botones. En vivo: Calox, 8
+  borradores con 28 líneas, todas de CALOX (0,47 USD, 92 s). 120 tests.
+
 ## Decisiones
 
 - Módulo nuevo, separado del antiguo `ai_data_chat`.

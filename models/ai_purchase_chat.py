@@ -8,6 +8,7 @@ from ..services.proposal_tools import all_companies_env
 from ..services.tools import GROUP_XMLID
 
 MAX_USER_TEXT = 4000
+MAX_PRESET_INPUT = 100
 LEVELS = [("basic", "Básico"), ("medium", "Medio"), ("advanced", "Avanzado")]
 
 
@@ -65,7 +66,16 @@ class AiPurchaseChatSession(models.Model):
         preset_def = presets.get_preset(preset) if preset else None
         if preset and not preset_def:
             raise UserError(_("Pregunta predefinida desconocida."))
-        if preset_def:
+        label = preset_def and preset_def["label"]
+        if preset_def and preset_def.get("input"):
+            value = " ".join((text or "").split())
+            if not value:
+                raise UserError(_("Escribe el dato que pide «%s».", preset_def["label"]))
+            if len(value) > MAX_PRESET_INPUT:
+                raise UserError(_("El dato es demasiado largo (máximo %s caracteres).", MAX_PRESET_INPUT))
+            label = "%s: %s" % (preset_def["label"], value)
+            text, level, task = preset_def["prompt"].format(input=value), preset_def["level"], preset_def["task"]
+        elif preset_def:
             text, level, task = preset_def["prompt"], preset_def["level"], preset_def["task"]
         else:
             text = (text or "").strip()
@@ -83,10 +93,10 @@ class AiPurchaseChatSession(models.Model):
         user_msg = Message.create({
             "session_id": self.id, "role": "user", "content": text,
             "preset_key": preset_def["key"] if preset_def else False,
-            "preset_label": preset_def["label"] if preset_def else False,
+            "preset_label": label or False,
         })
         if self.name == _("Nueva conversación"):
-            title = preset_def["label"] if preset_def else text
+            title = label or text
             self.name = title if len(title) <= 60 else title[:57] + "…"
 
         if preset_def and preset_def.get("ensure_proposal"):
@@ -106,6 +116,7 @@ class AiPurchaseChatSession(models.Model):
             "cost": result["cost"],
             "duration_ms": result["duration_ms"],
             "proposal_id": result.get("proposal_id") or False,
+            "laboratorio": result.get("proposal_id") and result.get("laboratorio") or False,
         })
         self.last_message_date = fields.Datetime.now()
         return {
@@ -113,15 +124,22 @@ class AiPurchaseChatSession(models.Model):
             "messages": [user_msg._chat_message_dict(), answer._chat_message_dict()],
         }
 
-    def chat_create_rfq(self, proposal_id):
+    def chat_create_rfq(self, proposal_id, laboratorio=False):
         """Botón «Generar borradores» bajo una respuesta: con las líneas de todas las
-        farmacias del usuario, las mismas que leyó el agente."""
+        farmacias del usuario, las mismas que leyó el agente, y solo las de
+        `laboratorio` si la respuesta trató un solo laboratorio."""
         self.ensure_one()
         self._check_ai_access()
         proposal = all_companies_env(self.env)["ai.purchase.proposal"].browse(proposal_id).exists()
         if not proposal:
             raise UserError(_("La propuesta ya no existe."))
-        return proposal.action_create_rfq()
+        if not laboratorio:
+            return proposal.action_create_rfq()
+        lines = proposal.env["ai.purchase.proposal.line"].search([
+            ("proposal_id", "=", proposal.id), ("laboratorio", "=", laboratorio)])
+        if not lines:
+            raise UserError(_("La propuesta no tiene líneas de %s.", laboratorio))
+        return lines.action_create_rfq()
 
     def chat_delete(self):
         self.unlink()
@@ -156,6 +174,8 @@ class AiPurchaseChatMessage(models.Model):
     duration_ms = fields.Integer("Duración (ms)")
     proposal_id = fields.Many2one("ai.purchase.proposal", "Propuesta", ondelete="set null",
                                   help="Propuesta que leyó o ajustó el agente en esta respuesta.")
+    laboratorio = fields.Char("Laboratorio", help="Si la respuesta trató un solo laboratorio de la "
+                              "propuesta, el botón genera solo sus borradores.")
 
     def _chat_message_dict(self):
         self.ensure_one()
@@ -175,5 +195,6 @@ class AiPurchaseChatMessage(models.Model):
             # False y no el recordset vacío: JSON-RPC lo convertiría en el texto "ai.purchase.proposal()".
             "proposal": {
                 "id": self.proposal_id.id, "name": self.proposal_id.name, "state": self.proposal_id.state,
+                "laboratorio": self.laboratorio or False,
             } if self.proposal_id else False,
         }

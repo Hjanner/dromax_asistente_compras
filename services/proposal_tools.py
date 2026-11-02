@@ -15,6 +15,8 @@ Las dos herramientas ven las líneas de todas las farmacias del usuario, no
 solo las marcadas en el selector de empresas: la compra no es estricta por
 farmacia.
 """
+import re
+
 from markupsafe import Markup, escape
 
 from odoo import _, fields
@@ -44,13 +46,15 @@ GET_PROPOSAL = {
                 "filtro": {
                     "type": "string",
                     "enum": ["por_pedir", "ajustadas", "revisar_presentacion", "sin_drogueria",
-                             "con_excedente", "en_solicitud", "pedidas"],
+                             "con_excedente", "se_cubre_con_traslado", "en_solicitud", "pedidas"],
                     "description": (
                         "por_pedir: con cantidad y droguería, aún sin orden; ajustadas: cambiadas "
                         "por el comprador; revisar_presentacion: precio de más del triple del "
                         "costo; sin_drogueria: ninguna droguería lo ofrece; con_excedente: otra "
-                        "farmacia tiene de sobra; en_solicitud: ya hay solicitudes sin confirmar; "
-                        "pedidas: ya están en una orden de compra."),
+                        "farmacia tiene de sobra; se_cubre_con_traslado: el excedente de otras "
+                        "farmacias alcanza para toda la cantidad final (de mayor a menor monto); "
+                        "en_solicitud: ya hay solicitudes sin confirmar; pedidas: ya están en una "
+                        "orden de compra."),
                 },
                 "limite": {"type": "integer", "description": "Máximo de líneas (por defecto 40, tope 80)."},
             },
@@ -111,6 +115,47 @@ FILTERS = {
     "en_solicitud": [("en_solicitud", ">", 0)],
     "pedidas": [("purchase_line_id", "!=", False)],
 }
+# Filtros que comparan dos campos de la línea: se aplican en Python sobre este dominio.
+TRANSFER_FILTER = "se_cubre_con_traslado"
+TRANSFER_DOMAIN = FILTERS["con_excedente"] + [("cantidad_final", ">", 0), ("purchase_line_id", "=", False)]
+
+
+# "FARMACIA A (12), FARMACIA B (3)", de mayor a menor excedente (ver ai_v_faltantes).
+EXCESS_ITEM = re.compile(r"(.+?) \((\d+)\)(?:, |$)")
+
+
+def _excess_origins(line):
+    """Farmacias con excedente del producto, de mayor a menor: [{'farmacia', 'excedente'}]."""
+    return [{"farmacia": name, "excedente": int(qty)}
+            for name, qty in EXCESS_ITEM.findall(line.farmacias_con_excedente or "")]
+
+
+def _transfer_origin(line):
+    """La farmacia con más excedente y si alcanza sola para la cantidad final."""
+    best = max(_excess_origins(line), key=lambda o: o["excedente"], default=None)
+    return best and best["farmacia"], bool(best and best["excedente"] >= line.cantidad_final)
+
+
+def _by_origin(lines):
+    """Lo que se deja de comprar por farmacia de origen, con las líneas que una sola farmacia cubre."""
+    totals, several = {}, 0
+    for line in lines:
+        origin, alone = _transfer_origin(line)
+        if not alone:
+            several += 1
+            continue
+        item = totals.setdefault(origin, {"farmacia": origin, "lineas": 0, "monto": 0.0})
+        item["lineas"] += 1
+        item["monto"] += line.monto
+    result = sorted(totals.values(), key=lambda i: -i["monto"])
+    for item in result:
+        item["monto"] = _money(item["monto"])
+    return result, several
+
+
+def _covered_by_transfer(lines):
+    """Las líneas cuya cantidad final cubre el excedente de otras farmacias, de mayor a menor monto."""
+    return lines.filtered(lambda l: l.excedente_otras >= l.cantidad_final).sorted("monto", reverse=True)
 
 
 class ProposalToolError(Exception):
@@ -179,8 +224,7 @@ def _summary(Line, base):
     labs = Line._read_group(base, ["laboratorio"], ["__count", "monto:sum"], order="monto:sum desc")
     review_lines = Line.search(base + FILTERS["revisar_presentacion"], order="monto desc", limit=TOP_ATTENTION)
     # Traslados que cubren toda la cantidad: otra farmacia tiene al menos lo que se iba a pedir.
-    transfers = Line.search(base + FILTERS["con_excedente"] + [("cantidad_final", ">", 0)], order="monto desc") \
-        .filtered(lambda l: l.excedente_otras >= l.cantidad_final)
+    transfers = _covered_by_transfer(Line.search(base + TRANSFER_DOMAIN))
     return {
         "lineas": lines,
         "monto_final": _money(amount),
@@ -197,8 +241,9 @@ def _summary(Line, base):
         } for lab, n, total in labs[:TOP_LABS]],
         "revisar_presentacion_mayor_monto": [_short_line(l, costo=_money(l.costo)) for l in review_lines],
         "traslados_que_cubren_todo": len(transfers),
+        "monto_que_cubren_los_traslados": _money(sum(transfers.mapped("monto"))),
         "traslados_mayor_monto": [_short_line(l, excedente_otras=l.excedente_otras,
-                                              farmacias_con_excedente=l.farmacias_con_excedente)
+                                              origenes_excedente=_excess_origins(l))
                                   for l in transfers[:TOP_ATTENTION]],
     }
 
@@ -246,7 +291,9 @@ def _line_dict(line, offers):
     if line.en_solicitud:
         item["en_solicitud"] = line.en_solicitud
     if line.excedente_otras:
-        item.update(excedente_otras=line.excedente_otras, farmacias_con_excedente=line.farmacias_con_excedente)
+        origin, alone = _transfer_origin(line)
+        item.update(excedente_otras=line.excedente_otras, origenes_excedente=_excess_origins(line),
+                    origen_sugerido=origin, una_farmacia_alcanza=alone)
     if line.revisar_presentacion:
         item.update(revisar_presentacion=True, costo=_money(line.costo))
     if line.purchase_line_id:
@@ -264,19 +311,26 @@ def get_proposal(env, args):
     base = [("proposal_id", "=", proposal.id)]
     domain = list(base)
     lab = (args.get("laboratorio") or "").strip().upper()
+    lab_found = []
     if lab:
         exact = Line.search_count(base + [("laboratorio", "=", lab)])
         domain.append(("laboratorio", "=" if exact else "ilike", lab))
+        lab_found = [found for (found,) in Line._read_group(base + domain[-1:], ["laboratorio"])]
     if (args.get("buscar") or "").strip():
         domain.append(("product_id", "ilike", args["buscar"].strip()))
     if (args.get("farmacia") or "").strip():
         domain.append(("company_id", "ilike", args["farmacia"].strip()))
-    if args.get("filtro"):
-        if args["filtro"] not in FILTERS:
-            raise ProposalToolError(_("Filtro desconocido: %s.", args["filtro"]))
-        domain += FILTERS[args["filtro"]]
+    filtro = args.get("filtro")
+    if filtro == TRANSFER_FILTER:
+        domain += TRANSFER_DOMAIN
+    elif filtro:
+        if filtro not in FILTERS:
+            raise ProposalToolError(_("Filtro desconocido: %s.", filtro))
+        domain += FILTERS[filtro]
 
     result = {"propuesta": _header(proposal)}
+    if len(lab_found) == 1:
+        result["laboratorio"] = lab_found[0]
     if domain == base:
         result.update(_summary(Line, base))
         result["row_count"] = result["lineas"]
@@ -285,11 +339,18 @@ def get_proposal(env, args):
         limit = min(max(int(args.get("limite") or DEFAULT_LINES), 1), MAX_LINES)
     except (TypeError, ValueError):
         limit = DEFAULT_LINES
-    found = Line.search_count(domain)
-    lines = Line.search(domain, limit=limit)
+    if filtro == TRANSFER_FILTER:
+        matching = _covered_by_transfer(Line.search(domain))
+        found, amount, lines = len(matching), sum(matching.mapped("monto")), matching[:limit]
+        result["por_farmacia_origen"], result["lineas_que_necesitan_varias_farmacias"] = _by_origin(matching)
+    else:
+        found = Line.search_count(domain)
+        [(amount,)] = Line._read_group(domain, [], ["monto:sum"])
+        lines = Line.search(domain, limit=limit)
     offers = _offers(env, lines.product_id.ids)
     result.update(
         lineas_encontradas=found,
+        monto_encontrado=_money(amount),
         row_count=len(lines),
         truncated=found > len(lines),
         lineas=[_line_dict(line, offers) for line in lines],
@@ -297,7 +358,22 @@ def get_proposal(env, args):
     if not found:
         result["nota"] = _("Ninguna línea de la propuesta coincide. Si el producto no aparece, es "
                            "porque su stock y lo pendiente cubren la demanda.")
+        if lab:
+            result["laboratorios_parecidos"] = _similar_labs(env, proposal, lab)
     return result
+
+
+def _similar_labs(env, proposal, lab):
+    """Laboratorios de la propuesta con nombre parecido (trigramas), para un nombre mal escrito."""
+    env.cr.execute("""
+        SELECT laboratorio FROM ai_purchase_proposal_line
+         WHERE proposal_id = %s AND laboratorio IS NOT NULL
+         GROUP BY laboratorio
+        HAVING max(similarity(laboratorio, %s)) > 0.2
+         ORDER BY max(similarity(laboratorio, %s)) DESC, laboratorio
+         LIMIT 8
+    """, (proposal.id, lab, lab))
+    return [row[0] for row in env.cr.fetchall()]
 
 
 def _snapshot(line):
@@ -344,7 +420,20 @@ def _apply_change(Line, change):
     before = _snapshot(line)
     line.write(vals)
     return line, {"linea_id": line.id, "producto": line.product_id.display_name,
-                  "farmacia": line.company_id.name, "antes": before, "ahora": _snapshot(line)}
+                  "farmacia": line.company_id.name, "laboratorio": line.laboratorio,
+                  "antes": before, "ahora": _snapshot(line)}
+
+
+def answer_laboratories(result):
+    """Laboratorios de las líneas que leyó o ajustó una llamada, o None si trató la
+    propuesta completa (resumen o lista recortada de varios laboratorios)."""
+    if "resultados" in result:
+        return {r["laboratorio"] for r in result["resultados"] if "error" not in r}
+    if "lineas" not in result or not isinstance(result["lineas"], list):
+        return None
+    if result.get("truncated"):
+        return {result["laboratorio"]} if result.get("laboratorio") else None
+    return {line["laboratorio"] for line in result["lineas"]}
 
 
 def _log_body(user, changes):

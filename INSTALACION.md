@@ -202,8 +202,8 @@ farmacéutico) son **exentos**:
 | *Compras IA → Códigos de barras* → **Actualizar reporte** | Las incoherencias entre los códigos propios y los de las droguerías, para corregir. |
 | *Compras IA → Análisis → Faltantes* | Productos por pedir con su droguería sugerida. |
 | *Compras IA → Propuestas* → **Calcular propuesta** | La propuesta de la semana, agrupada por laboratorio. |
-| *Compras IA → Chat* → **Arma la compra de esta semana** | El resumen de la propuesta, con los botones **Generar borradores** y **Abrir propuesta** debajo. |
-| **Generar borradores** sobre las líneas de un laboratorio | Una solicitud de presupuesto en borrador por farmacia y droguería, en *Compras*. |
+| *Compras IA → Chat* → **Arma la compra de esta semana** | El resumen de la propuesta, con los botones **Generar todos los borradores** y **Abrir propuesta** debajo. |
+| *Compras IA → Chat* → **Revisa un laboratorio** → **Generar borradores de …** | Una solicitud de presupuesto en borrador por farmacia y droguería, en *Compras*, solo con ese laboratorio. |
 | *Compras IA → Configuración → Consumo de IA* | Una línea por cada llamada al modelo, con su costo. |
 
 ## 11. Actualizar más adelante

@@ -99,9 +99,16 @@ corrigen en la orden.
 - Las líneas con revisar_presentacion no entran en los borradores hasta que el \
 comprador cambie su cantidad o su droguería: señálalas siempre.
 - Si una línea tiene excedente en otras farmacias, sugiere trasladar antes de \
-comprar; la cantidad la decide el comprador.
-- Para generar los borradores, el comprador pulsa «Generar borradores» bajo tu \
-respuesta: se crea una orden por farmacia y droguería con las líneas por pedir."""
+comprar; la cantidad la decide el comprador. El filtro se_cubre_con_traslado da \
+las líneas en que el excedente alcanza para toda la cantidad, con el total por \
+farmacia de origen. En cada línea, origenes_excedente dice cuánto sobra en cada \
+farmacia, origen_sugerido es la que más tiene y una_farmacia_alcanza dice si \
+cubre sola la cantidad (si no, hay que juntar de varias). Los traslados se \
+hacen fuera del chat, como hasta ahora: tú solo los sugieres.
+- Para generar los borradores, el comprador pulsa el botón bajo tu respuesta: se \
+crea una orden por farmacia y droguería con las líneas por pedir. Si en la \
+respuesta solo leíste o ajustaste líneas de un laboratorio, el botón pide solo \
+ese laboratorio; si no, toda la propuesta."""
 
 FORMAT = """\
 Formato de respuesta:

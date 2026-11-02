@@ -173,6 +173,17 @@ const until = (sel, text) => new Promise((resolve, reject) => {
         if (document.querySelector(".o_ai_proposal")) {
             throw new Error("Botones de propuesta en una respuesta que no la trató");
         }
+        // Pregunta predefinida que pide un dato: primero el laboratorio, después se envía.
+        (await until(".o_ai_presets_bar .o_ai_preset[data-preset='revisar_laboratorio']")).click();
+        await until(".o_ai_input_preset", "Revisa un laboratorio");
+        input.value = "LETI";
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        (await until(".o_ai_send:not([disabled])")).click();
+        await until(".o_ai_msg_user .o_ai_bubble", "Revisa un laboratorio: LETI");
+        await until(".o_ai_msg_assistant", "Laboratorio revisado.");
+        if (document.querySelector(".o_ai_input_preset")) {
+            throw new Error("La pregunta predefinida sigue esperando un dato");
+        }
         console.log("test successful");
     } catch (e) {
         console.error(e.message);
@@ -197,7 +208,7 @@ const until = (sel, text) => new Promise((resolve, reject) => {
         (await until(".o_ai_send:not([disabled])")).click();
         await until(".o_ai_msg_assistant", "Propuesta lista.");
         await until(".o_ai_open_proposal");
-        (await until(".o_ai_generate_drafts")).click();
+        (await until(".o_ai_generate_drafts", "Generar borradores de LAB UI")).click();
         (await until(".modal-footer .btn-primary", "Generar borradores")).click();
         await until(".o_form_view .o_data_row", "ZQX UI CHAT");
         console.log("test successful");
@@ -226,7 +237,8 @@ class TestChatUi(HttpCase):
             "dromax_asistente_compras.openrouter_api_key", "sk-or-test")
         transport = ScriptedTransport(
             tool_call_response("SELECT name FROM product_template"),
-            text_response("| Producto | Unidades |\n|---|---|\n| Kilometraje | 3 |"))
+            text_response("| Producto | Unidades |\n|---|---|\n| Kilometraje | 3 |"),
+            text_response("Laboratorio revisado."))
         fake_tool = lambda env, name, args: {"columns": ["name"], "rows": [["Kilometraje"]],
                                              "row_count": 1, "truncated": False, "elapsed_ms": 2}
         with patch.object(openrouter, "Transport", lambda: transport), \
@@ -235,7 +247,8 @@ class TestChatUi(HttpCase):
                             CHAT_FLOW, login="ai_chat_ui_buyer")
 
     def test_chat_proposal_buttons(self):
-        """Bajo la respuesta que trató la propuesta: Abrir propuesta y Generar borradores."""
+        """Bajo la respuesta que trató la propuesta: Abrir propuesta y Generar borradores,
+        solo del laboratorio que trató."""
         from unittest.mock import patch
 
         from ..services import agent as agent_mod
@@ -249,15 +262,18 @@ class TestChatUi(HttpCase):
             "dromax_asistente_compras.openrouter_api_key", "sk-or-test")
         product = self.env["product.product"].create({"name": "ZQX UI CHAT [LAB UI]", "detailed_type": "product"})
         drogueria = self.env["res.partner"].create({"name": "ZQX DROG UI", "is_company": True})
+        other = self.env["product.product"].create({"name": "ZQX UI OTRO [OTRO UI]", "detailed_type": "product"})
         proposal = self.env["ai.purchase.proposal"].create({"name": "ZQX Propuesta UI", "line_ids": [(0, 0, {
-            "company_id": self.env.company.id, "product_id": product.id, "cantidad_sugerida": 2,
+            "company_id": self.env.company.id, "product_id": p.id, "laboratorio": lab, "cantidad_sugerida": 2,
             "cantidad_final": 2, "drogueria_id": drogueria.id, "drogueria_sugerida_id": drogueria.id,
-            "precio": 1.0, "precio_sugerido": 1.0})]})
-        transport = ScriptedTransport(call_response("get_proposal", {}), text_response("Propuesta lista."))
-        fake_tool = lambda env, name, args: {"propuesta": {"id": proposal.id}, "row_count": 1}
+            "precio": 1.0, "precio_sugerido": 1.0}) for p, lab in [(product, "LAB UI"), (other, "OTRO UI")]]})
+        transport = ScriptedTransport(call_response("get_proposal", {"laboratorio": "LAB UI"}),
+                                      text_response("Propuesta lista."))
+        fake_tool = lambda env, name, args: {"propuesta": {"id": proposal.id}, "row_count": 1,
+                                             "lineas": [{"laboratorio": "LAB UI"}]}
         with patch.object(openrouter, "Transport", lambda: transport), \
                 patch.object(agent_mod, "call_tool", fake_tool):
             self.browser_js("/web#action=dromax_asistente_compras.action_ai_purchase_chat",
                             CHAT_PROPOSAL, login="ai_chat_ui_proposal")
-        self.assertEqual(proposal.state, "done")
-        self.assertEqual(proposal.purchase_order_ids.partner_id, drogueria)
+        self.assertEqual(proposal.state, "in_review")
+        self.assertEqual(proposal.purchase_order_ids.order_line.product_id, product)
