@@ -114,10 +114,9 @@ FILTERS = {
     "con_excedente": [("excedente_otras", ">", 0)],
     "en_solicitud": [("en_solicitud", ">", 0)],
     "pedidas": [("purchase_line_id", "!=", False)],
+    "se_cubre_con_traslado": [("se_cubre_con_traslado", "=", True), ("purchase_line_id", "=", False)],
 }
-# Filtros que comparan dos campos de la línea: se aplican en Python sobre este dominio.
 TRANSFER_FILTER = "se_cubre_con_traslado"
-TRANSFER_DOMAIN = FILTERS["con_excedente"] + [("cantidad_final", ">", 0), ("purchase_line_id", "=", False)]
 
 
 # "FARMACIA A (12), FARMACIA B (3)", de mayor a menor excedente (ver ai_v_faltantes).
@@ -151,11 +150,6 @@ def _by_origin(lines):
     for item in result:
         item["monto"] = _money(item["monto"])
     return result, several
-
-
-def _covered_by_transfer(lines):
-    """Las líneas cuya cantidad final cubre el excedente de otras farmacias, de mayor a menor monto."""
-    return lines.filtered(lambda l: l.excedente_otras >= l.cantidad_final).sorted("monto", reverse=True)
 
 
 class ProposalToolError(Exception):
@@ -224,7 +218,7 @@ def _summary(Line, base):
     labs = Line._read_group(base, ["laboratorio"], ["__count", "monto:sum"], order="monto:sum desc")
     review_lines = Line.search(base + FILTERS["revisar_presentacion"], order="monto desc", limit=TOP_ATTENTION)
     # Traslados que cubren toda la cantidad: otra farmacia tiene al menos lo que se iba a pedir.
-    transfers = _covered_by_transfer(Line.search(base + TRANSFER_DOMAIN))
+    transfers = Line.search(base + FILTERS[TRANSFER_FILTER], order="monto desc, id")
     return {
         "lineas": lines,
         "monto_final": _money(amount),
@@ -321,9 +315,7 @@ def get_proposal(env, args):
     if (args.get("farmacia") or "").strip():
         domain.append(("company_id", "ilike", args["farmacia"].strip()))
     filtro = args.get("filtro")
-    if filtro == TRANSFER_FILTER:
-        domain += TRANSFER_DOMAIN
-    elif filtro:
+    if filtro:
         if filtro not in FILTERS:
             raise ProposalToolError(_("Filtro desconocido: %s.", filtro))
         domain += FILTERS[filtro]
@@ -340,7 +332,7 @@ def get_proposal(env, args):
     except (TypeError, ValueError):
         limit = DEFAULT_LINES
     if filtro == TRANSFER_FILTER:
-        matching = _covered_by_transfer(Line.search(domain))
+        matching = Line.search(domain, order="monto desc, id")
         found, amount, lines = len(matching), sum(matching.mapped("monto")), matching[:limit]
         result["por_farmacia_origen"], result["lineas_que_necesitan_varias_farmacias"] = _by_origin(matching)
     else:

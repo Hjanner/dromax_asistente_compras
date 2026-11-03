@@ -259,7 +259,7 @@ class TestProposalChat(AnalisisCase):
         res = session.chat_send(text="del ibuprofeno pide 20", level="medium")
         answer = res["messages"][1]
         self.assertEqual(answer["proposal"], {"id": proposal.id, "name": proposal.name, "state": "in_review",
-                                              "laboratorio": "LAB ZQX"})
+                                              "laboratorio": "LAB ZQX", "vista": False})
         self.assertEqual(answer["tool_trace"][0]["tool"], "update_proposal_lines")
         self.assertIn("update_proposal_lines(", answer["tool_trace"][0]["query"])
         self.assertEqual(self.ibu.cantidad_final, 20)
@@ -298,6 +298,25 @@ class TestProposalChat(AnalisisCase):
         session.chat_create_rfq(proposal.id)
         self.assertTrue(self.vit.purchase_line_id)
         self.assertEqual(proposal.state, "done")
+
+    def test_transfer_answer(self):
+        proposal = self._proposal()
+        self.assertEqual(self.Line.search([("se_cubre_con_traslado", "=", True)]), self.ibu_otra)
+        self._transport(
+            call_response("get_proposal", {"filtro": "se_cubre_con_traslado"}), text_response("Traslados."),
+            call_response("get_proposal", {"filtro": "con_excedente"}), text_response("Con excedente."))
+        session = self.env["ai.purchase.chat.session"].with_env(self.uenv).create({})
+        answer = session.chat_send(text="¿qué conviene trasladar?", level="medium")["messages"][1]
+        self.assertEqual(answer["proposal"]["vista"], "traslados")
+        self.assertFalse(session.chat_send(text="¿qué sobra?", level="medium")["messages"][1]["proposal"]["vista"])
+        action = proposal.with_env(self.uenv).action_open_lines(transfers=True)
+        self.assertEqual(action["context"]["search_default_se_cubre_con_traslado"], 1)
+        self.assertEqual(action["views"][0][0],
+                         self.env.ref("dromax_asistente_compras.view_ai_purchase_proposal_line_tree_transfer").id)
+        self.assertNotIn("search_default_se_cubre_con_traslado", proposal.action_open_lines()["context"])
+        # Al ponerla en 0 (se va a trasladar), deja de figurar.
+        self.ibu_otra.cantidad_final = 0
+        self.assertFalse(self.ibu_otra.se_cubre_con_traslado)
 
     def test_answer_laboratories(self):
         lines = {"lineas": [{"laboratorio": "A"}, {"laboratorio": "B"}]}

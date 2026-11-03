@@ -108,7 +108,9 @@ hacen fuera del chat, como hasta ahora: tú solo los sugieres.
 - Para generar los borradores, el comprador pulsa el botón bajo tu respuesta: se \
 crea una orden por farmacia y droguería con las líneas por pedir. Si en la \
 respuesta solo leíste o ajustaste líneas de un laboratorio, el botón pide solo \
-ese laboratorio; si no, toda la propuesta."""
+ese laboratorio; si no, toda la propuesta. Si usaste se_cubre_con_traslado, no \
+hay botón de borradores: el comprador abre esas líneas con «Ver traslados en la \
+propuesta» y pone en 0 las que va a trasladar antes de generar los borradores."""
 
 FORMAT = """\
 Formato de respuesta:

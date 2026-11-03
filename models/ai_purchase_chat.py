@@ -117,6 +117,7 @@ class AiPurchaseChatSession(models.Model):
             "duration_ms": result["duration_ms"],
             "proposal_id": result.get("proposal_id") or False,
             "laboratorio": result.get("proposal_id") and result.get("laboratorio") or False,
+            "proposal_view": result.get("proposal_id") and result.get("vista") or False,
         })
         self.last_message_date = fields.Datetime.now()
         return {
@@ -176,6 +177,10 @@ class AiPurchaseChatMessage(models.Model):
                                   help="Propuesta que leyó o ajustó el agente en esta respuesta.")
     laboratorio = fields.Char("Laboratorio", help="Si la respuesta trató un solo laboratorio de la "
                               "propuesta, el botón genera solo sus borradores.")
+    proposal_view = fields.Selection(
+        [("traslados", "Se cubre con traslado")], "Vista de la propuesta",
+        help="Traslados: la respuesta revisó lo que se puede trasladar en vez de comprar; sin botón "
+             "de borradores y el de la propuesta abre esas líneas.")
 
     def _chat_message_dict(self):
         self.ensure_one()
@@ -196,5 +201,6 @@ class AiPurchaseChatMessage(models.Model):
             "proposal": {
                 "id": self.proposal_id.id, "name": self.proposal_id.name, "state": self.proposal_id.state,
                 "laboratorio": self.laboratorio or False,
+                "vista": self.proposal_view or False,
             } if self.proposal_id else False,
         }

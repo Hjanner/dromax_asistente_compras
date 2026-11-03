@@ -202,11 +202,22 @@ export class AiPurchaseChat extends Component {
         return last.id === msg.id;
     }
 
+    /** Tras revisar los traslados no se ofrece comprar: primero se ponen en 0 los que se trasladan. */
     canGenerate(proposal) {
-        return this.state.canCreateRfq && !["done", "discarded"].includes(proposal.state);
+        return this.state.canCreateRfq && !["done", "discarded"].includes(proposal.state) &&
+            proposal.vista !== "traslados";
     }
 
-    openProposal(proposal) {
+    openLabel(proposal) {
+        return proposal.vista === "traslados" ? "Ver traslados en la propuesta" : "Abrir propuesta";
+    }
+
+    async openProposal(proposal) {
+        if (proposal.vista === "traslados") {
+            const action = await this.orm.call("ai.purchase.proposal", "action_open_lines",
+                [[proposal.id]], { transfers: true });
+            return this.action.doAction(action);
+        }
         this.action.doAction({
             type: "ir.actions.act_window",
             res_model: "ai.purchase.proposal",

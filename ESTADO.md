@@ -208,6 +208,14 @@ El README explica cómo funciona lo que ya existe.
   pedía toda la propuesta); si trató varios o el resumen, *Generar todos los
   borradores*, y si no encontró líneas, no hay botones. En vivo: Calox, 8
   borradores con 28 líneas, todas de CALOX (0,47 USD, 92 s). 120 tests.
+- **Botones tras «¿Qué conviene trasladar?»** (versión `17.0.0.13.0`,
+  2026-11-03): sin botón de borradores (pedía todo, también lo que se puede
+  trasladar), y *Ver traslados en la propuesta* abre las líneas con el filtro
+  nuevo *Se cubre con traslado* (campo guardado `se_cubre_con_traslado`, que
+  también usa `get_proposal`) y la columna de farmacias con excedente. En
+  vivo: 690 líneas, las mismas en el chat y en la lista (0,03 USD, 19 s). 122
+  tests. Poner en 0 de una vez lo que se cubre con traslado queda fuera hasta
+  confirmarlo con el encargado de compras.
 
 ## Decisiones
 

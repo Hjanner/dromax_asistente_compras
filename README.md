@@ -316,6 +316,12 @@ Menú **Compras IA → Chat** (grupo *Asistente de Compras IA / Usuario*).
   (p. ej. *Revisa un laboratorio*), el botón es **Generar borradores de
   LETI** y pide solo ese laboratorio; si no, **Generar todos los
   borradores**. Si no encontró ninguna línea, no hay botones.
+- Bajo una respuesta que revisó los traslados (filtro `se_cubre_con_traslado`,
+  p. ej. *¿Qué conviene trasladar?*) no hay botón de borradores: comprarían
+  justo lo que se puede trasladar. El botón **Ver traslados en la propuesta**
+  abre esas líneas con el filtro *Se cubre con traslado* y las farmacias de
+  origen a la vista; el comprador pone en 0 las que va a trasladar y después
+  genera los borradores.
 - El system prompt (`services/prompt.py`) lleva el contexto del negocio, las
   reglas contra el sobre-stock y el esquema de las tablas permitidas, filtrado
   contra las columnas que existen en la base (`services/schema_catalog.py`).

@@ -218,6 +218,39 @@ const until = (sel, text) => new Promise((resolve, reject) => {
 })();
 """
 
+CHAT_TRANSFERS = """
+const until = (sel, text) => new Promise((resolve, reject) => {
+    let n = 0;
+    const t = setInterval(() => {
+        const el = [...document.querySelectorAll(sel)].find(e => !text || e.textContent.includes(text));
+        if (el) { clearInterval(t); resolve(el); }
+        else if (++n > 150) { clearInterval(t); reject(new Error("No apareció " + sel + " " + (text || ""))); }
+    }, 100);
+});
+(async () => {
+    try {
+        const input = await until(".o_ai_input");
+        input.value = "¿Qué conviene trasladar?";
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        (await until(".o_ai_send:not([disabled])")).click();
+        await until(".o_ai_msg_assistant", "Traslados revisados.");
+        const open = await until(".o_ai_open_proposal", "Ver traslados en la propuesta");
+        if (document.querySelector(".o_ai_generate_drafts")) {
+            throw new Error("Botón de borradores bajo la respuesta de traslados");
+        }
+        open.click();
+        await until(".o_list_view .o_data_row", "ZQX ORIGEN (5)");
+        await until(".o_searchview_facet", "Se cubre con traslado");
+        if ([...document.querySelectorAll(".o_data_row")].some(r => r.textContent.includes("ZQX UI SIN"))) {
+            throw new Error("Aparece una línea que no se cubre con traslado");
+        }
+        console.log("test successful");
+    } catch (e) {
+        console.error(e.message);
+    }
+})();
+"""
+
 
 @tagged("post_install", "-at_install", "dromax_asistente_compras")
 class TestChatUi(HttpCase):
@@ -277,3 +310,34 @@ class TestChatUi(HttpCase):
                             CHAT_PROPOSAL, login="ai_chat_ui_proposal")
         self.assertEqual(proposal.state, "in_review")
         self.assertEqual(proposal.purchase_order_ids.order_line.product_id, product)
+
+    def test_chat_transfer_buttons(self):
+        """Tras revisar los traslados: sin botón de borradores, y el de la propuesta
+        abre solo las líneas que se cubren con traslado."""
+        from unittest.mock import patch
+
+        from ..services import agent as agent_mod
+        from ..services import openrouter
+        from .test_chat import ScriptedTransport, text_response
+        from .test_proposal_chat import call_response
+
+        new_test_user(self.env, login="ai_chat_ui_transfer",
+                      groups="base.group_user,purchase.group_purchase_user")
+        self.env["ir.config_parameter"].sudo().set_param(
+            "dromax_asistente_compras.openrouter_api_key", "sk-or-test")
+        Product = self.env["product.product"]
+        moved = Product.create({"name": "ZQX UI TRASLADO", "detailed_type": "product"})
+        kept = Product.create({"name": "ZQX UI SIN EXCEDENTE", "detailed_type": "product"})
+        proposal = self.env["ai.purchase.proposal"].create({"name": "ZQX Propuesta UI", "line_ids": [(0, 0, {
+            "company_id": self.env.company.id, "product_id": p.id, "cantidad_sugerida": 2, "cantidad_final": 2,
+            "excedente_otras": excess, "farmacias_con_excedente": origin,
+        }) for p, excess, origin in [(moved, 5, "ZQX ORIGEN (5)"), (kept, 0, False)]]})
+        transport = ScriptedTransport(call_response("get_proposal", {"filtro": "se_cubre_con_traslado"}),
+                                      text_response("Traslados revisados."))
+        fake_tool = lambda env, name, args: {"propuesta": {"id": proposal.id}, "row_count": 1,
+                                             "lineas": [{"laboratorio": "LAB UI"}]}
+        with patch.object(openrouter, "Transport", lambda: transport), \
+                patch.object(agent_mod, "call_tool", fake_tool):
+            self.browser_js("/web#action=dromax_asistente_compras.action_ai_purchase_chat",
+                            CHAT_TRANSFERS, login="ai_chat_ui_transfer")
+        self.assertFalse(proposal.purchase_order_ids)

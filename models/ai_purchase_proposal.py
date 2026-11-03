@@ -227,13 +227,20 @@ class AiPurchaseProposal(models.Model):
             raise UserError(_("Una propuesta ya convertida en borradores no se puede descartar."))
         self.write({"state": "discarded"})
 
-    def action_open_lines(self):
+    def action_open_lines(self, transfers=False):
+        """Las líneas de la propuesta; con `transfers`, solo las que se cubren con traslado
+        y con las farmacias de origen a la vista (botón del chat tras «¿Qué conviene trasladar?»)."""
         self.ensure_one()
         action = self.env["ir.actions.act_window"]._for_xml_id(
             "dromax_asistente_compras.action_ai_purchase_proposal_line")
         action["domain"] = [("proposal_id", "=", self.id)]
         action["context"] = {"search_default_group_laboratorio": 1, "default_proposal_id": self.id}
         action["name"] = self.name
+        if transfers:
+            action["context"] = {"search_default_se_cubre_con_traslado": 1, "default_proposal_id": self.id}
+            action["name"] = _("%s: se cubre con traslado", self.name)
+            action["views"] = [(self.env.ref(
+                "dromax_asistente_compras.view_ai_purchase_proposal_line_tree_transfer").id, "tree")]
         return action
 
 
@@ -281,6 +288,9 @@ class AiPurchaseProposalLine(models.Model):
     monto_sugerido = fields.Float("Monto sugerido", compute="_compute_montos", store=True)
     ajustada = fields.Boolean("Ajustada", compute="_compute_montos", store=True,
                               help="El comprador cambió la cantidad o la droguería.")
+    se_cubre_con_traslado = fields.Boolean(
+        "Se cubre con traslado", compute="_compute_se_cubre_con_traslado", store=True,
+        help="El excedente de otras farmacias alcanza para toda la cantidad final.")
 
     @api.depends("cantidad_final", "precio", "cantidad_sugerida", "precio_sugerido",
                  "drogueria_id", "drogueria_sugerida_id")
@@ -290,6 +300,11 @@ class AiPurchaseProposalLine(models.Model):
             line.monto_sugerido = line.cantidad_sugerida * line.precio_sugerido
             line.ajustada = (line.cantidad_final != line.cantidad_sugerida
                              or line.drogueria_id != line.drogueria_sugerida_id)
+
+    @api.depends("cantidad_final", "excedente_otras")
+    def _compute_se_cubre_con_traslado(self):
+        for line in self:
+            line.se_cubre_con_traslado = 0 < line.cantidad_final <= line.excedente_otras
 
     @api.depends("product_id")
     def _compute_drogueria_opciones(self):
