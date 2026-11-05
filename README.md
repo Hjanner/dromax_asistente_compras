@@ -290,8 +290,8 @@ Menú **Compras IA → Chat** (grupo *Asistente de Compras IA / Usuario*).
     necesitan atención y las de mayor monto a revisar por presentación o que
     se cubren con un traslado. Con filtros (laboratorio, producto, farmacia o
     por pedir / ajustadas / revisar presentación / sin droguería / con
-    excedente / se cubre con traslado / en solicitud / pedidas) devuelve hasta
-    80 líneas con su `linea_id`, el motivo y las ofertas de las demás
+    excedente / se cubre con traslado / en solicitud / pedidas) devuelve 40
+    líneas (el modelo puede pedir hasta 80) con su `linea_id`, el motivo y las ofertas de las demás
     droguerías, más el total de líneas y el monto de todas las que coinciden.
     Las líneas con excedente traen las farmacias de origen con su cantidad, la
     que más tiene y si alcanza sola; el filtro de traslados suma además lo que

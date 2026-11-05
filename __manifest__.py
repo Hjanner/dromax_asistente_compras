@@ -7,15 +7,17 @@
 Agente de Compras IA para Dromax.
 
 - Flujo cotidiano: un cron precalcula los faltantes el lunes en la madrugada
-  y deja una propuesta por laboratorio (ai.purchase.proposal).
+  y deja una propuesta semanal con todas las farmacias, organizada por
+  laboratorio (ai.purchase.proposal).
 - El comprador la revisa y ajusta en lenguaje natural desde el chat.
 - Un botón (nunca el modelo) la convierte en purchase.order en borrador,
-  una por droguería dentro de cada laboratorio.
-- Flujo dinámico separado: la misma propuesta con contexto externo
+  una por farmacia y droguería.
+- Previsto (fase 3, sin hacer): flujo dinámico con contexto externo
   (clima, brotes, epidemias).
 
 El agente lee Postgres solo con SQL validado (SELECT sobre lista blanca) y un
-rol de solo lectura. La única escritura es la orden de compra en borrador.
+rol de solo lectura. Su única escritura es ajustar líneas de la propuesta
+cuando el comprador se lo pide; las órdenes en borrador las crea el botón.
     """,
     'author': "Hjanner",
     'category': 'Inventory/Purchase',

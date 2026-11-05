@@ -239,6 +239,19 @@ El README explica cómo funciona lo que ya existe.
     columna *Empresa*. En el servidor de Daniel tienen códigos propios (se ven
     en su video «Traslado inter sucursales.mp4», fuera del repo).
 
+- **Error de Daniel al guardar la clave FTP** (2026-11-05): su servidor no
+  tiene `FTP_SECRET_KEY` en el entorno del proceso de Odoo. Además le salió
+  el traceback completo en lugar del aviso, porque `FtpKeyError` era una
+  subclase de `UserError` y el cliente web solo reconoce las de
+  `odoo.exceptions`. En el módulo FTP (commit `b1692f7` del repo local):
+  - `FtpKeyError` pasa a ser `UserError` tal cual;
+  - la pestaña *Configuración FTP* avisa si falta la llave (campo
+    `ftp_key_missing`);
+  - la llave también se lee de `ftp_secret_key` en `odoo.conf` (más simple
+    que la variable de entorno del servicio; si están las dos, manda la
+    variable). `INSTALACION.md` ahora indica `odoo.conf`.
+  35 tests en el módulo FTP.
+
 ## Decisiones
 
 - Módulo nuevo, separado del antiguo `ai_data_chat`.
@@ -255,9 +268,9 @@ El README explica cómo funciona lo que ya existe.
 - Acceso al asistente = personal de compras + administradores, sin casilla
   aparte (decisión del 2026-10-23; antes era una casilla en el usuario).
 - Credenciales FTP en la base, cifradas, restringidas a administradores. La
-  llave va por ahora en la variable de entorno `FTP_SECRET_KEY` (acordado
-  2026-10-23; se puede cambiar a `odoo.conf` u otra fuente si hace falta).
-  En local está en `env/bin/activate`.
+  llave va en `ftp_secret_key` de `odoo.conf` o en la variable de entorno
+  `FTP_SECRET_KEY` (la variable, acordada el 2026-10-23; `odoo.conf` desde el
+  2026-11-05, tras el error de Daniel). En local está en `env/bin/activate`.
 - En los inventarios de las droguerías, el costo que cuenta es el **precio
   final** (ya trae todos los descuentos).
 - **Todo se trabaja por unidad** (Daniel, 2026-10-29): el paréntesis de
@@ -304,7 +317,7 @@ descuentos encadenados = precio final en todas las filas.
    flujo completo (resumen → ajustes en el chat → borradores) y medir costo y
    tiempo con uso real.
 2. **Instalar en el servidor de Daniel** siguiendo `INSTALACION.md` (guía
-   redactada el 2026-10-29: módulos, `FTP_SECRET_KEY`, rol `dromax_ai_ro`,
+   redactada el 2026-10-29: módulos, llave FTP en `odoo.conf`, rol `dromax_ai_ro`,
    OpenRouter, droguerías, crons, usuarios e IVA).
 3. **Traslados desde el agente** (propuesto, sin pedir aún): que *¿Qué
    conviene trasladar?* pueda crear los borradores de traslado interno del

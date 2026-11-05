@@ -39,9 +39,9 @@ Postgres como superusuario.
 
 ## 2. Llave de las claves FTP
 
-Las claves FTP de las droguerías se guardan cifradas. La llave va en la
-variable de entorno `FTP_SECRET_KEY` del proceso de Odoo, **no** en la base.
-Hay que definirla **antes** de actualizar el módulo FTP, para que la
+Las claves FTP de las droguerías se guardan cifradas. La llave va en el
+servidor, en el archivo de configuración de Odoo (`odoo.conf`), **no** en la
+base. Hay que ponerla **antes** de actualizar el módulo FTP, para que la
 actualización cifre las claves que estén en texto plano.
 
 1. Generarla (una sola vez):
@@ -50,18 +50,24 @@ actualización cifre las claves que estén en texto plano.
    python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
    ```
 
-2. Definirla en el servicio, por ejemplo con systemd:
+2. Abrir el `odoo.conf` con el que arranca Odoo (el que se pasa con `-c`) y
+   agregar esta línea en la sección `[options]`:
 
    ```ini
-   # systemctl edit odoo
-   [Service]
-   Environment=FTP_SECRET_KEY=<llave>
+   ftp_secret_key = <llave>
    ```
 
-3. Guardar la llave en un lugar seguro fuera del servidor. Si se pierde, hay
+   Comprobar que el archivo solo lo puede leer el usuario del servicio de
+   Odoo (`chmod 640` o `600`; ya contiene la clave de Postgres).
+
+3. Reiniciar Odoo para que lea el archivo de nuevo.
+
+4. Guardar la llave en un lugar seguro fuera del servidor. Si se pierde, hay
    que volver a escribir las claves FTP en cada droguería.
 
-Más detalles (cómo cambiar la llave sin perder las claves) en el README del
+También se puede usar la variable de entorno `FTP_SECRET_KEY` del servicio
+de Odoo en lugar de `odoo.conf` (si están las dos, manda la variable). Más
+detalles (cómo cambiar la llave sin perder las claves) en el README del
 módulo FTP.
 
 ## 3. Instalar y actualizar
@@ -223,7 +229,8 @@ farmacéutico) son **exentos**:
 
 | Síntoma | Causa y solución |
 |---|---|
-| «No se pudo descifrar la clave FTP» | La llave `FTP_SECRET_KEY` no es la que se usó al guardar la clave, o falta. Revisar la variable del servicio o volver a escribir la clave en el contacto. |
+| «Falta la llave de cifrado de las claves FTP…» al guardar la clave FTP, o el aviso en la pestaña *Configuración FTP* | Odoo no tiene la llave (paso 2). Agregar `ftp_secret_key` en `odoo.conf`, reiniciar Odoo y volver a escribir la clave. Con una versión del módulo FTP anterior a este cambio el mensaje es «Falta la variable de entorno FTP_SECRET_KEY…» y solo sirve la variable de entorno del servicio. |
+| «No se pudo descifrar la clave FTP» | La llave no es la que se usó al guardar la clave. Revisar `ftp_secret_key` en `odoo.conf` (o la variable `FTP_SECRET_KEY`) o volver a escribir la clave en el contacto. |
 | El chat responde que no puede consultar la base | Faltan los parámetros `ro_user` / `ro_password`, la clave no coincide, o `pg_hba.conf` no permite al rol entrar con clave (paso 4). |
 | «El Asistente de Compras IA es solo para el personal de compras…» | El usuario no tiene *Compras / Usuario*. |
 | «Para generar órdenes de compra hace falta el permiso de Compras» | Igual que el anterior: falta *Compras / Usuario*. |
