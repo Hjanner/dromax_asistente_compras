@@ -1,6 +1,6 @@
 # Estado del proyecto
 
-Última actualización: 2026-10-29. Qué está hecho, qué decidimos y qué falta.
+Última actualización: 2026-11-05. Qué está hecho, qué decidimos y qué falta.
 El README explica cómo funciona lo que ya existe.
 
 ## Hecho
@@ -216,6 +216,28 @@ El README explica cómo funciona lo que ya existe.
   vivo: 690 líneas, las mismas en el chat y en la lista (0,03 USD, 19 s). 122
   tests. Poner en 0 de una vez lo que se cubre con traslado queda fuera hasta
   confirmarlo con el encargado de compras.
+- **Traslados entre sucursales** (módulo FTP 1.4 y 1.5 de Daniel, commits
+  `12bc787` a `f885e2d` del repo local, 2026-11-04): incorporados sin los
+  archivos que sigue trayendo su `.zip` y el manifiesto no carga
+  (controlador, `ftp_connector`, asistente, plantillas, `models.py`, etc.).
+  Lo demás es idéntico a su 1.5. Flujo en el README del módulo FTP: borrador
+  de *Traslado interno* → *Generar Traslados Definitivos* → cadena por la
+  *Zona de Tránsito Inter-Empresas (Auto)*, con un traslado por paso si el
+  almacén entrega o recibe en 2 o 3 pasos; costo del origen, lotes copiados al
+  destino. La 1.5 solo agrega, en cada tarjeta del *Resumen de inventario*,
+  una etiqueta con «Empresa - Almacén». 29 tests en el módulo FTP (151 entre
+  los dos). Probado en vivo en `dromax_ai_inventario` con rollback: FARMAX →
+  LA 45 (27 u. de [6515] LOPERAM, costo 31,05 en ambas valoraciones) y
+  DROMAX en 3 pasos → FARMAX en 2 pasos (5 traslados, [2629] TUBO
+  RECOLECTOR).
+  - Los traslados internos solo aparecen con *Ajustes → Inventario →
+    Ubicaciones de almacenamiento*; al activarlo, Odoo solo reactiva el tipo
+    de la empresa actual. En `dromax_ai_inventario` quedó activado (guardado)
+    para las 8 sucursales.
+  - Los códigos de almacén los pone Odoo (`company.name[:5]`): en nuestras
+    bases hay 6 almacenes «FARMA», así que el destino se elige mirando la
+    columna *Empresa*. En el servidor de Daniel tienen códigos propios (se ven
+    en su video «Traslado inter sucursales.mp4», fuera del repo).
 
 ## Decisiones
 
@@ -284,7 +306,12 @@ descuentos encadenados = precio final en todas las filas.
 2. **Instalar en el servidor de Daniel** siguiendo `INSTALACION.md` (guía
    redactada el 2026-10-29: módulos, `FTP_SECRET_KEY`, rol `dromax_ai_ro`,
    OpenRouter, droguerías, crons, usuarios e IVA).
-3. **Con la base multisucursal de Daniel:** validar y calibrar las vistas y
+3. **Traslados desde el agente** (propuesto, sin pedir aún): que *¿Qué
+   conviene trasladar?* pueda crear los borradores de traslado interno del
+   módulo FTP en lugar de que el comprador los arme a mano. Antes conviene
+   poner códigos de almacén propios en `dromax_ai_inventario` (DX, FX, PRO,
+   FSC, FGA, FID, MAN, L45) para distinguir las sucursales.
+4. **Con la base multisucursal de Daniel:** validar y calibrar las vistas y
    las propuestas por sucursal con ventas reales, conectar el campo
    laboratorio y revisar el reporte de códigos de barras con el catálogo real.
 
@@ -310,9 +337,26 @@ descuentos encadenados = precio final en todas las filas.
 - Datos FTP de COBECA (vacíos en la planilla) y de las demás droguerías.
 - Frecuencia deseada del cron de inventarios.
 
+## Observaciones para Daniel sobre los traslados
+
+Comentadas al usuario el 2026-11-04; el código no se cambió:
+
+- Al arrancar, el módulo reescribe reglas del núcleo de `stock`
+  (`stock_location_comp_rule`, `stock_picking_rule`, `stock_move_rule`,
+  `stock_move_line_rule`) para que cada sucursal vea ubicaciones y traslados
+  de las demás.
+- Usa `sudo()` en casi todo el flujo y `ALTER TABLE … ADD COLUMN IF NOT
+  EXISTS` en `_register_hook` en lugar de campos normales.
+- En varios pasos, la cadena ignora la sububicación del borrador (sale de las
+  existencias principales del origen y llega a las del destino).
+- Códigos de almacén repetidos («FARMA») en bases nuevas: conviene
+  ponerlos a mano.
+
 ## Pendiente fuera del repo
 
 - Entregar a Daniel el `.zip` del módulo FTP cuando lo pida (ver CLAUDE.md).
+  Hoy no hace falta: su 1.5 es igual a la nuestra salvo los archivos sin uso
+  y el README.
 - Usuario de prueba sin permisos de administración en `DROMAX_AI_DEV`:
   `comprador.prueba` (id 83; Compras, Inventario y Asistente de Compras IA).
 - Usuario de prueba sin compras ni administración: `empleado.prueba` (id 207;

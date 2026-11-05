@@ -80,9 +80,13 @@ aplicaciones primero). Después, iniciar Odoo de nuevo.
 
 Qué hace la instalación:
 
-- El módulo FTP pasa a la versión 1.3: cifra las claves FTP, deja la oferta de
-  las droguerías de solo lectura para los usuarios internos y quita código que
-  no se usaba.
+- El módulo FTP va en la versión 1.5 (la misma que mandó Daniel el
+  2026-11-04, sin los archivos que no se usan): cifra las claves FTP, deja la
+  oferta de las droguerías de solo lectura para los usuarios internos y trae
+  los traslados entre sucursales de Daniel. Para ver la tarjeta *Traslados
+  internos* hay que activar *Ajustes → Inventario → Ubicaciones de
+  almacenamiento* (y, si alguna sucursal no la muestra, activar su tipo de
+  operación).
 - El asistente crea el menú **Compras IA**, sus vistas de análisis
   (`ai_v_*`) y dos tareas programadas (ver el paso 7).
 
