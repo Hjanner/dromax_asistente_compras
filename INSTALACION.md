@@ -35,7 +35,19 @@ Postgres como superusuario.
    git clone https://github.com/Hjanner/dromax_asistente_compras.git
    ```
 
+   Sin git en el servidor, basta con copiar la carpeta del módulo (por
+   ejemplo, un `git archive` del repo) reemplazando la anterior completa.
+
 3. Comprobar que las dos carpetas están en el `addons_path` de `odoo.conf`.
+
+> **Todas las bases del servidor usan el mismo código.** Si un Odoo atiende
+> varias bases, al reemplazar la carpeta de un módulo y reiniciar, todas las
+> bases que lo tienen instalado pasan a usar el código nuevo, aunque solo se
+> haya actualizado (`-u`) una. Cuando una versión agrega campos (p. ej. la
+> 0.13 del asistente), las que no se actualizaron dan error en esas pantallas.
+> Hay que actualizar a la vez todas las bases que tienen el módulo, o probar
+> antes en una sola con una instancia aparte (ver *Probar en otra base antes
+> de producción*, al final).
 
 ## 2. Llave de las claves FTP
 
@@ -98,28 +110,61 @@ Qué hace la instalación:
 
 ## 4. Rol de solo lectura de Postgres
 
-El agente consulta la base con un usuario propio de Postgres que solo puede
-leer una lista de tablas. Crearlo **después** de instalar el asistente (así
-recibe permiso sobre sus vistas), como superusuario y conectado a la base de
-Odoo:
+El agente consulta la base con un usuario propio de Postgres
+(`dromax_ai_ro`) que solo puede leer una lista de tablas. Crearlo **después**
+de instalar el asistente (así recibe permiso sobre sus vistas).
 
-```bash
-psql -d <base> -v ro_password='<clave segura>' -f dromax_asistente_compras/scripts/create_readonly_role.sql
-```
+1. Crear el rol y sus permisos, como superusuario y conectado a la base de
+   Odoo. `read -s` pide la clave sin mostrarla ni dejarla en el historial:
 
-- Decirle al asistente qué usuario usar: en **Ajustes → Técnico → Parámetros
-  del sistema** (con el modo desarrollador activado), crear
-  `dromax_asistente_compras.ro_user` = `dromax_ai_ro` y
-  `dromax_asistente_compras.ro_password` = la clave anterior. También se
-  pueden poner en `odoo.conf` (`ai_purchase_ro_user`, `ai_purchase_ro_password`)
-  o en las variables de entorno `AI_PURCHASE_RO_USER` y
-  `AI_PURCHASE_RO_PASSWORD` del servicio.
-- El script se puede repetir sin problema (por ejemplo, para cambiar la clave;
-  en ese caso, actualizar también el parámetro).
-- El asistente se conecta con este rol al mismo host, puerto y base que Odoo.
-  Si Odoo usa el socket local, `pg_hba.conf` debe permitir al usuario
-  `dromax_ai_ro` entrar **con clave** (`scram-sha-256` o `md5`), no con `peer`.
-  Si se cambia `pg_hba.conf`, recargar Postgres.
+   ```bash
+   read -s RO_PASS
+   sudo -u postgres psql -d <base> -v ro_password="$RO_PASS" \
+       < <carpeta de addons>/dromax_asistente_compras/scripts/create_readonly_role.sql
+   ```
+
+   El rol es del servidor de Postgres, pero los permisos son por base: para
+   usarlo en otra base, ejecutar el script también con `-d <otra base>`.
+   El script se puede repetir (por ejemplo, para añadir tablas nuevas de la
+   lista), pero **cambia la clave**: actualizarla en todas las bases que
+   usen el rol.
+
+2. Permitirle entrar con clave. El asistente se conecta como Odoo (mismo
+   host, puerto y base). Si `odoo.conf` no tiene `db_host`, Odoo usa el
+   socket local, y en Ubuntu/Debian `pg_hba.conf` deja entrar por ahí solo a
+   usuarios que existen en Linux (`peer`). Comprobarlo:
+
+   ```bash
+   psql -U dromax_ai_ro -d <base> -c "select count(*) from res_company"
+   ```
+
+   Si responde «Peer authentication failed», agregar en `pg_hba.conf`
+   (`sudo -u postgres psql -Atc "show hba_file"`), **antes** de la línea
+   `local all all peer`, una línea por base:
+
+   ```
+   local   <base>          dromax_ai_ro                            scram-sha-256
+   ```
+
+   y recargar Postgres sin cortar conexiones:
+   `sudo -u postgres psql -c "select pg_reload_conf()"`. Repetir la prueba:
+   debe pedir la clave y devolver un número. Con `db_host` en `odoo.conf`, la
+   prueba lleva `-h <ese host>` y normalmente no hace falta tocar `pg_hba.conf`.
+
+3. Decirle al asistente qué usuario usar, en una de estas formas:
+   - en la base: **Ajustes → Técnico → Parámetros del sistema** (modo
+     desarrollador), `dromax_asistente_compras.ro_user` = `dromax_ai_ro` y
+     `dromax_asistente_compras.ro_password` = la clave. No hace falta
+     reiniciar;
+   - en `odoo.conf`, para todas las bases: `ai_purchase_ro_user` y
+     `ai_purchase_ro_password`, y reiniciar Odoo (los parámetros de la base
+     mandan sobre `odoo.conf`);
+   - variables de entorno `AI_PURCHASE_RO_USER` y `AI_PURCHASE_RO_PASSWORD`
+     del servicio.
+
+4. Comprobar las barreras con la misma conexión: leer `res_partner` debe dar
+   *permission denied* (está fuera de la lista) y un `UPDATE` debe dar
+   *read-only transaction*.
 
 ## 5. Ajustes del asistente
 
@@ -150,11 +195,13 @@ administradores):
 
    | Droguería | Codificación | Columnas |
    |---|---|---|
-   | INTERCONTINENTAL | Latin-1 | `BASE,laboratorio` |
-   | INSUAMINCA | UTF-8 | `BASE,laboratorio,extra` |
-   | VITALCLINIC | UTF-8 | `BASE,extra,descuento,descuento` |
+   | INTERCONTINENTAL | Latin-1 | `codigo,barras,descripcion,lote,precio,descuento,precio_final,stock,laboratorio` |
+   | INSUAMINCA | UTF-8 | `codigo,barras,descripcion,lote,precio,descuento,precio_final,stock,laboratorio,extra` |
+   | VITALCLINIC | UTF-8 | `codigo,barras,descripcion,lote,precio,descuento,precio_final,stock,extra,descuento,descuento` |
 
-   `BASE` = `codigo,barras,descripcion,lote,precio,descuento,precio_final,stock`.
+   Copiar el texto de *Columnas* completo, tal cual. Con *Columnas* vacío se
+   leen solo las 8 primeras (sin el laboratorio ni los descuentos extra de
+   VITALCLINIC).
    El separador es `;` en las tres.
 3. Pulsar **Probar Conexión FTP** y después **Descargar y Leer Datos**. El
    resultado de la carga queda en la misma pestaña (*Última carga*,
@@ -218,12 +265,62 @@ farmacéutico) son **exentos**:
 
 ## 11. Actualizar más adelante
 
-- **Asistente**: `git pull` en la carpeta del módulo y actualizarlo
-  (`-u dromax_asistente_compras`).
+Antes de cada actualización: copia de seguridad de las bases y de las
+carpetas de los módulos.
+
+- **Asistente**: `git pull` en la carpeta del módulo (o reemplazar la
+  carpeta) y actualizarlo (`-u dromax_asistente_compras`).
 - **Módulo FTP**: reemplazar la carpeta por la del `.zip` nuevo y actualizarlo
   (`-u advanced_interbranch_transfer`).
+- Actualizar **todas las bases** que tienen el módulo instalado, con el
+  servicio detenido, y después arrancarlo:
+
+  ```bash
+  systemctl stop <servicio>
+  <python> <odoo-bin> -c <odoo.conf> -d <base> \
+      -u advanced_interbranch_transfer,dromax_asistente_compras --stop-after-init --no-http
+  # (repetir -d para cada base)
+  systemctl start <servicio>
+  ```
+
+  Usar el mismo Python y `odoo-bin` que el servicio (`systemctl cat
+  <servicio>`, línea `ExecStart`). Después, entrar al navegador con
+  Ctrl+Shift+R.
 - Si cambia la lista de tablas que puede leer el agente, volver a ejecutar el
-  script del rol (paso 4).
+  script del rol (paso 4) en cada base y actualizar la clave.
+
+### Probar en otra base antes de producción
+
+Para probar una versión nueva en una base de prueba sin tocar las demás ni
+reiniciar el servicio:
+
+1. Dejar el módulo nuevo en una carpeta aparte (p. ej. `<odoo>/test-addons`),
+   sin tocar la del `addons_path`.
+2. Actualizar solo la base de prueba poniendo esa carpeta primero (gana la
+   primera carpeta que tenga el módulo):
+
+   ```bash
+   <python> <odoo-bin> -c <odoo.conf> -d <base de prueba> \
+       --addons-path=<odoo>/test-addons,<addons_path de odoo.conf> \
+       -u dromax_asistente_compras --stop-after-init --no-http --max-cron-threads=0
+   ```
+
+3. Levantar una instancia temporal solo para esa base, en un puerto local:
+
+   ```bash
+   systemd-run --unit=odoo-prueba <python> <odoo-bin> -c <odoo.conf> \
+       --addons-path=<odoo>/test-addons,<addons_path de odoo.conf> \
+       -d <base de prueba> --db-filter='^<base de prueba>$' \
+       --http-interface=127.0.0.1 --http-port=8099 --max-cron-threads=0 --workers=0
+   ```
+
+   y abrirla desde la máquina propia con un túnel:
+   `ssh -N -L 8099:localhost:8099 <servidor>` → `http://localhost:8099`.
+4. Mientras dure la prueba, usar esa base solo por el 8099: por el puerto
+   normal, el servicio sigue con el código anterior y sus pantallas pueden
+   fallar.
+5. Al terminar: `systemctl stop odoo-prueba` y actualizar todas las bases
+   como arriba (o restaurar la base de prueba si algo falló).
 
 ## Problemas frecuentes
 
@@ -231,7 +328,8 @@ farmacéutico) son **exentos**:
 |---|---|
 | «Falta la llave de cifrado de las claves FTP…» al guardar la clave FTP, o el aviso en la pestaña *Configuración FTP* | Odoo no tiene la llave (paso 2). Agregar `ftp_secret_key` en `odoo.conf`, reiniciar Odoo y volver a escribir la clave. Con una versión del módulo FTP anterior a este cambio el mensaje es «Falta la variable de entorno FTP_SECRET_KEY…» y solo sirve la variable de entorno del servicio. |
 | «No se pudo descifrar la clave FTP» | La llave no es la que se usó al guardar la clave. Revisar `ftp_secret_key` en `odoo.conf` (o la variable `FTP_SECRET_KEY`) o volver a escribir la clave en el contacto. |
-| El chat responde que no puede consultar la base | Faltan los parámetros `ro_user` / `ro_password`, la clave no coincide, o `pg_hba.conf` no permite al rol entrar con clave (paso 4). |
+| Tras actualizar, las pantallas del asistente o del módulo FTP fallan en una base (columna o campo que no existe) | Esa base no se actualizó y el servicio ya usa el código nuevo: actualizarla con `-u` (ver el paso 11). |
+| El chat responde que no puede consultar la base | Faltan los parámetros `ro_user` / `ro_password`, la clave no coincide (el script del rol la cambia cada vez que se ejecuta), o `pg_hba.conf` no tiene la línea de esa base para `dromax_ai_ro` (paso 4). |
 | «El Asistente de Compras IA es solo para el personal de compras…» | El usuario no tiene *Compras / Usuario*. |
 | «Para generar órdenes de compra hace falta el permiso de Compras» | Igual que el anterior: falta *Compras / Usuario*. |
 | La propuesta no trae droguería en muchos productos | Sus códigos de barras no coinciden con los de las droguerías: revisar el reporte de *Códigos de barras*. |

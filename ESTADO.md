@@ -252,6 +252,33 @@ El README explica cómo funciona lo que ya existe.
     variable). `INSTALACION.md` ahora indica `odoo.conf`.
   35 tests en el módulo FTP.
 
+- **Servidor de Daniel: prueba en `ODOO_REPO`** (2026-11-05, por SSH). Los
+  detalles del servidor (rutas, servicio, accesos) no van en este repo, que es
+  público: están en el `CLAUDE.md` del espacio de trabajo.
+  - Varias bases en el mismo Odoo: **producción = `ODOO2026`**; `ODOO_REPO`
+    es la de prueba (casi sin datos: 13 productos con código, sin ventas TPV
+    ni oferta FTP). Las dos tenían los módulos, con el asistente en 0.11.0;
+    el módulo FTP ya era nuestro `b1692f7`.
+  - Con respaldo previo, el asistente `f955360` (0.13.0) se probó en
+    `ODOO_REPO` con una instancia temporal aparte (ver *Probar en otra base
+    antes de producción* en `INSTALACION.md`), sin tocar el código que usan
+    las demás bases ni reiniciar el servicio. Actualización sin errores.
+    Mientras siga así, `ODOO_REPO` solo por la instancia de prueba.
+  - Rol `dromax_ai_ro` creado (20 tablas en `ODOO_REPO`), con su línea en
+    `pg_hba.conf` solo para `ODOO_REPO` y los parámetros `ro_user` /
+    `ro_password` en esa base. Comprobado: lee la lista, rechaza
+    `res_partner`, escrituras y otras bases. El chat funciona (probado por
+    el usuario).
+  - Pendiente de diagnóstico: desde el servidor, *Probar Conexión FTP* de
+    INTERCONTINENTAL da «timed out» (desde local conecta con los mismos
+    datos). Probar `nc -vz -w 10 <host> 58021` en el servidor (pedir
+    confirmación antes: es su FTP real); si no responde, lo más probable es
+    que no acepte la IP del servidor y haya que pedirle que la autorice.
+  - Lección: el código de un módulo lo comparten todas las bases del
+    servidor; reemplazar la carpeta y reiniciar sin actualizar todas las que
+    lo tienen rompe las que no se actualizaron (0.13 agrega tres columnas).
+    Documentado en `INSTALACION.md`.
+
 ## Decisiones
 
 - Módulo nuevo, separado del antiguo `ai_data_chat`.
@@ -316,15 +343,22 @@ descuentos encadenados = precio final en todas las filas.
 1. **Validar el chat con el comprador**: probar con el encargado de compras el
    flujo completo (resumen → ajustes en el chat → borradores) y medir costo y
    tiempo con uso real.
-2. **Instalar en el servidor de Daniel** siguiendo `INSTALACION.md` (guía
-   redactada el 2026-10-29: módulos, llave FTP en `odoo.conf`, rol `dromax_ai_ro`,
-   OpenRouter, droguerías, crons, usuarios e IVA).
+2. **Dejar los módulos en producción (`ODOO2026`)** para que Daniel los
+   pruebe, cuando él lo autorice (1 a 2 minutos sin servicio para todas las
+   bases): respaldar `ODOO2026`, pasar el asistente de la carpeta de prueba
+   a la del servicio, `-u` de los dos módulos en `ODOO2026` y `ODOO_REPO`,
+   reiniciar y retirar la instancia de prueba. Después, en `ODOO2026`: rol
+   `dromax_ai_ro` (script con `-d ODOO2026`, que cambia la clave:
+   actualizarla también en `ODOO_REPO`), su línea en `pg_hba.conf`,
+   droguerías FTP, crons, usuarios e IVA (`INSTALACION.md`). De paso, con su
+   permiso, dos arreglos del servidor ajenos a los módulos (detalle en el
+   `CLAUDE.md` local).
 3. **Traslados desde el agente** (propuesto, sin pedir aún): que *¿Qué
    conviene trasladar?* pueda crear los borradores de traslado interno del
    módulo FTP en lugar de que el comprador los arme a mano. Antes conviene
    poner códigos de almacén propios en `dromax_ai_inventario` (DX, FX, PRO,
    FSC, FGA, FID, MAN, L45) para distinguir las sucursales.
-4. **Con la base multisucursal de Daniel:** validar y calibrar las vistas y
+4. **Con los datos de `ODOO2026`:** validar y calibrar las vistas y
    las propuestas por sucursal con ventas reales, conectar el campo
    laboratorio y revisar el reporte de códigos de barras con el catálogo real.
 
