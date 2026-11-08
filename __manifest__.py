@@ -21,7 +21,7 @@ cuando el comprador se lo pide; las órdenes en borrador las crea el botón.
     """,
     'author': "Hjanner",
     'category': 'Inventory/Purchase',
-    'version': '17.0.0.13.0',
+    'version': '17.0.0.14.0',
     'license': 'LGPL-3',
     'application': True,
     'installable': True,
@@ -46,6 +46,7 @@ cuando el comprador se lo pide; las órdenes en borrador las crea el botón.
         'views/ai_barcode_mismatch_views.xml',
         'views/ai_v_analisis_views.xml',
         'views/ai_purchase_proposal_views.xml',
+        'views/ai_v_reabastecimiento_views.xml',
         'views/menus.xml',
     ],
     'assets': {

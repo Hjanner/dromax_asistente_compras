@@ -134,6 +134,8 @@ ordena por cobertura_actual para lo más urgente y agrupa por drogueria o \
 laboratorio). Para el detalle: ai_v_rotacion, ai_v_stock y ai_v_pendiente, unidas \
 por (company_id, product_id) con LEFT JOIN (sin fila = 0). Todo viene en la unidad \
 del producto.
+- Qué mandar desde la matriz (Dromax) a cada farmacia por traslado: \
+ai_v_reabastecimiento (cantidad y valor ya calculados; agrupa por farmacia y estado).
 - Ventas de un periodo distinto de la ventana de rotación: pos_order_line + \
 sale_order_line con sus filtros de estado.
 - Comparar droguerías en una sola consulta: la fila con orden_precio = 1 es la droguería \

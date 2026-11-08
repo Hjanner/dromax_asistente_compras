@@ -50,6 +50,11 @@ class ResConfigSettings(models.TransientModel):
         help="Otra farmacia tiene excedente de un producto si su stock pasa de estas semanas "
              "de su propia demanda.")
 
+    ai_purchase_matrix_company_id = fields.Many2one(
+        "res.company", "Sucursal matriz", config_parameter=PARAM_PREFIX + "matrix_company_id",
+        help="Sucursal que reabastece a las farmacias con traslados (Compras IA → Reabastecimiento). "
+             "Vacío: la que tenga DROMAX en el nombre.")
+
     def action_ai_purchase_test_openrouter(self):
         """Comprueba la llave guardada y muestra su tope de crédito y consumo."""
         self.ensure_one()

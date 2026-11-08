@@ -87,6 +87,53 @@ class TestUi(HttpCase):
             self._open("action=dromax_asistente_compras." + action,
                        ".o_list_view .o_data_row td[name='%s']" % column, login=buyer.login)
 
+    def test_replenishment_screens(self):
+        """Reabastecimiento desde la matriz: lista (con el botón al elegir líneas), tabla dinámica y gráfico."""
+        matriz = self.env["res.company"].create({"name": "ZQX MATRIZ UI"})
+        self.env["ir.config_parameter"].sudo().set_param(
+            "dromax_asistente_compras.matrix_company_id", str(matriz.id))
+        companies = self.env.company | matriz
+        user = new_test_user(
+            self.env, login="ai_reabastecimiento_ui",
+            groups="base.group_user,stock.group_stock_user,dromax_asistente_compras.group_ai_purchase_user",
+            company_id=self.env.company.id, company_ids=companies.ids)
+        user.password = user.login
+        product = self.env["product.product"].create({"name": "ZQX UI REABASTECER", "detailed_type": "product"})
+        product.with_company(matriz).standard_price = 3.0
+        wh_matriz = self.env["stock.warehouse"].search([("company_id", "=", matriz.id)], limit=1)
+        self.env["stock.quant"]._update_available_quantity(product, wh_matriz.lot_stock_id, 20)
+        session = self.env["pos.session"].create({
+            "config_id": self.env["pos.config"].create({"name": "ZQX TPV UI REAB"}).id, "user_id": self.env.uid})
+        order = self.env["pos.order"].create({
+            "session_id": session.id, "amount_tax": 0, "amount_total": 16, "amount_paid": 16, "amount_return": 0,
+            "lines": [(0, 0, {"product_id": product.id, "qty": 16, "price_unit": 1,
+                              "price_subtotal": 16, "price_subtotal_incl": 16})],
+        })
+        order.write({"state": "paid", "date_order": order.date_order - timedelta(weeks=1)})
+        action = "action=dromax_asistente_compras.action_ai_v_reabastecimiento"
+        self.browser_js("/web#" + action, """
+            const until = (sel) => new Promise((resolve, reject) => {
+                let n = 0;
+                const t = setInterval(() => {
+                    const el = document.querySelector(sel);
+                    if (el) { clearInterval(t); resolve(el); }
+                    else if (++n > 150) { clearInterval(t); reject(new Error("No apareció " + sel)); }
+                }, 100);
+            });
+            (async () => {
+                try {
+                    await until(".o_list_view .o_data_row td[name='valor']");
+                    (await until(".o_list_view thead .o_list_record_selector input")).click();
+                    await until("button[name='action_generate_transfers']");
+                    console.log("test successful");
+                } catch (e) {
+                    console.error(e.message);
+                }
+            })();
+        """, login=user.login)
+        self._open(action + "&view_type=pivot", ".o_pivot table", login=user.login)
+        self._open(action + "&view_type=graph", ".o_graph_renderer canvas", login=user.login)
+
     def test_proposal_screens(self):
         buyer = new_test_user(self.env, login="ai_proposal_buyer_ui",
                               groups="base.group_user,purchase.group_purchase_user")

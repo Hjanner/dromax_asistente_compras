@@ -59,6 +59,21 @@ PRESETS = [
         ),
     },
     {
+        "key": "reabastecer",
+        "label": "¿A quién abastezco desde Dromax?",
+        "level": "medium",
+        "task": "replenishment",
+        "prompt": (
+            "¿Qué tiene que mandar la sucursal matriz a cada farmacia? Consulta "
+            "ai_v_reabastecimiento: total por farmacia (líneas, unidades a trasladar y valor), "
+            "separando «En cero» de «Por agotarse», y los 10 productos de mayor valor en cero. "
+            "Di cuántas líneas son parciales porque la matriz no alcanza. Calcula los totales "
+            "(por farmacia y el general) en la misma consulta SQL, con GROUP BY ROLLUP, y "
+            "cópialos tal cual: no sumes tú ni inventes cantidades. Termina diciendo que los borradores se generan "
+            "en Compras IA → Reabastecimiento, eligiendo las líneas."
+        ),
+    },
+    {
         "key": "por_agotarse",
         "label": "Productos por agotarse",
         "level": "medium",

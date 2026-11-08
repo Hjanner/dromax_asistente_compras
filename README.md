@@ -122,6 +122,41 @@ en *Compras IA → Análisis → Faltantes*. Es la base de la propuesta.
 En `dromax_ai_inventario` (inventario real + 26 semanas simuladas): 1412
 faltantes, 1004 con droguería, 41 a revisar por presentación, ~2 s.
 
+## Reabastecimiento desde la matriz (`ai_v_reabastecimiento`)
+
+Menú *Compras IA → Reabastecimiento*. Lo que la sucursal matriz (Dromax, la
+droguería del grupo que distribuye a las farmacias) puede mandar por traslado
+a cada farmacia. Una fila por producto y farmacia:
+
+- **Falta** = venta semanal (demanda depurada) × semanas de cobertura − stock −
+  compras pendientes − lo que **ya viene en camino por traslado** (borradores
+  y traslados sin terminar que llegan a la farmacia desde otra sucursal o desde
+  tránsito). Estado **En cero** (sin stock) o **Por agotarse**. Con stock en
+  cero también entra la venta esporádica (demanda depurada 0 pero con venta en
+  el período): se repone su venta media.
+- **Disponible en la matriz** = su stock − lo que ya sale hacia otras
+  sucursales − su propia venta de las mismas semanas. Si no alcanza para
+  todas, se reparte primero a la farmacia más urgente (menor cobertura) y la
+  línea queda **Parcial**. Solo productos almacenables, en su unidad.
+- **Valor** = a trasladar × costo de la matriz (el costo que pasa el traslado).
+  Vista de tabla dinámica y gráfico con el valor por farmacia y estado.
+- **Generar borradores de traslado** (botón de la lista al elegir líneas;
+  requiere Inventario / Usuario y acceso a la matriz y a las farmacias): un
+  *Traslado interno* en borrador de la matriz a cada farmacia, del tipo de
+  traslado interno de su almacén, de sus existencias a las de la farmacia, con
+  origen «Reabastecimiento <fecha>». Es el borrador del módulo de traslados
+  (`advanced_interbranch_transfer`): en cada uno, **Generar Traslados
+  Definitivos** arma la cadena por tránsito con el costo de origen, los lotes
+  y los pasos de cada almacén. Las cantidades se vuelven a leer al pulsar, y
+  lo ya generado deja de sugerirse (si se cancela un borrador, vuelve).
+- Ajustes: *Sucursal matriz* (`matrix_company_id`; vacío = la que tenga
+  DROMAX en el nombre) y las semanas de historial y de cobertura de siempre.
+- Chat: *¿A quién abastezco desde Dromax?* (nivel medio) resume la vista por
+  farmacia y estado.
+
+En `dromax_ai_inventario`: 305 líneas en 7 farmacias (1919 unidades, 6243 de
+valor), ~1,5 s.
+
 ## Propuesta de compra (`ai.purchase.proposal`)
 
 Menú *Compras IA → Propuestas*. **Una propuesta por semana con todas las
@@ -275,7 +310,8 @@ Menú **Compras IA → Chat** (grupo *Asistente de Compras IA / Usuario*).
 - Preguntas predefinidas (`services/presets.py`), cada una con su nivel de
   modelo: *Arma la compra de esta semana* (avanzado), *Revisa un laboratorio*
   (avanzado; pide el laboratorio en el cuadro de texto antes de enviarse),
-  *¿Qué conviene trasladar?* (medio), *Productos por agotarse*, *Más vendidos
+  *¿Qué conviene trasladar?* (medio), *¿A quién abastezco desde Dromax?*
+  (medio), *Productos por agotarse*, *Más vendidos
   de las últimas 4 semanas*, *Compras pendientes de recibir*, *Compara precios
   entre droguerías* y *Stock sin rotación*. También se puede escribir
   libremente eligiendo el nivel.

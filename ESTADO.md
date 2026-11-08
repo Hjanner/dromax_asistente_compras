@@ -279,6 +279,25 @@ El README explica cómo funciona lo que ya existe.
     lo tienen rompe las que no se actualizaron (0.13 agrega tres columnas).
     Documentado en `INSTALACION.md`.
 
+- **Reabastecimiento desde la matriz** (versión `17.0.0.14.0`, 2026-11-07,
+  pedido de Daniel en sus audios del 5 y 6 de noviembre, versión sencilla para
+  su presentación del día 8): vista `ai_v_reabastecimiento`, menú *Compras IA →
+  Reabastecimiento* (lista, tabla dinámica y gráfico con el valor por
+  farmacia), botón *Generar borradores de traslado* que crea el borrador del
+  módulo de traslados (Daniel pidió respetar las reglas de Odoo: el asistente
+  solo crea el borrador interno; tránsito, costo, lotes y pasos los hace su
+  *Generar Traslados Definitivos*), ajuste *Sucursal matriz* y pregunta *¿A
+  quién abastezco desde Dromax?* (medio). Probado en `dromax_ai_inventario`
+  con rollback: 305 líneas; borradores de DROMAX a FARMAX y LA 45 y cadena de 5
+  pasos (Dromax en 3, Farmax recibe en 2) con el costo de Dromax. Chat en vivo
+  (Gemini, rollback): la primera versión sumó mal el valor total (6533 en vez
+  de 6243); la pregunta ahora pide los totales con ROLLUP en el propio SQL y
+  copiarlos: 2 consultas, 0,02 USD, 21 s, totales exactos. 129 tests en el
+  asistente (164 con el módulo FTP).
+  Para una segunda etapa (en la propuesta a Daniel): período por consulta,
+  umbral como % de la venta semanal, traslados entre farmacias, solicitud de
+  la farmacia y validación de Dromax, y ajustar el plan desde el chat.
+
 ## Decisiones
 
 - Módulo nuevo, separado del antiguo `ai_data_chat`.
@@ -343,16 +362,16 @@ descuentos encadenados = precio final en todas las filas.
 1. **Validar el chat con el comprador**: probar con el encargado de compras el
    flujo completo (resumen → ajustes en el chat → borradores) y medir costo y
    tiempo con uso real.
-2. **Dejar los módulos en producción (`ODOO2026`)** para que Daniel los
-   pruebe, cuando él lo autorice (1 a 2 minutos sin servicio para todas las
-   bases): respaldar `ODOO2026`, pasar el asistente de la carpeta de prueba
-   a la del servicio, `-u` de los dos módulos en `ODOO2026` y `ODOO_REPO`,
-   reiniciar y retirar la instancia de prueba. Después, en `ODOO2026`: rol
-   `dromax_ai_ro` (script con `-d ODOO2026`, que cambia la clave:
-   actualizarla también en `ODOO_REPO`), su línea en `pg_hba.conf`,
-   droguerías FTP, crons, usuarios e IVA (`INSTALACION.md`). De paso, con su
-   permiso, dos arreglos del servidor ajenos a los módulos (detalle en el
-   `CLAUDE.md` local).
+2. **Producción (`ODOO2026`)**: el asistente 0.13.0 quedó instalado el
+   2026-11-06 (13 s sin servicio, sin errores, con respaldo completo previo),
+   con el usuario de solo lectura funcionando. Falta: que las droguerías
+   carguen desde el servidor (los tres FTP conectan e inician sesión, pero el
+   listado del directorio da «timed out»: el canal de datos del modo pasivo
+   está bloqueado en la red del servidor; detalle en el `CLAUDE.md` local), datos de
+   ventas y compras en la base, IVA y usuarios (`INSTALACION.md`). De paso,
+   con permiso de Daniel, dos arreglos del servidor ajenos a los módulos
+   (detalle en el `CLAUDE.md` local). Daniel modificó el módulo FTP en el
+   servidor: incorporar sus cambios al repo local antes de la próxima entrega.
 3. **Traslados desde el agente** (propuesto, sin pedir aún): que *¿Qué
    conviene trasladar?* pueda crear los borradores de traslado interno del
    módulo FTP en lugar de que el comprador los arme a mano. Antes conviene

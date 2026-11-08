@@ -113,6 +113,34 @@ CATALOG = {
                                      "posible empaque distinto con el mismo código; no comprar sin revisar"),
         ],
     ),
+    "ai_v_reabastecimiento": (
+        "Lo que la sucursal matriz (Dromax, la droguería del grupo) puede mandar por traslado a "
+        "cada farmacia: una fila por producto y farmacia en cero o por agotarse que la matriz "
+        "tiene disponible. Ya descuenta lo que viene en camino y reserva la venta de la matriz; "
+        "si no alcanza para todas, reparte primero a la más urgente. Usa sus cantidades tal cual.",
+        [
+            ("company_id", "farmacia que recibe"),
+            ("farmacia", "nombre de la farmacia"),
+            ("matriz_id", "sucursal matriz que manda (res_company.id)"),
+            ("product_id", "product_product.id"),
+            ("producto", "nombre del producto"),
+            ("codigo", "código interno"),
+            ("estado", "'cero' (sin stock) o 'por_agotarse' (no le alcanza para la cobertura)"),
+            ("demanda_semanal", "venta semanal de la farmacia (demanda depurada)"),
+            ("semanas_cobertura", "semanas de cobertura configuradas"),
+            ("stock", "stock en la farmacia (negativo = 0)"),
+            ("pendiente_compra", "compras confirmadas pendientes de recibir en la farmacia"),
+            ("en_camino", "traslados en borrador o sin terminar que ya van hacia la farmacia"),
+            ("cobertura_actual", "semanas que cubre lo que tiene y lo que viene: menor = más urgente"),
+            ("falta", "lo que le falta para la cobertura"),
+            ("cantidad", "unidades a trasladar desde la matriz"),
+            ("parcial", "TRUE si la matriz no alcanza para toda la falta"),
+            ("stock_matriz", "stock de la matriz"),
+            ("disponible_matriz", "lo que la matriz puede repartir del producto entre todas las farmacias"),
+            ("costo", "costo del producto en la matriz"),
+            ("valor", "cantidad × costo: valor de la mercancía a trasladar"),
+        ],
+    ),
     "ai_v_oferta": (
         "Oferta vigente de las droguerías (inventarios que publican por FTP), una fila por "
         "producto y droguería, ya cruzada con los productos propios por código de barras "

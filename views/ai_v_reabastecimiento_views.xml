@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_ai_v_reabastecimiento_tree" model="ir.ui.view">
+        <field name="name">ai.v.reabastecimiento.tree</field>
+        <field name="model">ai.v.reabastecimiento</field>
+        <field name="arch" type="xml">
+            <tree create="0" edit="0" delete="0" decoration-danger="estado == 'cero'"
+                  decoration-warning="estado == 'por_agotarse' and parcial">
+                <header>
+                    <button name="action_generate_transfers" type="object" class="btn-primary"
+                            string="Generar borradores de traslado"
+                            groups="stock.group_stock_user"
+                            confirm="Se creará un Traslado interno en borrador de la sucursal matriz a cada farmacia con las líneas elegidas. ¿Continuar?"/>
+                </header>
+                <field name="company_id"/>
+                <field name="product_id"/>
+                <field name="codigo" optional="hide"/>
+                <field name="estado" widget="badge"
+                       decoration-danger="estado == 'cero'" decoration-warning="estado == 'por_agotarse'"/>
+                <field name="demanda_semanal"/>
+                <field name="semanas_cobertura" optional="hide"/>
+                <field name="stock"/>
+                <field name="pendiente_compra" optional="show"/>
+                <field name="en_camino" optional="hide"/>
+                <field name="cobertura_actual" optional="show"/>
+                <field name="falta" optional="show"/>
+                <field name="cantidad" sum="Total"/>
+                <field name="parcial" optional="show"/>
+                <field name="matriz_id" optional="hide"/>
+                <field name="stock_matriz" optional="show"/>
+                <field name="disponible_matriz" optional="hide"/>
+                <field name="costo" optional="show"/>
+                <field name="valor" sum="Total"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_ai_v_reabastecimiento_pivot" model="ir.ui.view">
+        <field name="name">ai.v.reabastecimiento.pivot</field>
+        <field name="model">ai.v.reabastecimiento</field>
+        <field name="arch" type="xml">
+            <pivot string="Valor a trasladar por farmacia" disable_linking="0">
+                <field name="company_id" type="row"/>
+                <field name="estado" type="col"/>
+                <field name="valor" type="measure"/>
+                <field name="cantidad" type="measure"/>
+            </pivot>
+        </field>
+    </record>
+
+    <record id="view_ai_v_reabastecimiento_graph" model="ir.ui.view">
+        <field name="name">ai.v.reabastecimiento.graph</field>
+        <field name="model">ai.v.reabastecimiento</field>
+        <field name="arch" type="xml">
+            <graph string="Valor a trasladar por farmacia" type="bar" stacked="1">
+                <field name="company_id"/>
+                <field name="estado"/>
+                <field name="valor" type="measure"/>
+            </graph>
+        </field>
+    </record>
+
+    <record id="view_ai_v_reabastecimiento_search" model="ir.ui.view">
+        <field name="name">ai.v.reabastecimiento.search</field>
+        <field name="model">ai.v.reabastecimiento</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="product_id"/>
+                <field name="codigo"/>
+                <field name="company_id"/>
+                <filter name="cero" string="En cero" domain="[('estado', '=', 'cero')]"/>
+                <filter name="por_agotarse" string="Por agotarse" domain="[('estado', '=', 'por_agotarse')]"/>
+                <separator/>
+                <filter name="parcial" string="La matriz no alcanza" domain="[('parcial', '=', True)]"/>
+                <filter name="sin_costo" string="Sin costo en la matriz" domain="[('costo', '=', 0)]"/>
+                <group expand="0" string="Agrupar por">
+                    <filter name="group_company" string="Farmacia" context="{'group_by': 'company_id'}"/>
+                    <filter name="group_estado" string="Estado" context="{'group_by': 'estado'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_ai_v_reabastecimiento" model="ir.actions.act_window">
+        <field name="name">Reabastecimiento desde la matriz</field>
+        <field name="res_model">ai.v.reabastecimiento</field>
+        <field name="groups_id" eval="[(6, 0, [ref('group_ai_purchase_user')])]"/>
+        <field name="view_mode">tree,pivot,graph</field>
+        <field name="search_view_id" ref="view_ai_v_reabastecimiento_search"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_empty_folder">Ninguna farmacia necesita mercancía que tenga la matriz</p>
+            <p>Productos en cero o por agotarse en cada farmacia (venta semanal × semanas de
+               cobertura − stock − compras pendientes − lo que ya viene por traslado) que la
+               sucursal matriz puede mandar sin quedarse sin su propia venta. Elige las líneas
+               y pulsa «Generar borradores de traslado»; después, en cada borrador, «Generar
+               Traslados Definitivos». La matriz y las semanas se cambian en Compras IA →
+               Configuración → Ajustes.</p>
+        </field>
+    </record>
+
+</odoo>

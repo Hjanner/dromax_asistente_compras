@@ -258,6 +258,7 @@ farmacéutico) son **exentos**:
 | *Compras IA → Oferta por producto* | Productos propios con oferta, cruzados por código de barras. Si sale vacío, revisar los códigos de barras de los productos. |
 | *Compras IA → Códigos de barras* → **Actualizar reporte** | Las incoherencias entre los códigos propios y los de las droguerías, para corregir. |
 | *Compras IA → Análisis → Faltantes* | Productos por pedir con su droguería sugerida. |
+| *Compras IA → Reabastecimiento* | Lo que la sucursal matriz (Ajustes → *Sucursal matriz*; por defecto la que tenga DROMAX en el nombre) puede mandar a cada farmacia. Al elegir líneas, **Generar borradores de traslado** crea los *Traslados internos* en borrador; en cada uno, **Generar Traslados Definitivos**. Requiere Inventario / Usuario y el tipo *Traslados internos* activo en el almacén de la matriz. |
 | *Compras IA → Propuestas* → **Calcular propuesta** | La propuesta de la semana, agrupada por laboratorio. |
 | *Compras IA → Chat* → **Arma la compra de esta semana** | El resumen de la propuesta, con los botones **Generar todos los borradores** y **Abrir propuesta** debajo. |
 | *Compras IA → Chat* → **Revisa un laboratorio** → **Generar borradores de …** | Una solicitud de presupuesto en borrador por farmacia y droguería, en *Compras*, solo con ese laboratorio. |
