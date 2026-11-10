@@ -59,7 +59,8 @@ class TestUi(HttpCase):
 
     def test_comparator(self):
         """Comparador: la lista, el clic que abre la ventana con cada droguería, la ficha completa y
-        la selección de productos que abre el asistente para añadirlos a un borrador de compra."""
+        la selección de productos que abre el asistente para añadirlos a un borrador de compra y el
+        botón del aviso que lleva a esa orden en Compras."""
         matriz = self.env["res.company"].create({"name": "ZQX MATRIZ UI COMPARADOR"})
         self.env["ir.config_parameter"].sudo().set_param(
             "dromax_asistente_compras.matrix_company_id", str(matriz.id))
@@ -104,7 +105,12 @@ class TestUi(HttpCase):
                     row.querySelector(".o_list_record_selector input").click();
                     (await until("button[name='action_add_to_rfq']")).click();
                     await until(".modal .o_field_one2many .o_data_row td[name='cantidad']");
-                    await until(".modal button[name='action_confirm']");
+                    (await until(".modal button[name='action_confirm']")).click();
+                    // El aviso trae el botón para ir a la orden en Compras, en la misma pestaña.
+                    (await until(".o_notification .o_notification_buttons button", "Ver en Compras")).click();
+                    await until(".o_form_view .o_field_one2many .o_data_row td[name='product_id']",
+                                "00 ZQX UI COMPARADOR PROPIO");
+                    await until(".o_breadcrumb", "Comparador de precios");
                     console.log("test successful");
                 } catch (e) {
                     console.error(e.message);

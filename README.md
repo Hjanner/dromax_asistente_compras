@@ -262,12 +262,23 @@ descuentos en cascada, % total, precio final, stock y vencimiento). Al buscar
   marcar productos o de la ventana de uno): un asistente con cada producto,
   la droguería (por defecto la más barata, se puede cambiar entre las que lo
   tienen; el precio sale de su oferta) y la cantidad (por defecto la de la
-  necesidad de compra, o 1). Al confirmar, se agregan a la orden en borrador
-  de la sucursal matriz con esa droguería que creó el comparador para el
-  usuario (origen «Comparador de precios»; si no hay, se crea) y, si el
-  producto ya está, se suma la cantidad: así se arma un pedido en varias
-  búsquedas. Los borradores hechos a mano o desde la propuesta no se tocan.
-  Solo se pueden pedir productos de nuestro catálogo; los demás se avisan.
+  necesidad de compra, o 1, sin pasar del stock de la droguería). Al
+  confirmar, se agregan a la orden en borrador de la sucursal matriz con esa
+  droguería que creó el comparador para el usuario (origen «Comparador de
+  precios»; si no hay, se crea) y, si el producto ya está, se suma la
+  cantidad: así se arma un pedido en varias búsquedas. Los borradores hechos
+  a mano o desde la propuesta no se tocan. Solo se pueden pedir productos de
+  nuestro catálogo; los demás se avisan.
+- **Tope de stock:** no se puede pedir más de lo que la droguería tiene en
+  la oferta elegida, sumando lo que ya está en su borrador del comparador.
+  En el asistente, al pasarse, la cantidad baja al stock y se avisa (la fila
+  se marca en rojo); al confirmar se vuelve a comprobar con la oferta de ese
+  momento (precio y stock) y, si no alcanza, se dice cuánto se puede agregar
+  todavía o que la droguería ya no lo tiene.
+- **Aviso con «Ver en Compras»:** al confirmar, la ventana se cierra y un
+  aviso dice en qué órdenes quedó cada producto, con un botón que abre esas
+  órdenes (la ficha, si es una sola) en la misma pestaña; la ruta de migas
+  permite volver al comparador. Para seguir comparando, basta cerrar el aviso.
 - El agente lo usa para *Compara precios entre droguerías*.
 
 En `dromax_ai_inventario`: 15 724 ofertas en 8788 productos (4690 en 2 o más

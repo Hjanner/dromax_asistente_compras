@@ -98,10 +98,11 @@ aplicaciones primero). Después, iniciar Odoo de nuevo.
 
 Qué hace la instalación:
 
-- El módulo FTP va en la versión 1.5 (la misma que mandó Daniel el
-  2026-11-04, sin los archivos que no se usan): cifra las claves FTP, deja la
-  oferta de las droguerías de solo lectura para los usuarios internos y trae
-  los traslados entre sucursales de Daniel. Para ver la tarjeta *Traslados
+- El módulo FTP va en la versión 1.5 (la última de Daniel, del 2026-11-09,
+  sin los archivos que no se usan y con un arreglo nuestro: un valor sin
+  dígitos, como «N/D», descarta la línea en vez de cargarla con precio 0):
+  cifra las claves FTP, deja la oferta de las droguerías de solo lectura para
+  los usuarios internos y trae los traslados entre sucursales de Daniel. Para ver la tarjeta *Traslados
   internos* hay que activar *Ajustes → Inventario → Ubicaciones de
   almacenamiento* (y, si alguna sucursal no la muestra, activar su tipo de
   operación).
@@ -261,7 +262,7 @@ farmacéutico) son **exentos**:
 | Dónde | Qué debería verse |
 |---|---|
 | *Inventario → Productos → Oferta de droguerías* | Las filas de cada droguería. Un usuario sin permisos de administración puede verlas pero no editarlas ni borrarlas. |
-| *Compras IA → Comparador de precios* | Un producto por fila con la droguería más barata, la segunda y el ahorro; al abrirlo, la oferta de cada droguería. |
+| *Compras IA → Comparador de precios* | Un producto por fila con la droguería más barata, la segunda y el ahorro; al hacer clic, una ventana con el precio de cada droguería. Al marcar productos, **Añadir a borrador de compra** (permiso de Compras y acceso a la matriz) los agrega a una solicitud en borrador de la matriz por droguería, sin pasar del stock de la droguería; el aviso trae **Ver en Compras**. |
 | *Compras IA → Oferta por droguería* | Productos propios con oferta, cruzados por código de barras. Si sale vacío, revisar los códigos de barras de los productos. |
 | *Compras IA → Códigos de barras* → **Actualizar reporte** | Las incoherencias entre los códigos propios y los de las droguerías, para corregir. |
 | *Compras IA → Análisis → Necesidad de compra* | Lo que tiene que comprar la matriz para toda la red, con la falta de cada farmacia y la droguería sugerida. |

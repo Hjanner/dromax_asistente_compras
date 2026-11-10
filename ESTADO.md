@@ -1,6 +1,7 @@
 # Estado del proyecto
 
-Última actualización: 2026-11-05. Qué está hecho, qué decidimos y qué falta.
+Última actualización: 2026-11-10 (asistente `17.0.0.16.1`, 137 tests; módulo
+FTP 1.5 con 38). Qué está hecho, qué decidimos y qué falta.
 El README explica cómo funciona lo que ya existe.
 
 ## Hecho
@@ -333,6 +334,12 @@ El README explica cómo funciona lo que ya existe.
     marcados o desde esa ventana) los agrega a la orden en borrador de la
     matriz con cada droguería, sumando en varias búsquedas. 136 tests en el
     asistente.
+  - Asistente `17.0.0.16.1` (pedido del usuario, 2026-11-10): el pedido desde
+    el comparador no pasa del stock de la oferta de la droguería (contando lo
+    que ya está en su borrador; se revisa otra vez al confirmar) y el aviso
+    final trae el botón *Ver en Compras*, que abre esas órdenes en la misma
+    pestaña. Antes los enlaces del aviso no se veían: `display_notification`
+    solo los pone donde el mensaje tiene `%s`. 137 tests.
   - Respuestas de Daniel (reunión): códigos de barras y ventas de `ODOO2026`
     los resuelve él; no restringir su módulo de traslados (se permiten
     traslados manuales entre farmacias); historial de 8 semanas; la
@@ -352,6 +359,8 @@ El README explica cómo funciona lo que ya existe.
 - **Cada farmacia es una sucursal** (`res.company`), no un almacén. Se agrupa
   por `company_id`.
 - Compra semanal: las órdenes se hacen lunes y martes.
+- Historial de **8 semanas** para la rotación (confirmado por Daniel el
+  2026-11-09).
 - **Toda compra pasa por Dromax** (2026-11-09, reemplaza la decisión del
   2026-10-27 de que cualquier farmacia podía comprar para otra): la sucursal
   matriz recibe cada compra y la distribuye a las farmacias con traslados
@@ -410,33 +419,42 @@ descuentos encadenados = precio final en todas las filas.
 
 ## Siguiente
 
-1. **Validar el chat con el comprador**: probar con el encargado de compras el
-   flujo completo (resumen → ajustes en el chat → borradores) y medir costo y
-   tiempo con uso real.
-2. **Producción (`ODOO2026`)**: el asistente 0.13.0 quedó instalado el
-   2026-11-06 (13 s sin servicio, sin errores, con respaldo completo previo),
-   con el usuario de solo lectura funcionando. Falta: que las droguerías
-   carguen desde el servidor (los tres FTP conectan e inician sesión, pero el
-   listado del directorio da «timed out»: el canal de datos del modo pasivo
-   está bloqueado en la red del servidor; detalle en el `CLAUDE.md` local), datos de
-   ventas y compras en la base, IVA y usuarios (`INSTALACION.md`). De paso,
-   con permiso de Daniel, dos arreglos del servidor ajenos a los módulos
-   (detalle en el `CLAUDE.md` local). Daniel modificó el módulo FTP en el
-   servidor: incorporar sus cambios al repo local antes de la próxima entrega.
-3. **Traslados desde el agente** (propuesto, sin pedir aún): que *¿Qué
-   conviene trasladar?* pueda crear los borradores de traslado interno del
-   módulo FTP en lugar de que el comprador los arme a mano. Antes conviene
-   poner códigos de almacén propios en `dromax_ai_inventario` (DX, FX, PRO,
-   FSC, FGA, FID, MAN, L45) para distinguir las sucursales.
-4. **Con los datos de `ODOO2026`:** validar y calibrar las vistas y
-   las propuestas por sucursal con ventas reales, conectar el campo
+1. **Producción (`ODOO2026`)**: tiene el asistente 0.13.0 (instalado el
+   2026-11-06 con respaldo completo previo y el usuario de solo lectura
+   funcionando). Las versiones 0.14.0 a 0.16.1 (reabastecimiento, toda compra
+   por Dromax, comparador) están **pendientes de instalar**: Daniel pidió
+   dejarlo para después, y nada se toca en el servidor sin consultarlo antes
+   con él. Al instalar: volver a bajar el módulo FTP del servidor y compararlo
+   con el repo local (Daniel lo edita allí) antes de entregar el nuestro,
+   actualizar las bases que tienen los módulos (`INSTALACION.md`, paso 11),
+   elegir la *Sucursal matriz* en los ajustes y dar a los compradores acceso a
+   la matriz. Siguen pendientes en el servidor: que las droguerías carguen (el
+   FTP conecta, pero el listado en modo pasivo se agota; detalle en el
+   `CLAUDE.md` local), los códigos de barras de los productos y las ventas de
+   TPV en la base (los resuelve Daniel), IVA y usuarios.
+2. **Validar con el comprador**: el flujo completo (necesidad de compra →
+   propuesta o comparador → borradores → reabastecimiento) y el chat, midiendo
+   costo y tiempo con uso real.
+3. **Compra directa al laboratorio** (sin respuesta de Daniel): en la base
+   operativa ~2200 productos se compran solo a laboratorios o representantes.
+   Propuesta: si el proveedor principal del producto (`product.supplierinfo`)
+   no es una droguería con FTP, la necesidad de compra lo marca como compra
+   directa y no lo manda a una droguería. Depende de que Daniel migre los
+   proveedores por producto a `ODOO2026`.
+4. **Descuentos que no vienen en los archivos FTP** (p. ej. el de volumen de
+   INSUAMINCA o uno opcional): Daniel agregó un descuento de cabecera por
+   droguería; falta saber si hacen falta escalas por volumen.
+5. **Ideas de la reunión, sin pedir aún**: borradores automáticos (compra
+   semanal y traslados diarios desde la matriz) y exportar la compra por
+   laboratorio con la cantidad de cada farmacia.
+6. **Con los datos de `ODOO2026`:** validar y calibrar la necesidad de compra,
+   el reabastecimiento y la propuesta con ventas reales, conectar el campo
    laboratorio y revisar el reporte de códigos de barras con el catálogo real.
 
 ## Preguntas abiertas para Daniel
 
 - Respuestas sugeridas a estas preguntas, para que Daniel solo diga cuál no
   le sirve: `~/odoo-dev/respuestas_sugeridas_daniel.txt` (fuera del repo).
-- Ventana de semanas de historial para la rotación (provisional: 8).
 - Campo laboratorio: ¿many2one o many2many? ¿Coincide con el de los archivos
   de las droguerías?
 - 10.ª columna de INSUAMINCA (`INDEXADO` en 3675 productos / `MONTO FACTURA`
@@ -471,9 +489,11 @@ Comentadas al usuario el 2026-11-04; el código no se cambió:
 
 ## Pendiente fuera del repo
 
-- Entregar a Daniel el `.zip` del módulo FTP cuando lo pida (ver CLAUDE.md).
-  Hoy no hace falta: su 1.5 es igual a la nuestra salvo los archivos sin uso
-  y el README.
+- Entregar a Daniel el `.zip` del módulo FTP (lleva el arreglo `a7be8c8`
+  sobre su versión del 2026-11-09) cuando lo pida o al instalar en
+  producción; antes, volver a bajar su carpeta y comparar (ver CLAUDE.md).
+- Comentarle a Daniel que su botón *Descargar* ahora deshace la carga
+  fallida, así que el error no queda en *Última carga*.
 - Usuario de prueba sin permisos de administración en `DROMAX_AI_DEV`:
   `comprador.prueba` (id 83; Compras, Inventario y Asistente de Compras IA).
 - Usuario de prueba sin compras ni administración: `empleado.prueba` (id 207;

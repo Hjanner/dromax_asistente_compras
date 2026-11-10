@@ -78,8 +78,13 @@ class TestComparadorPedido(AnalisisCase):
         ibu.write({"drogueria_id": self.drog_c.id, "cantidad": 4})
         ibu.write(ibu._offer_values())
         result = wizard.action_confirm()
+        self.assertEqual(result["tag"], "dromax_asistente_compras.rfq_added")
         self.assertEqual(result["params"]["next"], {"type": "ir.actions.act_window_close"})
         orders = self.env["purchase.order"].search([("origin", "=", ORIGIN), ("user_id", "=", self.buyer.id)])
+        # El botón «Ver en Compras» abre esas órdenes, y solo esas.
+        go = result["params"]["action"]
+        self.assertEqual((go["res_model"], go["target"]), ("purchase.order", "current"))
+        self.assertEqual(self.env["purchase.order"].search(go["domain"]), orders)
         self.assertEqual(orders.partner_id, self.drog_b | self.drog_c)          # una por droguería
         self.assertEqual(set(orders.mapped("company_id")), {self.matriz})
         self.assertEqual(set(orders.mapped("state")), {"draft"})
@@ -90,10 +95,52 @@ class TestComparadorPedido(AnalisisCase):
         wizard = self.env["ai.comparador.pedido"].browse(rows[:1].action_add_to_rfq()["res_id"]).with_user(self.buyer)
         wizard.line_ids.write({"drogueria_id": self.drog_c.id, "cantidad": 2})
         wizard.line_ids.write(wizard.line_ids._offer_values())
-        wizard.action_confirm()
+        go = wizard.action_confirm()["params"]["action"]
         again = self.env["purchase.order"].search([("origin", "=", ORIGIN), ("user_id", "=", self.buyer.id)])
         self.assertEqual(again, orders)
         self.assertEqual(line_c.product_qty, 6)
+        self.assertEqual((go["res_id"], go["view_mode"]), (line_c.order_id.id, "form"))    # una sola: su ficha
+
+    def test_quantity_limited_to_drugstore_stock(self):
+        self._weekly_sales(self.vitamina, 60)                                    # necesidad 60, B tiene 50
+        rows = self._comparador([self.ibuprofeno.barcode, self.vitamina.barcode])
+        wizard = self.env["ai.comparador.pedido"].browse(rows.action_add_to_rfq()["res_id"]).with_user(self.buyer)
+        ibu = wizard.line_ids.filtered(lambda l: l.product_id == self.ibuprofeno)
+        vit = wizard.line_ids.filtered(lambda l: l.product_id == self.vitamina)
+        self.assertEqual((vit.cantidad, vit.stock_drogueria), (50, 50))
+        # En pantalla, al pasarse del stock la cantidad baja a él (con aviso).
+        with self.assertLogs("odoo.tests.form.onchange", "WARNING") as logs, Form(wizard) as form:
+            with form.line_ids.edit(list(wizard.line_ids).index(ibu)) as line:
+                line.cantidad = 500
+        self.assertIn("ZQX DROG B tiene 100", logs.output[0])
+        self.assertEqual(ibu.cantidad, 100)
+        # Al confirmar se vuelve a comprobar, con el stock de la oferta de ese momento.
+        ibu.cantidad = 101
+        with self.assertRaisesRegex(UserError, "ZQX DROG B tiene 100 y pides 101"):
+            wizard.action_confirm()
+        self.assertFalse(self.env["purchase.order"].search([("origin", "=", ORIGIN), ("user_id", "=", self.buyer.id)]))
+        ibu.cantidad = 60
+        vit.cantidad = 0
+        wizard.action_confirm()
+        # Lo que ya está en el borrador cuenta: quedan 40.
+        wizard = self.env["ai.comparador.pedido"].browse(rows[:1].action_add_to_rfq()["res_id"]).with_user(self.buyer)
+        self.assertEqual(wizard.line_ids.product_id, self.ibuprofeno)
+        wizard.line_ids.cantidad = 41
+        with self.assertRaisesRegex(UserError, "ya hay 60 en el borrador .*hasta 40"):
+            wizard.action_confirm()
+        wizard.line_ids.cantidad = 40
+        wizard.action_confirm()
+        order = self.env["purchase.order"].search([("origin", "=", ORIGIN), ("user_id", "=", self.buyer.id)])
+        self.assertEqual(order.order_line.product_qty, 100)
+        # Si la droguería se queda sin stock antes de confirmar, se avisa.
+        wizard = self.env["ai.comparador.pedido"].browse(
+            rows.filtered(lambda r: r.product_id == self.vitamina).action_add_to_rfq()["res_id"]).with_user(self.buyer)
+        self.env["supplier.product.staging"].search([("partner_id", "=", self.drog_b.id),
+                                                     ("ai_barcode_norm", "=", self.vitamina.barcode)]
+                                                    ).stock_disponible = 0
+        self.env.flush_all()
+        with self.assertRaisesRegex(UserError, "ZQX DROG B ya no lo tiene disponible"):
+            wizard.action_confirm()
 
     def test_confirm_checks(self):
         rows = self._comparador([self.ibuprofeno.barcode])

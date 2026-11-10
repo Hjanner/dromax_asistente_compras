@@ -157,21 +157,22 @@
                 <div class="text-muted mb-2">
                     Se agregan a la orden en borrador de <field name="company_id" class="d-inline" readonly="1"/>
                     con cada droguería que creó el comparador (si no hay, se crea una). Cambia la droguería
-                    o la cantidad si hace falta; con cantidad 0 el producto no se pide.
+                    o la cantidad si hace falta; con cantidad 0 el producto no se pide. No se puede pedir
+                    más que el stock de la droguería, contando lo que ya esté en su borrador.
                 </div>
                 <div class="alert alert-info py-2" role="status" invisible="not sin_catalogo">
                     Estos productos no están en nuestro catálogo y no se pueden pedir:
                     <field name="sin_catalogo" class="d-block"/>
                 </div>
                 <field name="line_ids" nolabel="1">
-                    <tree editable="bottom" create="0">
+                    <tree editable="bottom" create="0" decoration-danger="cantidad &gt; stock_drogueria">
                         <field name="product_id" readonly="1" force_save="1"/>
                         <field name="drogueria_opciones_ids" column_invisible="1"/>
                         <field name="drogueria_id" options="{'no_create': True, 'no_open': True}"/>
                         <field name="cantidad"/>
                         <field name="precio" force_save="1"/>
                         <field name="descuentos" force_save="1" optional="show"/>
-                        <field name="stock_drogueria" force_save="1" optional="show"/>
+                        <field name="stock_drogueria" force_save="1"/>
                         <field name="fecha_vencimiento" force_save="1" optional="hide"/>
                         <field name="subtotal" sum="Total"/>
                     </tree>
