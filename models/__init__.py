@@ -6,6 +6,8 @@ from . import res_config_settings
 from . import product_product
 from . import supplier_product_staging
 from . import ai_v_oferta
+from . import ai_v_comparador
+from . import ai_comparador_pedido
 from . import ai_v_rotacion
 from . import ai_v_stock
 from . import ai_v_pendiente

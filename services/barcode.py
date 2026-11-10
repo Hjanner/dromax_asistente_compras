@@ -48,3 +48,19 @@ def normalize_barcode(value):
             gtin = "0" + body + gtin_check_digit(body)
         return gtin[1:]
     return digits.lstrip("0") or "0"
+
+
+def is_valid_ean13(norm):
+    """True si `norm` (ya normalizado) es un EAN-13 con su dígito de control correcto.
+
+    Los códigos que no lo son ('0', '10', internos cortos o con un dígito mal
+    escrito) no sirven para cruzar droguerías: juntarían productos distintos.
+
+    >>> is_valid_ean13('7593255000411')
+    True
+    >>> is_valid_ean13('0000000000010')
+    False
+    """
+    if not norm or len(norm) != 13 or not norm.isdigit() or not norm.strip("0"):
+        return False
+    return gtin_check_digit(norm[:12]) == norm[12]

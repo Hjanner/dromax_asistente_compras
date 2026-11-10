@@ -298,6 +298,51 @@ El README explica cómo funciona lo que ya existe.
   umbral como % de la venta semanal, traslados entre farmacias, solicitud de
   la farmacia y validación de Dromax, y ajustar el plan desde el chat.
 
+- **Reenfoque: toda compra pasa por Dromax** (versión `17.0.0.15.0`,
+  2026-11-09): `ai_v_faltantes` pasa a ser la *Necesidad de compra* de la
+  matriz para toda la red (una fila por producto: Σ faltas de las farmacias +
+  venta propia − stock libre − pendiente, con `detalle_farmacias`); la
+  propuesta queda por producto y sus borradores, una orden de la matriz por
+  droguería. Fuera todo lo de traslados entre farmacias: excedente en otras
+  farmacias, `se_cubre_con_traslado`, la pregunta *¿Qué conviene
+  trasladar?*, el botón *Ver traslados en la propuesta* y el ajuste
+  *Excedente a partir de*. Compra y reabastecimiento comparten el cálculo
+  (`services/network_sql.py`). En `dromax_ai_inventario`: 708 productos a
+  comprar (antes 1412 líneas por producto y farmacia), cuadra con el
+  reabastecimiento (p. ej. MELOXICAM: a MANAL le faltan 31, Dromax manda 13 y
+  compra 18). Propuesta en ~3 s y borradores de las 489 líneas por pedir (3
+  órdenes de DROMAX) en ~5 s. Las pantallas de la matriz (necesidad de compra
+  y líneas de la propuesta) se ven con la matriz marcada en el selector de
+  empresas. 162 tests entre los dos módulos (127 del asistente).
+
+- **Versión de Daniel del módulo FTP y comparador agrupado** (2026-11-09,
+  tras la reunión con el supervisor):
+  - Módulo FTP: su versión del servidor (07:11) incorporada al repo local
+    (`4e3cdb7`, «de Daniel»: moneda del archivo con conversión a USD,
+    descuento de cabecera, FTPS con respaldo FTP, archivos de ancho fijo de
+    NENA). Arreglo nuestro (`a7be8c8`): un valor sin dígitos («N/D») vuelve a
+    descartar la línea en vez de cargarla con precio 0; tests al día (38).
+    Pendiente de comentarle: el botón *Descargar* ahora lanza el error y Odoo
+    deshace la transacción, así que la carga fallida no queda en *Última
+    carga* (la tarea programada sí la guarda).
+  - Asistente `17.0.0.16.0`: *Comparador de precios* (`ai_v_comparador`, una
+    fila por producto con visor por droguería) y oferta más estricta (lotes
+    vencidos y códigos sin dígito de control válido fuera de la comparación).
+    Además (pedido del usuario): clic en un producto abre una ventana con
+    el precio de cada droguería, y *Añadir a borrador de compra* (productos
+    marcados o desde esa ventana) los agrega a la orden en borrador de la
+    matriz con cada droguería, sumando en varias búsquedas. 136 tests en el
+    asistente.
+  - Respuestas de Daniel (reunión): códigos de barras y ventas de `ODOO2026`
+    los resuelve él; no restringir su módulo de traslados (se permiten
+    traslados manuales entre farmacias); historial de 8 semanas; la
+    instalación de la 0.15.0 queda para después. Compra al laboratorio o a
+    droguerías: sin respuesta; en la base `DROMAX` (la operativa) hay 3068
+    compras y 3472 proveedores por producto: ~2200 productos se compran solo
+    a laboratorios o representantes, ~160 solo a droguerías y ~400 por las
+    dos vías. Propuesta: usar el proveedor principal del producto
+    (`product.supplierinfo`) para separar la compra directa.
+
 ## Decisiones
 
 - Módulo nuevo, separado del antiguo `ai_data_chat`.
@@ -307,9 +352,15 @@ El README explica cómo funciona lo que ya existe.
 - **Cada farmacia es una sucursal** (`res.company`), no un almacén. Se agrupa
   por `company_id`.
 - Compra semanal: las órdenes se hacen lunes y martes.
-- **La compra no es estricta por farmacia** (2026-10-27): un comprador de
-  cualquier farmacia puede comprar para otra. Por eso el chat no se filtra
-  por farmacia y los faltantes informan el excedente de las demás.
+- **Toda compra pasa por Dromax** (2026-11-09, reemplaza la decisión del
+  2026-10-27 de que cualquier farmacia podía comprar para otra): la sucursal
+  matriz recibe cada compra y la distribuye a las farmacias con traslados
+  cuando lo necesitan. Las farmacias no compran a las droguerías (tampoco los
+  ~2000 productos que, según el audio de Daniel del 6/11, compraban a otras
+  droguerías) ni se trasladan mercancía entre ellas. La propuesta es una
+  línea por producto para toda la red; el módulo de traslados de Daniel no se
+  restringe (decisión del usuario: solo el asistente deja de sugerir
+  traslados entre farmacias).
 - `res_partner` queda fuera de la lista blanca SQL (mezcla clientes).
 - Acceso al asistente = personal de compras + administradores, sin casilla
   aparte (decisión del 2026-10-23; antes era una casilla en el usuario).

@@ -2,6 +2,9 @@ id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
 access_ai_usage_log_system,ai.usage.log administradores,model_ai_usage_log,base.group_system,1,0,0,1
 access_ai_purchase_chat_session_user,ai.purchase.chat.session compradores,model_ai_purchase_chat_session,group_ai_purchase_user,1,1,1,1
 access_ai_purchase_chat_message_user,ai.purchase.chat.message compradores,model_ai_purchase_chat_message,group_ai_purchase_user,1,0,1,0
+access_ai_comparador_pedido_user,ai.comparador.pedido compradores,model_ai_comparador_pedido,group_ai_purchase_user,1,1,1,1
+access_ai_comparador_pedido_line_user,ai.comparador.pedido.line compradores,model_ai_comparador_pedido_line,group_ai_purchase_user,1,1,1,1
+access_ai_v_comparador_user,ai.v.comparador compradores,model_ai_v_comparador,group_ai_purchase_user,1,0,0,0
 access_ai_v_oferta_user,ai.v.oferta compradores,model_ai_v_oferta,group_ai_purchase_user,1,0,0,0
 access_ai_barcode_mismatch_user,ai.barcode.mismatch compradores,model_ai_barcode_mismatch,group_ai_purchase_user,1,0,0,0
 access_ai_v_rotacion_user,ai.v.rotacion compradores,model_ai_v_rotacion,group_ai_purchase_user,1,0,0,0

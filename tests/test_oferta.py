@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 """Normalización de códigos de barras y vista ai_v_oferta."""
-from datetime import date
+from datetime import date, timedelta
 
 from odoo.tests.common import TransactionCase, tagged
 
 from ..models.supplier_product_staging import parse_lot_date
-from ..services.barcode import gtin_check_digit, normalize_barcode
+from ..services import presets
+from ..services.barcode import gtin_check_digit, is_valid_ean13, normalize_barcode
 from ..services.prompt import build_system_prompt
 
 
@@ -35,6 +36,12 @@ class TestBarcode(TransactionCase):
         }
         for raw, expected in cases.items():
             self.assertEqual(normalize_barcode(raw), expected, raw)
+
+    def test_valid_ean13(self):
+        for code in ("7591619520889", "7593255000411", "0612197152006"):
+            self.assertTrue(is_valid_ean13(code), code)
+        for code in ("0", "10", "0000000000000", "7591619520880", "123456789012345", False, ""):
+            self.assertFalse(is_valid_ean13(code), code)                    # el penúltimo: control mal
 
     def test_lot_date(self):
         self.assertEqual(parse_lot_date("31/07/2029"), date(2029, 7, 31))
@@ -151,3 +158,66 @@ class TestOfertaView(TransactionCase):
         self.assertIn("ai_v_oferta", prompt)
         self.assertIn("precio_final", prompt)
         self.assertIn("ai_barcode_norm", prompt)
+
+    # -- reglas de comparación y comparador -------------------------------------
+
+    def _comparador(self, code):
+        self.env.flush_all()
+        self.env.invalidate_all()
+        return self.env["ai.v.comparador"].search([("codigo_barras", "=", code)])
+
+    def test_invalid_codes_and_expired_lots_are_not_compared(self):
+        """Códigos como «0» juntarían productos distintos; un lote vencido no se puede comprar."""
+        propio = self.env["product.product"].create({"name": "PRODUCTO CON CODIGO 0", "barcode": "0"})
+        uno, otro = (self.staging.create({
+            "partner_id": partner.id, "codigo_barras": "0", "descripcion_producto": name,
+            "precio_unitario_final": price, "stock_disponible": 5,
+        }) for partner, name, price in ((self.inter, "CLINDAMICINA AMP", 4.0), (self.insua, "FUROSEMIDA AMP", 0.7)))
+        vencida = self.staging.create({
+            "partner_id": self.insua.id, "codigo_barras": GASA, "descripcion_producto": "GASA VENCIDA",
+            "fecha_lote": (date.today() - timedelta(days=1)).strftime("%d/%m/%Y"),
+            "precio_unitario_final": 1.0, "stock_disponible": 50,
+        })
+        self.env.flush_all()
+        for line in (uno, otro):
+            row = self._row(line)
+            self.assertFalse(row.codigo_valido)
+            self.assertFalse(row.disponible)
+            self.assertFalse(row.orden_precio)
+            self.assertFalse(row.product_id)                                    # no se cruza con «0» propio
+            self.assertFalse(row.comparador_id)
+        self.assertEqual(propio.ai_barcode_norm, "0")                          # existe, pero no se cruza
+        row = self._row(vencida)
+        self.assertTrue(row.vencido)
+        self.assertFalse(row.disponible)
+        self.assertAlmostEqual(self._row(self.gasa_a).mejor_precio, 4.17)      # la vencida no gana
+
+    def test_comparador(self):
+        gasa = self._comparador(GASA)
+        self.assertEqual(len(gasa), 1)
+        self.assertEqual((gasa.nombre, gasa.product_id, gasa.en_catalogo), ("GASA 4X4 CAJA X 25", self.gasa, True))
+        self.assertEqual((gasa.drogueria_id, gasa.segunda_drogueria_id), (self.inter, self.insua))
+        self.assertAlmostEqual(gasa.mejor_precio, 4.17)
+        self.assertAlmostEqual(gasa.segundo_precio, 4.20)
+        self.assertAlmostEqual(gasa.ahorro, 0.03)
+        self.assertAlmostEqual(gasa.ahorro_pct, 0.7)
+        self.assertEqual((gasa.droguerias_con_stock, gasa.droguerias_total, gasa.stock_total), (2, 2, 1854))
+        self.assertEqual(gasa.oferta_ids, self.env["ai.v.oferta"].browse(
+            (self.gasa_a | self.gasa_b | self.gasa_a_agotada).ids))
+        self.assertFalse(gasa.precios_dispares or gasa.vence_pronto or gasa.stock_bajo)
+        # Sin producto propio: el nombre de la droguería, sin segunda.
+        ajeno = self._comparador(AJENO)
+        self.assertEqual((ajeno.nombre, ajeno.en_catalogo, ajeno.segundo_precio), ("PRODUCTO %s" % AJENO, False, 0))
+        # Alertas: otra presentación, lote por vencer y poco stock en la más barata.
+        self.staging.create({"partner_id": self.env["res.partner"].create({"name": "DROGUERÍA C"}).id,
+                             "codigo_barras": GASA, "descripcion_producto": "GASA CAJA X 10 CAJAS",
+                             "precio_unitario_final": 13.0, "stock_disponible": 4})
+        self.gasa_a.write({"stock_disponible": 2,
+                           "fecha_lote": (date.today() + timedelta(days=30)).strftime("%d/%m/%Y")})
+        gasa = self._comparador(GASA)
+        self.assertTrue(gasa.precios_dispares and gasa.vence_pronto and gasa.stock_bajo)
+        self.assertEqual(gasa.droguerias_con_stock, 3)
+
+    def test_agent_uses_the_comparator(self):
+        self.assertIn("ai_v_comparador", build_system_prompt(self.env))
+        self.assertIn("ai_v_comparador", presets.get_preset("comparar_droguerias")["prompt"])

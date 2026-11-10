@@ -34,8 +34,10 @@ class AiVOferta(models.Model):
     product_id queda vacío si no hay producto propio con ese código.
 
     La comparación es entre droguerías, no entre filas: cada droguería entra
-    con su mejor oferta disponible (con stock y precio final > 0) de cada
-    código, aunque traiga varios lotes. orden_precio es el puesto de la
+    con su mejor oferta disponible de cada código, aunque traiga varios lotes.
+    Disponible = con stock, precio final > 0, lote no vencido y código válido
+    (EAN-13 con dígito de control correcto: códigos como «0» o «10» juntarían
+    productos distintos, así que no se cruzan ni se comparan). orden_precio es el puesto de la
     droguería (1 = la más barata; en empate decide el id) y solo lo lleva la
     fila de su mejor oferta; segundo_precio es el de la droguería en el puesto 2.
     """
@@ -58,11 +60,18 @@ class AiVOferta(models.Model):
     laboratorio = fields.Char("Laboratorio", readonly=True)
     fecha_vencimiento = fields.Date("Vencimiento", readonly=True)
     precio_lista = fields.Float("Precio de lista", readonly=True)
+    descuento_texto = fields.Char("Descuentos", readonly=True,
+                                  help="Descuentos en cascada como vienen de la droguería, p. ej. 12+12+0.")
     descuento_pct = fields.Float("% Descuento", readonly=True)
     precio_final = fields.Float("Precio final", readonly=True)
     stock_drogueria = fields.Integer("Stock en la droguería", readonly=True)
     disponible = fields.Boolean("Disponible", readonly=True,
-                                help="Con stock y precio final mayor que cero.")
+                                help="Con stock, precio final mayor que cero, lote no vencido y código válido.")
+    codigo_valido = fields.Boolean("Código válido", readonly=True)
+    vencido = fields.Boolean("Lote vencido", readonly=True)
+    vence_pronto = fields.Boolean("Vence en menos de 90 días", readonly=True)
+    stock_bajo = fields.Boolean("Stock bajo", readonly=True, help="La droguería tiene 1 o 2 unidades.")
+    comparador_id = fields.Many2one("ai.v.comparador", "Comparador", readonly=True)
     orden_precio = fields.Integer("Puesto por precio", readonly=True,
                                   help="Puesto de la droguería para ese código: 1 = la más barata. "
                                        "Vacío si la oferta no está disponible o no es la mejor de su droguería.")
@@ -85,11 +94,19 @@ class AiVOferta(models.Model):
                   FROM product_product pp
                   JOIN product_template pt ON pt.id = pp.product_tmpl_id
                  WHERE pp.active AND pp.ai_barcode_norm IS NOT NULL
+                   AND length(pp.ai_barcode_norm) = 13
                  ORDER BY pp.ai_barcode_norm, pp.id
             ),
             oferta AS (
                 SELECT s.*,
-                       (s.stock_disponible > 0 AND s.precio_unitario_final > 0) AS disponible
+                       COALESCE(s.ai_barcode_valid, false) AS codigo_valido,
+                       COALESCE(s.ai_fecha_vencimiento < current_date, false) AS vencido,
+                       (s.stock_disponible > 0 AND s.precio_unitario_final > 0
+                        AND COALESCE(s.ai_barcode_valid, false)
+                        AND NOT COALESCE(s.ai_fecha_vencimiento < current_date, false)) AS disponible,
+                       -- La ficha del comparador de cada código: la fila más antigua del código.
+                       CASE WHEN s.ai_barcode_valid
+                            THEN min(s.id) OVER (PARTITION BY s.ai_barcode_norm) END AS comparador_id
                   FROM supplier_product_staging s
             ),
             puestos AS (
@@ -123,10 +140,16 @@ class AiVOferta(models.Model):
                    NULLIF(o.laboratorio, '') AS laboratorio,
                    o.ai_fecha_vencimiento AS fecha_vencimiento,
                    o.precio_unitario AS precio_lista,
+                   o.descuento_texto,
                    o.porcentaje_oferta_vigente AS descuento_pct,
                    o.precio_unitario_final AS precio_final,
                    o.stock_disponible AS stock_drogueria,
                    o.disponible,
+                   o.codigo_valido,
+                   o.vencido,
+                   COALESCE(o.ai_fecha_vencimiento < current_date + 90, false) AND NOT o.vencido AS vence_pronto,
+                   o.stock_disponible BETWEEN 1 AND 2 AS stock_bajo,
+                   o.comparador_id,
                    CASE WHEN o.disponible AND o.precio_unitario_final = pu.precio
                         THEN pu.puesto END AS orden_precio,
                    r.mejor_precio,
@@ -135,7 +158,7 @@ class AiVOferta(models.Model):
                    o.create_date AS fecha_carga
               FROM oferta o
               JOIN res_partner rp ON rp.id = o.partner_id
-              LEFT JOIN productos p ON p.ai_barcode_norm = o.ai_barcode_norm
+              LEFT JOIN productos p ON p.ai_barcode_norm = o.ai_barcode_norm AND o.codigo_valido
               LEFT JOIN puestos pu ON pu.ai_barcode_norm = o.ai_barcode_norm
                                   AND pu.partner_id = o.partner_id
               LEFT JOIN resumen r ON r.ai_barcode_norm = o.ai_barcode_norm

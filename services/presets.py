@@ -21,8 +21,8 @@ PRESETS = [
             "Muéstrame la propuesta de compra de esta semana con su resumen (get_proposal sin "
             "filtros; no hace falta consultar nada más): monto, líneas y farmacias, los "
             "laboratorios de mayor monto y lo que necesita mi atención antes de generar los "
-            "borradores: productos a revisar por presentación, productos sin droguería y "
-            "traslados entre farmacias que eviten comprar. Sé breve y termina diciéndome cómo seguir."
+            "borradores: productos a revisar por presentación y productos sin droguería. "
+            "Sé breve y termina diciéndome cómo seguir."
         ),
     },
     {
@@ -34,28 +34,12 @@ PRESETS = [
         "input": "Laboratorio, p. ej. LETI",
         "prompt": (
             "Revisa el laboratorio «{input}» en la propuesta de compra de esta semana "
-            "(get_proposal con ese laboratorio). Muestra sus líneas por farmacia y el total. "
-            "Señala las que hay que revisar por presentación, las que no tienen droguería, "
-            "las que se pueden cubrir con un traslado, las que ya están en solicitudes sin "
+            "(get_proposal con ese laboratorio). Muestra sus líneas, cuánto le falta a cada "
+            "farmacia y el total. Señala las que hay que revisar por presentación, las que no "
+            "tienen droguería, las que ya están en solicitudes sin "
             "confirmar y las que tienen otra droguería más barata o con más stock. Si el "
             "nombre no coincide con ningún laboratorio, dime los parecidos. No cambies nada: "
             "sugiere y espera mi respuesta."
-        ),
-    },
-    {
-        "key": "traslados",
-        "label": "¿Qué conviene trasladar?",
-        "level": "medium",
-        "task": "transfer_check",
-        "ensure_proposal": True,
-        "prompt": (
-            "¿Qué compras de la propuesta de esta semana se pueden evitar trasladando "
-            "mercancía entre farmacias? Usa get_proposal con el filtro se_cubre_con_traslado. "
-            "Agrupa por farmacia de origen (el total por origen ya viene calculado), muestra "
-            "los de mayor monto de cada una y el monto total que se dejaría de comprar; aparte, "
-            "los que hay que juntar de varias farmacias. Señala aparte los excedentes "
-            "que parezcan errores de inventario por ser desproporcionados. No cambies nada: "
-            "si quiero, te pido poner esas líneas en cero."
         ),
     },
     {
@@ -109,13 +93,13 @@ PRESETS = [
         "level": "medium",
         "task": "supplier_comparison",
         "prompt": (
-            "Compara la oferta vigente de las droguerías: de los productos disponibles "
-            "en más de una droguería, muestra los 20 con mayor ahorro porcentual del mejor "
-            "precio final frente al segundo, con la droguería más barata, su descuento, su "
-            "stock, el vencimiento del lote y si el producto está en nuestro catálogo. "
-            "Deja fuera los casos en que el segundo precio supera el triple del mejor "
-            "(probable presentación distinta) y di solo cuántos son. Al final, di cuántos "
-            "de nuestros productos aparecen en la oferta y cuántos no."
+            "Compara la oferta vigente de las droguerías con ai_v_comparador: de los productos "
+            "con 2 o más droguerías con stock y sin precios_dispares, muestra los 20 con mayor "
+            "ahorro_pct, con la droguería más barata, sus descuentos, su stock, el vencimiento "
+            "del lote y si está en nuestro catálogo; marca los que vencen pronto o tienen poco "
+            "stock. Di aparte cuántos tienen precios_dispares (probable otra presentación). Al "
+            "final, cuántos productos del comparador están en nuestro catálogo y cuántos no. "
+            "Calcula los conteos en SQL, no los sumes tú."
         ),
     },
     {

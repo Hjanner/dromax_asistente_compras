@@ -57,9 +57,70 @@ class TestUi(HttpCase):
         self._open("action=dromax_asistente_compras.action_ai_v_oferta",
                    ".o_list_view .o_data_row", login=buyer.login)
 
+    def test_comparator(self):
+        """Comparador: la lista, el clic que abre la ventana con cada droguería, la ficha completa y
+        la selección de productos que abre el asistente para añadirlos a un borrador de compra."""
+        matriz = self.env["res.company"].create({"name": "ZQX MATRIZ UI COMPARADOR"})
+        self.env["ir.config_parameter"].sudo().set_param(
+            "dromax_asistente_compras.matrix_company_id", str(matriz.id))
+        buyer = new_test_user(self.env, login="ai_comparador_ui",
+                              groups="base.group_user,purchase.group_purchase_user,"
+                                     "dromax_asistente_compras.group_ai_purchase_user",
+                              company_id=matriz.id, company_ids=(matriz | self.env.company).ids)
+        buyer.password = buyer.login
+        Partner = self.env["res.partner"]
+        code = "7599999000045"                                   # EAN-13 válido inventado
+        self.env["product.product"].create({"name": "00 ZQX UI COMPARADOR PROPIO", "barcode": code,
+                                            "detailed_type": "product"})
+        lines = self.env["supplier.product.staging"].create([{
+            "partner_id": Partner.create({"name": name, "is_company": True}).id, "codigo_barras": code,
+            "descripcion_producto": "ZQX UI COMPARADOR %s" % name, "fecha_lote": "30/01/2031",
+            "precio_unitario": price, "precio_unitario_final": price, "stock_disponible": 10,
+        } for name, price in (("DROG UI A", 2.5), ("DROG UI B", 2.8))])
+        self.env.flush_all()
+        comparador = self.env["ai.v.comparador"].search([("codigo_barras", "=", code)])
+        self.assertEqual(comparador.id, min(lines.ids))
+        self.browser_js("/web#action=dromax_asistente_compras.action_ai_v_comparador", """
+            const until = (sel, text) => new Promise((resolve, reject) => {
+                let n = 0;
+                const t = setInterval(() => {
+                    const el = [...document.querySelectorAll(sel)].find(e => !text || e.textContent.includes(text));
+                    if (el) { clearInterval(t); resolve(el); }
+                    else if (++n > 150) { clearInterval(t); reject(new Error("No apareció " + sel + " " + (text || ""))); }
+                }, 100);
+            });
+            (async () => {
+                try {
+                    (await until(".o_list_view .o_data_row td[name='nombre']", "00 ZQX UI COMPARADOR PROPIO")).click();
+                    await until(".modal .o_field_one2many .o_data_row td[name='partner_id']", "DROG UI A");
+                    await until(".modal .o_field_one2many .o_data_row td[name='partner_id']", "DROG UI B");
+                    (await until(".modal button[special='cancel']")).click();
+                    // Al cerrar, la lista se vuelve a dibujar: esperar y buscar la fila de nuevo.
+                    await new Promise((resolve) => {
+                        const t = setInterval(() => { if (!document.querySelector(".modal")) { clearInterval(t); resolve(); } }, 100);
+                    });
+                    await new Promise((resolve) => setTimeout(resolve, 500));
+                    const row = await until(".o_list_view .o_data_row", "00 ZQX UI COMPARADOR PROPIO");
+                    row.querySelector(".o_list_record_selector input").click();
+                    (await until("button[name='action_add_to_rfq']")).click();
+                    await until(".modal .o_field_one2many .o_data_row td[name='cantidad']");
+                    await until(".modal button[name='action_confirm']");
+                    console.log("test successful");
+                } catch (e) {
+                    console.error(e.message);
+                }
+            })();
+        """, login=buyer.login)
+        self._open("action=dromax_asistente_compras.action_ai_v_comparador&id=%d&view_type=form" % comparador.id,
+                   ".o_form_view .o_field_one2many .o_data_row td[name='precio_final']", login=buyer.login)
+
     def test_analysis_lists(self):
+        matriz = self.env["res.company"].create({"name": "ZQX MATRIZ UI LISTAS"})
+        self.env["ir.config_parameter"].sudo().set_param(
+            "dromax_asistente_compras.matrix_company_id", str(matriz.id))
         buyer = new_test_user(self.env, login="ai_analisis_buyer_ui",
-                              groups="base.group_user,dromax_asistente_compras.group_ai_purchase_user")
+                              groups="base.group_user,dromax_asistente_compras.group_ai_purchase_user",
+                              company_id=self.env.company.id, company_ids=(self.env.company | matriz).ids)
         buyer.password = buyer.login
         product = self.env["product.product"].create({"name": "ZQX UI ANALISIS", "detailed_type": "product"})
         agotado = self.env["product.product"].create({"name": "ZQX UI AGOTADO", "detailed_type": "product"})
@@ -80,11 +141,13 @@ class TestUi(HttpCase):
                               "price_subtotal": 2, "price_subtotal_incl": 2}) for p in (product, agotado)],
         })
         order.write({"state": "paid", "date_order": order.date_order - timedelta(weeks=1)})
+        # La necesidad de compra es de la matriz: se ve con ella marcada en el selector de empresas.
+        cids = "&cids=%d-%d" % (self.env.company.id, matriz.id)
         for action, column in (("action_ai_v_faltantes", "cantidad_sugerida"),
                                ("action_ai_v_rotacion", "demanda_depurada"),
                                ("action_ai_v_stock", "disponible"),
                                ("action_ai_v_pendiente", "proxima_llegada")):
-            self._open("action=dromax_asistente_compras." + action,
+            self._open("action=dromax_asistente_compras." + action + cids,
                        ".o_list_view .o_data_row td[name='%s']" % column, login=buyer.login)
 
     def test_replenishment_screens(self):
@@ -135,8 +198,13 @@ class TestUi(HttpCase):
         self._open(action + "&view_type=graph", ".o_graph_renderer canvas", login=user.login)
 
     def test_proposal_screens(self):
+        # La propuesta es de la matriz: el comprador de Dromax la tiene como empresa activa.
+        matriz = self.env["res.company"].create({"name": "ZQX MATRIZ UI PROPUESTA"})
+        self.env["ir.config_parameter"].sudo().set_param(
+            "dromax_asistente_compras.matrix_company_id", str(matriz.id))
         buyer = new_test_user(self.env, login="ai_proposal_buyer_ui",
-                              groups="base.group_user,purchase.group_purchase_user")
+                              groups="base.group_user,purchase.group_purchase_user",
+                              company_id=matriz.id, company_ids=(matriz | self.env.company).ids)
         buyer.password = buyer.login
         product = self.env["product.product"].create({"name": "ZQX UI PROPUESTA [LAB UI]", "detailed_type": "product"})
         session = self.env["pos.session"].create({
@@ -265,40 +333,6 @@ const until = (sel, text) => new Promise((resolve, reject) => {
 })();
 """
 
-CHAT_TRANSFERS = """
-const until = (sel, text) => new Promise((resolve, reject) => {
-    let n = 0;
-    const t = setInterval(() => {
-        const el = [...document.querySelectorAll(sel)].find(e => !text || e.textContent.includes(text));
-        if (el) { clearInterval(t); resolve(el); }
-        else if (++n > 150) { clearInterval(t); reject(new Error("No apareció " + sel + " " + (text || ""))); }
-    }, 100);
-});
-(async () => {
-    try {
-        const input = await until(".o_ai_input");
-        input.value = "¿Qué conviene trasladar?";
-        input.dispatchEvent(new Event("input", { bubbles: true }));
-        (await until(".o_ai_send:not([disabled])")).click();
-        await until(".o_ai_msg_assistant", "Traslados revisados.");
-        const open = await until(".o_ai_open_proposal", "Ver traslados en la propuesta");
-        if (document.querySelector(".o_ai_generate_drafts")) {
-            throw new Error("Botón de borradores bajo la respuesta de traslados");
-        }
-        open.click();
-        await until(".o_list_view .o_data_row", "ZQX ORIGEN (5)");
-        await until(".o_searchview_facet", "Se cubre con traslado");
-        if ([...document.querySelectorAll(".o_data_row")].some(r => r.textContent.includes("ZQX UI SIN"))) {
-            throw new Error("Aparece una línea que no se cubre con traslado");
-        }
-        console.log("test successful");
-    } catch (e) {
-        console.error(e.message);
-    }
-})();
-"""
-
-
 @tagged("post_install", "-at_install", "dromax_asistente_compras")
 class TestChatUi(HttpCase):
     """Conversación completa en el navegador, con OpenRouter y la herramienta
@@ -357,34 +391,3 @@ class TestChatUi(HttpCase):
                             CHAT_PROPOSAL, login="ai_chat_ui_proposal")
         self.assertEqual(proposal.state, "in_review")
         self.assertEqual(proposal.purchase_order_ids.order_line.product_id, product)
-
-    def test_chat_transfer_buttons(self):
-        """Tras revisar los traslados: sin botón de borradores, y el de la propuesta
-        abre solo las líneas que se cubren con traslado."""
-        from unittest.mock import patch
-
-        from ..services import agent as agent_mod
-        from ..services import openrouter
-        from .test_chat import ScriptedTransport, text_response
-        from .test_proposal_chat import call_response
-
-        new_test_user(self.env, login="ai_chat_ui_transfer",
-                      groups="base.group_user,purchase.group_purchase_user")
-        self.env["ir.config_parameter"].sudo().set_param(
-            "dromax_asistente_compras.openrouter_api_key", "sk-or-test")
-        Product = self.env["product.product"]
-        moved = Product.create({"name": "ZQX UI TRASLADO", "detailed_type": "product"})
-        kept = Product.create({"name": "ZQX UI SIN EXCEDENTE", "detailed_type": "product"})
-        proposal = self.env["ai.purchase.proposal"].create({"name": "ZQX Propuesta UI", "line_ids": [(0, 0, {
-            "company_id": self.env.company.id, "product_id": p.id, "cantidad_sugerida": 2, "cantidad_final": 2,
-            "excedente_otras": excess, "farmacias_con_excedente": origin,
-        }) for p, excess, origin in [(moved, 5, "ZQX ORIGEN (5)"), (kept, 0, False)]]})
-        transport = ScriptedTransport(call_response("get_proposal", {"filtro": "se_cubre_con_traslado"}),
-                                      text_response("Traslados revisados."))
-        fake_tool = lambda env, name, args: {"propuesta": {"id": proposal.id}, "row_count": 1,
-                                             "lineas": [{"laboratorio": "LAB UI"}]}
-        with patch.object(openrouter, "Transport", lambda: transport), \
-                patch.object(agent_mod, "call_tool", fake_tool):
-            self.browser_js("/web#action=dromax_asistente_compras.action_ai_purchase_chat",
-                            CHAT_TRANSFERS, login="ai_chat_ui_transfer")
-        self.assertFalse(proposal.purchase_order_ids)

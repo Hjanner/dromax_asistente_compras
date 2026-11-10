@@ -72,31 +72,33 @@ CATALOG = {
         ],
     ),
     "ai_v_faltantes": (
-        "Lo que hace falta comprar: una fila por producto y farmacia con faltante > 0 "
-        "(demanda depurada × semanas de cobertura − stock − pendiente). Si no hay fila, no "
-        "hace falta pedirlo. Trae la droguería sugerida: la más barata que tiene toda la "
-        "cantidad (o la más barata si ninguna alcanza), prefiriendo precios coherentes con el "
-        "costo. Es la base de la propuesta de compra.",
+        "Lo que tiene que comprar Dromax (la sucursal matriz, que recibe todas las compras y "
+        "reparte a las farmacias) para toda la red: una fila por producto con faltante > 0. "
+        "Faltante = suma de lo que les falta a las farmacias + venta de Dromax × semanas de "
+        "cobertura − stock libre de Dromax − sus compras pendientes. Si no hay fila, no hace "
+        "falta comprarlo. Trae la droguería sugerida: la más barata que tiene toda la cantidad "
+        "(o la más barata si ninguna alcanza), prefiriendo precios coherentes con el costo. Es "
+        "la base de la propuesta de compra.",
         [
-            ("company_id", "sucursal (farmacia) que necesita el producto"),
-            ("farmacia", "nombre de la farmacia"),
+            ("company_id", "sucursal que compra (Dromax)"),
             ("product_id", "product_product.id"),
             ("product_tmpl_id", "product_template.id"),
             ("producto", "nombre del producto"),
             ("codigo", "código interno"),
-            ("demanda_semanal", "demanda depurada (ai_v_rotacion)"),
+            ("demanda_semanal", "venta semanal de toda la red (farmacias + Dromax, demanda depurada)"),
+            ("demanda_propia", "venta semanal de Dromax"),
             ("semanas_cobertura", "semanas de cobertura configuradas"),
-            ("necesidad", "demanda_semanal × semanas_cobertura"),
-            ("stock", "existencia actual; la negativa cuenta como 0"),
-            ("pendiente", "pendiente de recibir de órdenes confirmadas (ya restado)"),
+            ("faltas_farmacias", "suma de lo que les falta a las farmacias para la cobertura"),
+            ("farmacias_con_falta", "cuántas farmacias tienen falta"),
+            ("detalle_farmacias", "cuánto le falta a cada farmacia, p. ej. 'FARMAX (10), LA 45 (5)'"),
+            ("necesidad", "faltas_farmacias + demanda_propia × semanas_cobertura"),
+            ("stock", "stock libre de Dromax (sin lo que ya sale a las farmacias)"),
+            ("pendiente", "compras confirmadas de Dromax por recibir (ya restadas)"),
             ("atrasado", "parte de lo pendiente con la fecha prevista vencida"),
             ("en_solicitud", "unidades en solicitudes sin confirmar (no restadas): avisar"),
-            ("cobertura_actual", "semanas que cubren stock + pendiente: menor = más urgente"),
+            ("cobertura_actual", "semanas de venta de la red que cubren el stock libre y lo pendiente de Dromax"),
             ("faltante", "necesidad − stock − pendiente, con decimales"),
-            ("cantidad_sugerida", "faltante redondeado hacia arriba: la cantidad a pedir"),
-            ("excedente_otras", "stock de otras farmacias que pasa de varias semanas de su propia "
-                                "demanda: se podría trasladar en vez de comprar"),
-            ("farmacias_con_excedente", "qué farmacias tienen ese excedente y cuánto"),
+            ("cantidad_sugerida", "faltante redondeado hacia arriba: la cantidad a comprar"),
             ("drogueria_id", "droguería sugerida (id del contacto); NULL si ninguna lo ofrece"),
             ("drogueria", "nombre de la droguería sugerida"),
             ("precio", "precio final de la droguería sugerida"),
@@ -108,7 +110,7 @@ CATALOG = {
             ("droguerias_con_oferta", "cuántas droguerías tienen el producto disponible"),
             ("fecha_vencimiento", "vencimiento del lote ofrecido"),
             ("laboratorio", "laboratorio según la droguería sugerida (texto)"),
-            ("costo", "costo actual del producto en la farmacia"),
+            ("costo", "costo actual del producto en Dromax"),
             ("revisar_presentacion", "TRUE si el precio de la droguería pasa del triple del costo: "
                                      "posible empaque distinto con el mismo código; no comprar sin revisar"),
         ],
@@ -139,6 +141,38 @@ CATALOG = {
             ("disponible_matriz", "lo que la matriz puede repartir del producto entre todas las farmacias"),
             ("costo", "costo del producto en la matriz"),
             ("valor", "cantidad × costo: valor de la mercancía a trasladar"),
+        ],
+    ),
+    "ai_v_comparador": (
+        "Comparador de precios: una fila por producto (código de barras válido) con la oferta de "
+        "todas las droguerías ya resumida. Úsala para comparar droguerías: la mejor, la segunda y el "
+        "ahorro ya están calculados. Si precios_dispares es TRUE, probablemente es otra presentación "
+        "con el mismo código: no lo cuentes como ahorro. El detalle por droguería está en ai_v_oferta "
+        "(ai_v_oferta.comparador_id = ai_v_comparador.id).",
+        [
+            ("id", "id del producto en el comparador (= ai_v_oferta.comparador_id)"),
+            ("nombre", "nombre en nuestro catálogo o, si no lo tenemos, el de la droguería más barata"),
+            ("codigo_barras", "código de barras normalizado (EAN-13)"),
+            ("product_id", "product_product.id si está en nuestro catálogo; NULL si no"),
+            ("en_catalogo", "TRUE si lo tenemos en el catálogo"),
+            ("laboratorio", "laboratorio que informan más droguerías"),
+            ("droguerias_total", "droguerías que lo ofrecen (con o sin stock)"),
+            ("droguerias_con_stock", "droguerías con oferta disponible"),
+            ("drogueria_id", "droguería más barata (id del contacto)"),
+            ("descripcion", "descripción en la droguería más barata"),
+            ("mejor_precio", "precio final más bajo (con todos los descuentos)"),
+            ("descuentos", "descuentos de la más barata, p. ej. 12+12+0"),
+            ("stock_mejor", "stock de la más barata"),
+            ("vencimiento_mejor", "vencimiento del lote de la más barata"),
+            ("vence_pronto", "TRUE si ese lote vence en menos de 90 días"),
+            ("stock_bajo", "TRUE si la más barata tiene 1 o 2 unidades"),
+            ("segunda_drogueria_id", "segunda droguería más barata"),
+            ("segundo_precio", "precio de la segunda"),
+            ("ahorro", "segundo_precio − mejor_precio"),
+            ("ahorro_pct", "ahorro en % frente a la segunda"),
+            ("precio_max", "precio más alto entre las disponibles"),
+            ("precios_dispares", "TRUE si el más caro pasa del triple del más barato: posible otra presentación"),
+            ("stock_total", "stock sumado de las droguerías con oferta disponible"),
         ],
     ),
     "ai_v_oferta": (

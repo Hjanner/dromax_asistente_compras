@@ -1,0 +1,229 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_ai_v_comparador_tree" model="ir.ui.view">
+        <field name="name">ai.v.comparador.tree</field>
+        <field name="model">ai.v.comparador</field>
+        <field name="arch" type="xml">
+            <!-- Clic en una fila: el precio de cada droguería en una ventana emergente. -->
+            <tree create="0" edit="0" delete="0" decoration-warning="precios_dispares"
+                  decoration-muted="not drogueria_id" action="action_open_offers" type="object">
+                <header>
+                    <button name="action_add_to_rfq" type="object" class="btn-primary"
+                            string="Añadir a borrador de compra" groups="purchase.group_purchase_user"/>
+                </header>
+                <field name="nombre"/>
+                <field name="codigo_barras" optional="show"/>
+                <field name="laboratorio" optional="show"/>
+                <field name="en_catalogo" optional="hide"/>
+                <field name="droguerias_con_stock" string="Droguerías"/>
+                <field name="drogueria_id"/>
+                <field name="mejor_precio"/>
+                <field name="descuentos" optional="hide"/>
+                <field name="segunda_drogueria_id" optional="show"/>
+                <field name="segundo_precio" optional="show" invisible="not segunda_drogueria_id"/>
+                <field name="ahorro" optional="hide" invisible="not segunda_drogueria_id"/>
+                <field name="ahorro_pct" optional="show" invisible="not segunda_drogueria_id"/>
+                <field name="stock_mejor" optional="show"/>
+                <field name="vencimiento_mejor" optional="hide"/>
+                <field name="stock_total" optional="hide"/>
+                <field name="vence_pronto" optional="show"/>
+                <field name="stock_bajo" optional="show"/>
+                <field name="precios_dispares" optional="show"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- El visor: la oferta de cada droguería para este producto. -->
+    <record id="view_ai_v_comparador_form" model="ir.ui.view">
+        <field name="name">ai.v.comparador.form</field>
+        <field name="model">ai.v.comparador</field>
+        <field name="arch" type="xml">
+            <form create="0" edit="0" delete="0">
+                <sheet>
+                    <div class="oe_title">
+                        <h1><field name="nombre"/></h1>
+                        <div class="text-muted">
+                            <field name="codigo_barras" class="me-3"/>
+                            <field name="laboratorio"/>
+                        </div>
+                    </div>
+                    <div class="alert alert-warning" role="alert" invisible="not precios_dispares">
+                        Un precio pasa del triple de otro: probablemente alguna droguería vende otra
+                        presentación con el mismo código. Compara las descripciones antes de decidir.
+                    </div>
+                    <group>
+                        <group string="Mejor oferta">
+                            <field name="drogueria_id"/>
+                            <field name="mejor_precio"/>
+                            <field name="descuentos"/>
+                            <field name="stock_mejor"/>
+                            <field name="vencimiento_mejor"/>
+                            <field name="vence_pronto" invisible="not vence_pronto"/>
+                            <field name="stock_bajo" invisible="not stock_bajo"/>
+                        </group>
+                        <group string="Frente a las demás">
+                            <field name="segunda_drogueria_id"/>
+                            <field name="segundo_precio"/>
+                            <field name="ahorro"/>
+                            <field name="ahorro_pct"/>
+                            <field name="droguerias_con_stock"/>
+                            <field name="droguerias_total"/>
+                            <field name="product_id"/>
+                            <field name="precios_dispares" invisible="1"/>
+                        </group>
+                    </group>
+                    <field name="oferta_ids" readonly="1">
+                        <tree decoration-success="orden_precio == 1" decoration-muted="not disponible"
+                              decoration-danger="vencido" default_order="disponible desc, precio_final">
+                            <field name="orden_precio" string="Puesto"/>
+                            <field name="partner_id"/>
+                            <field name="descripcion"/>
+                            <field name="precio_lista"/>
+                            <field name="descuento_texto"/>
+                            <field name="descuento_pct"/>
+                            <field name="precio_final"/>
+                            <field name="stock_drogueria"/>
+                            <field name="fecha_vencimiento"/>
+                            <field name="laboratorio" optional="hide"/>
+                            <field name="vence_pronto" optional="show"/>
+                            <field name="stock_bajo" optional="show"/>
+                            <field name="disponible" column_invisible="True"/>
+                            <field name="vencido" column_invisible="True"/>
+                        </tree>
+                    </field>
+                    <div class="text-muted small">
+                        Oferta cargada el <field name="fecha_carga" class="d-inline"/>. Precio final con
+                        todos los descuentos de la droguería. Solo se comparan los lotes con stock, no
+                        vencidos y con código de barras válido.
+                    </div>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Ventana emergente al hacer clic en un producto: la mejor oferta de cada droguería. -->
+    <record id="view_ai_v_comparador_form_modal" model="ir.ui.view">
+        <field name="name">ai.v.comparador.form.modal</field>
+        <field name="model">ai.v.comparador</field>
+        <field name="priority">20</field>
+        <field name="arch" type="xml">
+            <form create="0" edit="0" delete="0">
+                <div class="text-muted mb-2">
+                    <field name="codigo_barras" class="me-3"/>
+                    <field name="laboratorio"/>
+                    <span invisible="not product_id" class="ms-3">En nuestro catálogo</span>
+                    <field name="product_id" invisible="1"/>
+                </div>
+                <div class="alert alert-warning py-2" role="alert" invisible="not precios_dispares">
+                    Un precio pasa del triple de otro: probablemente es otra presentación con el mismo
+                    código. Compara las descripciones.
+                </div>
+                <field name="precios_dispares" invisible="1"/>
+                <field name="mejores_ofertas_ids" readonly="1" nolabel="1">
+                    <tree decoration-success="orden_precio == 1" default_order="orden_precio">
+                        <field name="orden_precio" string="Puesto"/>
+                        <field name="partner_id"/>
+                        <field name="descripcion"/>
+                        <field name="precio_lista" optional="show"/>
+                        <field name="descuento_texto"/>
+                        <field name="precio_final"/>
+                        <field name="stock_drogueria"/>
+                        <field name="fecha_vencimiento"/>
+                        <field name="vence_pronto" optional="show"/>
+                        <field name="stock_bajo" optional="show"/>
+                    </tree>
+                </field>
+                <div class="text-muted small">
+                    La mejor oferta disponible de cada droguería (con stock, no vencida), con todos sus
+                    descuentos. Cargada el <field name="fecha_carga" class="d-inline"/>
+                </div>
+                <footer>
+                    <button name="action_add_to_rfq" type="object" string="Añadir a borrador de compra"
+                            class="btn-primary" groups="purchase.group_purchase_user"
+                            invisible="not product_id"/>
+                    <button string="Cerrar" special="cancel" class="btn-secondary"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <!-- Asistente: confirmar droguería y cantidad de los productos elegidos. -->
+    <record id="view_ai_comparador_pedido_form" model="ir.ui.view">
+        <field name="name">ai.comparador.pedido.form</field>
+        <field name="model">ai.comparador.pedido</field>
+        <field name="arch" type="xml">
+            <form>
+                <div class="text-muted mb-2">
+                    Se agregan a la orden en borrador de <field name="company_id" class="d-inline" readonly="1"/>
+                    con cada droguería que creó el comparador (si no hay, se crea una). Cambia la droguería
+                    o la cantidad si hace falta; con cantidad 0 el producto no se pide.
+                </div>
+                <div class="alert alert-info py-2" role="status" invisible="not sin_catalogo">
+                    Estos productos no están en nuestro catálogo y no se pueden pedir:
+                    <field name="sin_catalogo" class="d-block"/>
+                </div>
+                <field name="line_ids" nolabel="1">
+                    <tree editable="bottom" create="0">
+                        <field name="product_id" readonly="1" force_save="1"/>
+                        <field name="drogueria_opciones_ids" column_invisible="1"/>
+                        <field name="drogueria_id" options="{'no_create': True, 'no_open': True}"/>
+                        <field name="cantidad"/>
+                        <field name="precio" force_save="1"/>
+                        <field name="descuentos" force_save="1" optional="show"/>
+                        <field name="stock_drogueria" force_save="1" optional="show"/>
+                        <field name="fecha_vencimiento" force_save="1" optional="hide"/>
+                        <field name="subtotal" sum="Total"/>
+                    </tree>
+                </field>
+                <footer>
+                    <button name="action_confirm" type="object" string="Añadir a borrador de compra"
+                            class="btn-primary"/>
+                    <button string="Cancelar" special="cancel" class="btn-secondary"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_ai_v_comparador_search" model="ir.ui.view">
+        <field name="name">ai.v.comparador.search</field>
+        <field name="model">ai.v.comparador</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="nombre" string="Producto"
+                       filter_domain="['|', '|', ('nombre', 'ilike', self), ('descripcion', 'ilike', self), ('oferta_ids.descripcion', 'ilike', self)]"/>
+                <field name="codigo_barras"/>
+                <field name="laboratorio"/>
+                <field name="drogueria_id"/>
+                <filter name="con_stock" string="Con stock" domain="[('drogueria_id', '!=', False)]"/>
+                <filter name="varias" string="En 2 o más droguerías" domain="[('droguerias_con_stock', '>=', 2)]"/>
+                <filter name="en_catalogo" string="En nuestro catálogo" domain="[('en_catalogo', '=', True)]"/>
+                <separator/>
+                <filter name="ahorro_10" string="Ahorro de 10 % o más"
+                        domain="[('ahorro_pct', '>=', 10), ('precios_dispares', '=', False)]"/>
+                <filter name="dispares" string="Posible otra presentación" domain="[('precios_dispares', '=', True)]"/>
+                <filter name="vence_pronto" string="La más barata vence pronto" domain="[('vence_pronto', '=', True)]"/>
+                <filter name="stock_bajo" string="La más barata tiene poco stock" domain="[('stock_bajo', '=', True)]"/>
+                <group expand="0" string="Agrupar por">
+                    <filter name="group_laboratorio" string="Laboratorio" context="{'group_by': 'laboratorio'}"/>
+                    <filter name="group_drogueria" string="Droguería más barata" context="{'group_by': 'drogueria_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_ai_v_comparador" model="ir.actions.act_window">
+        <field name="name">Comparador de precios</field>
+        <field name="res_model">ai.v.comparador</field>
+        <field name="groups_id" eval="[(6, 0, [ref('group_ai_purchase_user')])]"/>
+        <field name="view_mode">tree,form</field>
+        <field name="search_view_id" ref="view_ai_v_comparador_search"/>
+        <field name="context">{'search_default_con_stock': 1}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_empty_folder">No hay ofertas de droguerías cargadas</p>
+            <p>Un producto por fila, con la oferta de todas las droguerías agrupada aunque cada una
+               lo escriba distinto. Ábrelo para ver el detalle de cada droguería.</p>
+        </field>
+    </record>
+
+</odoo>

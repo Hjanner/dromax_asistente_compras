@@ -7,11 +7,12 @@
 Agente de Compras IA para Dromax.
 
 - Flujo cotidiano: un cron precalcula los faltantes el lunes en la madrugada
-  y deja una propuesta semanal con todas las farmacias, organizada por
-  laboratorio (ai.purchase.proposal).
+  y deja la propuesta semanal de la sucursal matriz (Dromax), que compra para
+  toda la red, organizada por laboratorio (ai.purchase.proposal).
 - El comprador la revisa y ajusta en lenguaje natural desde el chat.
 - Un botón (nunca el modelo) la convierte en purchase.order en borrador,
-  una por farmacia y droguería.
+  una por droguería, a nombre de la matriz.
+- Reabastecimiento: la matriz reparte a las farmacias con traslados.
 - Previsto (fase 3, sin hacer): flujo dinámico con contexto externo
   (clima, brotes, epidemias).
 
@@ -21,7 +22,7 @@ cuando el comprador se lo pide; las órdenes en borrador las crea el botón.
     """,
     'author': "Hjanner",
     'category': 'Inventory/Purchase',
-    'version': '17.0.0.14.0',
+    'version': '17.0.0.16.0',
     'license': 'LGPL-3',
     'application': True,
     'installable': True,
@@ -43,6 +44,7 @@ cuando el comprador se lo pide; las órdenes en borrador las crea el botón.
         'views/res_config_settings_views.xml',
         'views/ai_purchase_chat_views.xml',
         'views/ai_v_oferta_views.xml',
+        'views/ai_v_comparador_views.xml',
         'views/ai_barcode_mismatch_views.xml',
         'views/ai_v_analisis_views.xml',
         'views/ai_purchase_proposal_views.xml',

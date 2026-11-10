@@ -176,7 +176,7 @@ En **Ajustes → Asistente de Compras IA** (o *Compras IA → Configuración*):
 | Modelos por nivel | Dejar los iniciales: básico `deepseek/deepseek-v4-flash`, medio `google/gemini-3.8-flash`, avanzado `anthropic/claude-opus-5.5`. |
 | Semanas de historial | 8 (provisional, a calibrar con el encargado de compras). |
 | Semanas de cobertura | 1 (la compra es semanal). |
-| Excedente a partir de (semanas) | 4. |
+| Sucursal matriz | La sucursal que recibe todas las compras y reparte a las farmacias (Dromax). Vacío: la que tenga DROMAX en el nombre. |
 | Campo de laboratorio | El nombre técnico del campo de laboratorio en el producto (el del módulo de laboratorios de Dromax). Vacío: se toma del texto entre corchetes del nombre («… [LETI]») o del que informa la droguería. |
 
 La llave de OpenRouter y la clave del rol quedan en los parámetros del
@@ -226,9 +226,15 @@ En **Ajustes → Técnico → Acciones planificadas**:
 - El asistente lo ven automáticamente los usuarios con **Compras / Usuario**
   y los administradores; no hay que marcar nada más.
 - Generar borradores de órdenes de compra requiere **Compras / Usuario**.
-- Como cualquier comprador puede comprar para cualquier farmacia, darles
-  **acceso a todas las farmacias** (empresas permitidas en su ficha). Cada uno
-  solo ve y pide las líneas de las farmacias a las que tiene acceso.
+- Toda compra la hace la sucursal matriz (Dromax): los compradores necesitan
+  **acceso a la matriz** (empresas permitidas en su ficha) para ver la
+  propuesta y generar las órdenes. Para el reabastecimiento, además, acceso a
+  las farmacias que reciben y el permiso **Inventario / Usuario**.
+  Como en el resto de Odoo, las pantallas muestran solo las empresas marcadas
+  en el selector de empresas (arriba a la derecha): la *Necesidad de compra*
+  y las líneas de la propuesta son de la matriz, así que hay que tenerla
+  marcada (lo natural es que los compradores tengan a Dromax como empresa
+  principal). El chat las ve igual, sin depender del selector.
 - Zona horaria de los usuarios y de las farmacias: `America/Caracas` (las
   semanas de venta se cuentan en hora local).
 - La configuración y el consumo de IA (*Compras IA → Configuración → Consumo
@@ -255,13 +261,14 @@ farmacéutico) son **exentos**:
 | Dónde | Qué debería verse |
 |---|---|
 | *Inventario → Productos → Oferta de droguerías* | Las filas de cada droguería. Un usuario sin permisos de administración puede verlas pero no editarlas ni borrarlas. |
-| *Compras IA → Oferta por producto* | Productos propios con oferta, cruzados por código de barras. Si sale vacío, revisar los códigos de barras de los productos. |
+| *Compras IA → Comparador de precios* | Un producto por fila con la droguería más barata, la segunda y el ahorro; al abrirlo, la oferta de cada droguería. |
+| *Compras IA → Oferta por droguería* | Productos propios con oferta, cruzados por código de barras. Si sale vacío, revisar los códigos de barras de los productos. |
 | *Compras IA → Códigos de barras* → **Actualizar reporte** | Las incoherencias entre los códigos propios y los de las droguerías, para corregir. |
-| *Compras IA → Análisis → Faltantes* | Productos por pedir con su droguería sugerida. |
+| *Compras IA → Análisis → Necesidad de compra* | Lo que tiene que comprar la matriz para toda la red, con la falta de cada farmacia y la droguería sugerida. |
 | *Compras IA → Reabastecimiento* | Lo que la sucursal matriz (Ajustes → *Sucursal matriz*; por defecto la que tenga DROMAX en el nombre) puede mandar a cada farmacia. Al elegir líneas, **Generar borradores de traslado** crea los *Traslados internos* en borrador; en cada uno, **Generar Traslados Definitivos**. Requiere Inventario / Usuario y el tipo *Traslados internos* activo en el almacén de la matriz. |
 | *Compras IA → Propuestas* → **Calcular propuesta** | La propuesta de la semana, agrupada por laboratorio. |
 | *Compras IA → Chat* → **Arma la compra de esta semana** | El resumen de la propuesta, con los botones **Generar todos los borradores** y **Abrir propuesta** debajo. |
-| *Compras IA → Chat* → **Revisa un laboratorio** → **Generar borradores de …** | Una solicitud de presupuesto en borrador por farmacia y droguería, en *Compras*, solo con ese laboratorio. |
+| *Compras IA → Chat* → **Revisa un laboratorio** → **Generar borradores de …** | Una solicitud de presupuesto en borrador de la matriz por droguería, en *Compras*, solo con ese laboratorio. |
 | *Compras IA → Configuración → Consumo de IA* | Una línea por cada llamada al modelo, con su costo. |
 
 ## 11. Actualizar más adelante
