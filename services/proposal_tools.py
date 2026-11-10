@@ -11,11 +11,12 @@ final, la droguería o la nota de líneas concretas, con las mismas reglas que
 la pantalla (write de la línea). Las órdenes de compra no: las genera el
 comprador con el botón.
 
-Las dos herramientas ven las líneas de todas las farmacias del usuario, no
-solo las marcadas en el selector de empresas: la compra no es estricta por
-farmacia.
+Toda compra la hace la sucursal matriz (Dromax) para toda la red: una línea
+por producto, con lo que le falta a cada farmacia en detalle_farmacias. Las
+farmacias se abastecen después desde la matriz con traslados (Compras IA →
+Reabastecimiento); entre farmacias no se traslada. Las herramientas ven todas
+las sucursales del usuario, no solo las marcadas en el selector de empresas.
 """
-import re
 
 from markupsafe import Markup, escape
 
@@ -28,9 +29,10 @@ GET_PROPOSAL = {
         "name": "get_proposal",
         "description": (
             "Lee la propuesta de compra semanal guardada (por defecto, la vigente). Sin filtros "
-            "devuelve el resumen: totales, farmacias, laboratorios de mayor monto, cuántas líneas "
-            "necesitan atención y las de mayor monto a revisar por presentación o que se pueden "
-            "cubrir con un traslado. Con algún filtro (laboratorio, buscar, farmacia o filtro) "
+            "devuelve el resumen: totales, laboratorios de mayor monto, cuántas líneas necesitan "
+            "atención y las de mayor monto a revisar por presentación. La compra es de la matriz "
+            "para toda la red: una línea por producto. Con algún filtro (laboratorio, buscar, "
+            "farmacia o filtro) "
             "devuelve las líneas que coinciden, cada una con su linea_id, cantidades, "
             "droguería, precio, motivo y las ofertas de las demás droguerías."
         ),
@@ -42,19 +44,17 @@ GET_PROPOSAL = {
                 "laboratorio": {"type": "string", "description": "Laboratorio (nombre o parte)."},
                 "buscar": {"type": "string",
                            "description": "Producto: parte del nombre, referencia o código de barras."},
-                "farmacia": {"type": "string", "description": "Farmacia (nombre o parte)."},
+                "farmacia": {"type": "string",
+                             "description": "Farmacia (nombre o parte): las líneas en que a esa farmacia le falta el producto."},
                 "filtro": {
                     "type": "string",
                     "enum": ["por_pedir", "ajustadas", "revisar_presentacion", "sin_drogueria",
-                             "con_excedente", "se_cubre_con_traslado", "en_solicitud", "pedidas"],
+                             "en_solicitud", "pedidas"],
                     "description": (
                         "por_pedir: con cantidad y droguería, aún sin orden; ajustadas: cambiadas "
                         "por el comprador; revisar_presentacion: precio de más del triple del "
-                        "costo; sin_drogueria: ninguna droguería lo ofrece; con_excedente: otra "
-                        "farmacia tiene de sobra; se_cubre_con_traslado: el excedente de otras "
-                        "farmacias alcanza para toda la cantidad final (de mayor a menor monto); "
-                        "en_solicitud: ya hay solicitudes sin confirmar; pedidas: ya están en una "
-                        "orden de compra."),
+                        "costo; sin_drogueria: ninguna droguería lo ofrece; en_solicitud: ya hay "
+                        "solicitudes sin confirmar; pedidas: ya están en una orden de compra."),
                 },
                 "limite": {"type": "integer", "description": "Máximo de líneas (por defecto 40, tope 80)."},
             },
@@ -111,45 +111,9 @@ FILTERS = {
     "ajustadas": [("ajustada", "=", True)],
     "revisar_presentacion": [("revisar_presentacion", "=", True)],
     "sin_drogueria": [("drogueria_id", "=", False)],
-    "con_excedente": [("excedente_otras", ">", 0)],
     "en_solicitud": [("en_solicitud", ">", 0)],
     "pedidas": [("purchase_line_id", "!=", False)],
-    "se_cubre_con_traslado": [("se_cubre_con_traslado", "=", True), ("purchase_line_id", "=", False)],
 }
-TRANSFER_FILTER = "se_cubre_con_traslado"
-
-
-# "FARMACIA A (12), FARMACIA B (3)", de mayor a menor excedente (ver ai_v_faltantes).
-EXCESS_ITEM = re.compile(r"(.+?) \((\d+)\)(?:, |$)")
-
-
-def _excess_origins(line):
-    """Farmacias con excedente del producto, de mayor a menor: [{'farmacia', 'excedente'}]."""
-    return [{"farmacia": name, "excedente": int(qty)}
-            for name, qty in EXCESS_ITEM.findall(line.farmacias_con_excedente or "")]
-
-
-def _transfer_origin(line):
-    """La farmacia con más excedente y si alcanza sola para la cantidad final."""
-    best = max(_excess_origins(line), key=lambda o: o["excedente"], default=None)
-    return best and best["farmacia"], bool(best and best["excedente"] >= line.cantidad_final)
-
-
-def _by_origin(lines):
-    """Lo que se deja de comprar por farmacia de origen, con las líneas que una sola farmacia cubre."""
-    totals, several = {}, 0
-    for line in lines:
-        origin, alone = _transfer_origin(line)
-        if not alone:
-            several += 1
-            continue
-        item = totals.setdefault(origin, {"farmacia": origin, "lineas": 0, "monto": 0.0})
-        item["lineas"] += 1
-        item["monto"] += line.monto
-    result = sorted(totals.values(), key=lambda i: -i["monto"])
-    for item in result:
-        item["monto"] = _money(item["monto"])
-    return result, several
 
 
 class ProposalToolError(Exception):
@@ -200,7 +164,7 @@ def _header(proposal):
 
 
 def _short_line(line, **extra):
-    item = {"linea_id": line.id, "producto": line.product_id.display_name, "farmacia": line.company_id.name,
+    item = {"linea_id": line.id, "producto": line.product_id.display_name,
             "cantidad_final": line.cantidad_final, "drogueria": line.drogueria_id.name or None,
             "precio": _money(line.precio), "monto": _money(line.monto)}
     item.update(extra)
@@ -210,15 +174,10 @@ def _short_line(line, **extra):
 def _summary(Line, base):
     count = lambda extra: Line.search_count(base + extra)
     [(lines, amount, suggested)] = Line._read_group(base, [], ["__count", "monto:sum", "monto_sugerido:sum"])
-    pharmacies = [{"farmacia": company.name, "lineas": n, "monto": _money(total)}
-                  for company, n, total in Line._read_group(
-                      base, ["company_id"], ["__count", "monto:sum"], order="monto:sum desc")]
     to_order = dict(Line._read_group(base + FILTERS["por_pedir"], ["laboratorio"], ["__count"]))
     review = dict(Line._read_group(base + FILTERS["revisar_presentacion"], ["laboratorio"], ["__count"]))
     labs = Line._read_group(base, ["laboratorio"], ["__count", "monto:sum"], order="monto:sum desc")
     review_lines = Line.search(base + FILTERS["revisar_presentacion"], order="monto desc", limit=TOP_ATTENTION)
-    # Traslados que cubren toda la cantidad: otra farmacia tiene al menos lo que se iba a pedir.
-    transfers = Line.search(base + FILTERS[TRANSFER_FILTER], order="monto desc, id")
     return {
         "lineas": lines,
         "monto_final": _money(amount),
@@ -226,19 +185,14 @@ def _summary(Line, base):
         "lineas_ajustadas": count(FILTERS["ajustadas"]),
         "en_cero": count([("cantidad_final", "=", 0)]),
         "atencion": {key: count(FILTERS[key]) for key in (
-            "por_pedir", "pedidas", "revisar_presentacion", "sin_drogueria", "con_excedente", "en_solicitud")},
-        "farmacias": pharmacies,
+            "por_pedir", "pedidas", "revisar_presentacion", "sin_drogueria", "en_solicitud")},
+        "compra": Line.search(base, limit=1).company_id.name or None,
         "laboratorios_total": len(labs),
         "laboratorios_mayor_monto": [{
             "laboratorio": lab, "lineas": n, "monto": _money(total),
             "por_pedir": to_order.get(lab, 0), "revisar_presentacion": review.get(lab, 0),
         } for lab, n, total in labs[:TOP_LABS]],
         "revisar_presentacion_mayor_monto": [_short_line(l, costo=_money(l.costo)) for l in review_lines],
-        "traslados_que_cubren_todo": len(transfers),
-        "monto_que_cubren_los_traslados": _money(sum(transfers.mapped("monto"))),
-        "traslados_mayor_monto": [_short_line(l, excedente_otras=l.excedente_otras,
-                                              origenes_excedente=_excess_origins(l))
-                                  for l in transfers[:TOP_ATTENTION]],
     }
 
 
@@ -264,11 +218,13 @@ def _offers(env, product_ids):
 def _line_dict(line, offers):
     item = {
         "linea_id": line.id,
-        "farmacia": line.company_id.name,
         "producto": line.product_id.display_name,
         "laboratorio": line.laboratorio,
-        "demanda_semanal": line.demanda,
-        "stock": line.stock,
+        "venta_semanal_red": line.demanda,
+        "falta_farmacias": line.faltas_farmacias,
+        "falta_por_farmacia": line.detalle_farmacias or None,
+        "venta_semanal_matriz": line.demanda_propia,
+        "stock_matriz": line.stock,
         "pendiente": line.pendiente,
         "cantidad_sugerida": line.cantidad_sugerida,
         "cantidad_final": line.cantidad_final,
@@ -284,10 +240,6 @@ def _line_dict(line, offers):
         item["drogueria_sugerida"] = line.drogueria_sugerida_id.name or None
     if line.en_solicitud:
         item["en_solicitud"] = line.en_solicitud
-    if line.excedente_otras:
-        origin, alone = _transfer_origin(line)
-        item.update(excedente_otras=line.excedente_otras, origenes_excedente=_excess_origins(line),
-                    origen_sugerido=origin, una_farmacia_alcanza=alone)
     if line.revisar_presentacion:
         item.update(revisar_presentacion=True, costo=_money(line.costo))
     if line.purchase_line_id:
@@ -313,7 +265,7 @@ def get_proposal(env, args):
     if (args.get("buscar") or "").strip():
         domain.append(("product_id", "ilike", args["buscar"].strip()))
     if (args.get("farmacia") or "").strip():
-        domain.append(("company_id", "ilike", args["farmacia"].strip()))
+        domain.append(("detalle_farmacias", "ilike", args["farmacia"].strip()))
     filtro = args.get("filtro")
     if filtro:
         if filtro not in FILTERS:
@@ -331,14 +283,9 @@ def get_proposal(env, args):
         limit = min(max(int(args.get("limite") or DEFAULT_LINES), 1), MAX_LINES)
     except (TypeError, ValueError):
         limit = DEFAULT_LINES
-    if filtro == TRANSFER_FILTER:
-        matching = Line.search(domain, order="monto desc, id")
-        found, amount, lines = len(matching), sum(matching.mapped("monto")), matching[:limit]
-        result["por_farmacia_origen"], result["lineas_que_necesitan_varias_farmacias"] = _by_origin(matching)
-    else:
-        found = Line.search_count(domain)
-        [(amount,)] = Line._read_group(domain, [], ["monto:sum"])
-        lines = Line.search(domain, limit=limit)
+    found = Line.search_count(domain)
+    [(amount,)] = Line._read_group(domain, [], ["monto:sum"])
+    lines = Line.search(domain, limit=limit)
     offers = _offers(env, lines.product_id.ids)
     result.update(
         lineas_encontradas=found,

@@ -44,16 +44,10 @@ class ResConfigSettings(models.TransientModel):
         help="Nombre técnico del campo del producto con el laboratorio (p. ej. el del módulo de "
              "laboratorios de Dromax). Vacío: se toma del texto entre corchetes al final del "
              "nombre o, si no hay, del que informa la droguería.")
-    ai_purchase_excess_weeks = fields.Integer(
-        "Excedente a partir de (semanas)", config_parameter=PARAM_PREFIX + "excess_weeks",
-        default=prompt.DEFAULT_EXCESS_WEEKS,
-        help="Otra farmacia tiene excedente de un producto si su stock pasa de estas semanas "
-             "de su propia demanda.")
-
     ai_purchase_matrix_company_id = fields.Many2one(
         "res.company", "Sucursal matriz", config_parameter=PARAM_PREFIX + "matrix_company_id",
-        help="Sucursal que reabastece a las farmacias con traslados (Compras IA → Reabastecimiento). "
-             "Vacío: la que tenga DROMAX en el nombre.")
+        help="Sucursal que recibe todas las compras y reabastece a las farmacias con traslados "
+             "(Compras IA → Reabastecimiento). Vacío: la que tenga DROMAX en el nombre.")
 
     def action_ai_purchase_test_openrouter(self):
         """Comprueba la llave guardada y muestra su tope de crédito y consumo."""

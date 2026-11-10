@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
 """Propuesta de compra semanal.
 
-Una propuesta por semana con todas las farmacias: una línea por producto y
-farmacia de ai_v_faltantes, guardada como foto del momento (demanda, stock,
-pendiente, droguería y precio). Se organiza por laboratorio en las líneas, no
+Una propuesta por semana: toda compra la hace la sucursal matriz (Dromax)
+para toda la red y después reparte a las farmacias con traslados (Compras IA
+→ Reabastecimiento). Una línea por producto de ai_v_faltantes, guardada como
+foto del momento (falta en cada farmacia, venta propia de la matriz, stock y
+compras pendientes de la matriz, droguería y precio). Se organiza por laboratorio en las líneas, no
 en propuestas separadas: con datos reales salen cerca de 200 laboratorios con
 una mediana de 3 líneas cada uno.
 
@@ -12,10 +14,10 @@ cantidad y la droguería sugeridas quedan fijas, para medir cuánto corrige el
 comprador al agente.
 
 Borradores (action_create_rfq, botón del comprador, nunca del modelo): una
-orden de compra en borrador por farmacia y droguería, con las líneas que
-tienen cantidad final y droguería. Se puede hacer por partes (p. ej. un
-laboratorio el lunes y otro el martes): lo nuevo se suma al borrador que esta
-misma propuesta ya creó para esa farmacia y droguería; los borradores hechos a
+orden de compra en borrador por droguería, a nombre de la matriz, con las
+líneas que tienen cantidad final y droguería. Se puede hacer por partes (p. ej.
+un laboratorio el lunes y otro el martes): lo nuevo se suma al borrador que
+esta misma propuesta ya creó para esa droguería; los borradores hechos a
 mano no se tocan. Las líneas marcadas para revisar la presentación no entran
 hasta que el comprador cambie su cantidad o su droguería. Cuando no queda
 nada por pedir, la propuesta pasa a "Convertida en borradores".
@@ -227,20 +229,14 @@ class AiPurchaseProposal(models.Model):
             raise UserError(_("Una propuesta ya convertida en borradores no se puede descartar."))
         self.write({"state": "discarded"})
 
-    def action_open_lines(self, transfers=False):
-        """Las líneas de la propuesta; con `transfers`, solo las que se cubren con traslado
-        y con las farmacias de origen a la vista (botón del chat tras «¿Qué conviene trasladar?»)."""
+    def action_open_lines(self):
+        """Las líneas de la propuesta, agrupadas por laboratorio."""
         self.ensure_one()
         action = self.env["ir.actions.act_window"]._for_xml_id(
             "dromax_asistente_compras.action_ai_purchase_proposal_line")
         action["domain"] = [("proposal_id", "=", self.id)]
         action["context"] = {"search_default_group_laboratorio": 1, "default_proposal_id": self.id}
         action["name"] = self.name
-        if transfers:
-            action["context"] = {"search_default_se_cubre_con_traslado": 1, "default_proposal_id": self.id}
-            action["name"] = _("%s: se cubre con traslado", self.name)
-            action["views"] = [(self.env.ref(
-                "dromax_asistente_compras.view_ai_purchase_proposal_line_tree_transfer").id, "tree")]
         return action
 
 
@@ -253,16 +249,20 @@ class AiPurchaseProposalLine(models.Model):
     proposal_id = fields.Many2one("ai.purchase.proposal", "Propuesta", required=True, ondelete="cascade",
                                   index=True, readonly=True)
     state = fields.Selection(related="proposal_id.state")
-    company_id = fields.Many2one("res.company", "Farmacia", required=True, readonly=True, index=True)
+    company_id = fields.Many2one("res.company", "Compra", required=True, readonly=True, index=True,
+                                 help="Sucursal matriz, que compra para toda la red.")
     product_id = fields.Many2one("product.product", "Producto", required=True, readonly=True, index=True)
     laboratorio = fields.Char("Laboratorio", readonly=True)
-    demanda = fields.Float("Demanda semanal", readonly=True, help="Demanda depurada de la rotación.")
-    stock = fields.Float("Stock", readonly=True)
-    pendiente = fields.Float("Pendiente de recibir", readonly=True)
+    demanda = fields.Float("Venta semanal de la red", readonly=True,
+                           help="Demanda depurada de las farmacias más la de la matriz.")
+    demanda_propia = fields.Float("Venta semanal de la matriz", readonly=True)
+    faltas_farmacias = fields.Integer("Falta en las farmacias", readonly=True)
+    detalle_farmacias = fields.Char("Falta por farmacia", readonly=True,
+                                    help="Cuánto le falta a cada farmacia, de mayor a menor.")
+    stock = fields.Float("Stock libre en la matriz", readonly=True)
+    pendiente = fields.Float("Compras pendientes", readonly=True)
     en_solicitud = fields.Float("En solicitudes sin confirmar", readonly=True)
     cobertura_actual = fields.Float("Cobertura actual (semanas)", readonly=True)
-    excedente_otras = fields.Float("Excedente en otras farmacias", readonly=True)
-    farmacias_con_excedente = fields.Char("Farmacias con excedente", readonly=True)
     costo = fields.Float("Costo actual", readonly=True)
     cantidad_sugerida = fields.Integer("Cantidad sugerida", readonly=True)
     cantidad_final = fields.Integer("Cantidad final", help="Lo que se va a pedir; 0 = no pedir.")
@@ -288,9 +288,6 @@ class AiPurchaseProposalLine(models.Model):
     monto_sugerido = fields.Float("Monto sugerido", compute="_compute_montos", store=True)
     ajustada = fields.Boolean("Ajustada", compute="_compute_montos", store=True,
                               help="El comprador cambió la cantidad o la droguería.")
-    se_cubre_con_traslado = fields.Boolean(
-        "Se cubre con traslado", compute="_compute_se_cubre_con_traslado", store=True,
-        help="El excedente de otras farmacias alcanza para toda la cantidad final.")
 
     @api.depends("cantidad_final", "precio", "cantidad_sugerida", "precio_sugerido",
                  "drogueria_id", "drogueria_sugerida_id")
@@ -300,11 +297,6 @@ class AiPurchaseProposalLine(models.Model):
             line.monto_sugerido = line.cantidad_sugerida * line.precio_sugerido
             line.ajustada = (line.cantidad_final != line.cantidad_sugerida
                              or line.drogueria_id != line.drogueria_sugerida_id)
-
-    @api.depends("cantidad_final", "excedente_otras")
-    def _compute_se_cubre_con_traslado(self):
-        for line in self:
-            line.se_cubre_con_traslado = 0 < line.cantidad_final <= line.excedente_otras
 
     @api.depends("product_id")
     def _compute_drogueria_opciones(self):
@@ -324,13 +316,17 @@ class AiPurchaseProposalLine(models.Model):
     @api.model
     def _values_from_shortage(self, row, lab):
         """Valores de una línea a partir de una fila de ai_v_faltantes."""
-        reason = _("Demanda %(d)s/sem × %(c)s sem − stock %(s)s − pendiente %(p)s = %(f)s.",
-                   d=_num(row["demanda_semanal"]), c=row["semanas_cobertura"], s=_num(row["stock"]),
-                   p=_num(row["pendiente"]), f=_num(row["faltante"]))
+        parts = []
+        if row["faltas_farmacias"]:
+            parts.append(_("farmacias %(f)s (%(d)s)", f=row["faltas_farmacias"], d=row["detalle_farmacias"]))
+        if row["demanda_propia"]:
+            parts.append(_("venta propia %(d)s/sem × %(c)s sem",
+                           d=_num(row["demanda_propia"]), c=row["semanas_cobertura"]))
+        reason = _("Falta: %(partes)s − stock %(s)s − pendiente %(p)s = %(f)s.",
+                   partes=" + ".join(parts), s=_num(row["stock"]), p=_num(row["pendiente"]),
+                   f=_num(row["faltante"]))
         if row["en_solicitud"]:
             reason += " " + _("Ya hay %s en solicitudes sin confirmar.", _num(row["en_solicitud"]))
-        if row["farmacias_con_excedente"]:
-            reason += " " + _("Excedente en otras farmacias: %s.", row["farmacias_con_excedente"])
         if not row["drogueria_id"]:
             reason += " " + _("Ninguna droguería lo ofrece.")
         elif row["revisar_presentacion"]:
@@ -343,12 +339,13 @@ class AiPurchaseProposalLine(models.Model):
             "product_id": row["product_id"],
             "laboratorio": lab or (row["laboratorio"] or "").strip().upper() or NO_LAB,
             "demanda": row["demanda_semanal"],
+            "demanda_propia": row["demanda_propia"],
+            "faltas_farmacias": row["faltas_farmacias"],
+            "detalle_farmacias": row["detalle_farmacias"],
             "stock": row["stock"],
             "pendiente": row["pendiente"],
             "en_solicitud": row["en_solicitud"],
             "cobertura_actual": row["cobertura_actual"],
-            "excedente_otras": row["excedente_otras"],
-            "farmacias_con_excedente": row["farmacias_con_excedente"],
             "costo": row["costo"] or 0.0,
             "cantidad_sugerida": row["cantidad_sugerida"],
             "cantidad_final": row["cantidad_sugerida"],
@@ -436,7 +433,7 @@ class AiPurchaseProposalLine(models.Model):
                 "su cantidad o su droguería.", len(review)))
         missing = lines.company_id - self.env.user.company_ids
         if missing:
-            raise UserError(_("No tienes acceso a: %s. Pide acceso a esas farmacias o quita sus líneas.",
+            raise UserError(_("No tienes acceso a: %s. Pide acceso a esa sucursal para generar las órdenes.",
                               ", ".join(missing.mapped("name"))))
 
         groups = {}

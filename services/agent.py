@@ -18,7 +18,7 @@ import time
 from .config import get_agent_max_steps
 from .openrouter import OpenRouterClient, OpenRouterError, resolve_level
 from .prompt import build_system_prompt
-from .proposal_tools import TRANSFER_FILTER, answer_laboratories
+from .proposal_tools import answer_laboratories
 from .tools import call_tool, tool_definitions
 
 _logger = logging.getLogger(__name__)
@@ -91,9 +91,9 @@ def run_agent(env, user_text, history=(), level=None, task=None, transport=None)
     history: [{'role': 'user'|'assistant', 'content': str}, ...] en orden.
     Devuelve {'state', 'content', 'level', 'model', 'tool_trace', 'prompt_tokens',
     'completion_tokens', 'cost', 'duration_ms', 'proposal_id', 'laboratorio', 'vista'}
-    (la propuesta que leyó o ajustó, para mostrar sus botones bajo la respuesta; su
-    laboratorio si solo trató uno: el botón genera entonces solo esos borradores; y
-    'traslados' si revisó lo que se cubre con traslado: sin botón de borradores).
+    (la propuesta que leyó o ajustó, para mostrar sus botones bajo la respuesta, y su
+    laboratorio si solo trató uno: el botón genera entonces solo esos borradores.
+    'vista' queda en False: era para los traslados entre farmacias, que ya no existen).
     """
     started = time.monotonic()
     level = resolve_level(level, task)
@@ -142,8 +142,6 @@ def run_agent(env, user_text, history=(), level=None, task=None, transport=None)
                 out["tool_trace"].append(_trace_entry(fn.get("name"), args, result))
                 if isinstance(result.get("propuesta"), dict):
                     out["proposal_id"] = result["propuesta"].get("id") or out["proposal_id"]
-                    if fn.get("name") == "get_proposal" and args.get("filtro") == TRANSFER_FILTER:
-                        out["vista"] = "traslados"
                     found = answer_laboratories(result)
                     labs = None if labs is None or found is None else labs | found
                 content = _tool_content(result)

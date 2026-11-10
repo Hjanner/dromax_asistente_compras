@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 """Reabastecimiento desde la sucursal matriz (ai.v.reabastecimiento)."""
-from odoo import Command
 from odoo.exceptions import AccessError, UserError
 from odoo.tests.common import new_test_user, tagged
 
@@ -16,9 +15,7 @@ class TestReabastecimiento(AnalisisCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        Company = cls.env["res.company"]
-        cls.matriz = Company.create({"name": "ZQX MATRIZ"})
-        cls.otra = Company.create({"name": "ZQX FARMACIA 2"})
+        cls.otra = cls.env["res.company"].create({"name": "ZQX FARMACIA 2"})   # la matriz viene de AnalisisCase
         cls.env["ir.config_parameter"].sudo().set_param(MATRIX_PARAM, str(cls.matriz.id))
         cls.wh_matriz = cls.env["stock.warehouse"].search([("company_id", "=", cls.matriz.id)], limit=1)
         cls.wh_matriz.int_type_id.active = True
@@ -32,14 +29,7 @@ class TestReabastecimiento(AnalisisCase):
             allowed_company_ids=companies.ids)
 
     def _so(self, company, product, qty, weeks=8):
-        """Venta semanal de `qty` en `company` por pedidos de venta (las del TPV son de la empresa actual)."""
-        for weeks_ago in range(1, weeks + 1):
-            order = self.env["sale.order"].with_company(company).create({
-                "partner_id": self.cliente.id, "company_id": company.id,
-                "order_line": [Command.create({"product_id": product.id, "product_uom_qty": qty})],
-            })
-            order.action_confirm()
-            order.date_order = self._week_date(weeks_ago)
+        self._so_weekly(company, product, qty, weeks)
 
     def _rows(self, product):
         self.env.flush_all()

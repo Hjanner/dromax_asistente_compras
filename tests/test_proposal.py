@@ -20,7 +20,7 @@ class TestProposal(AnalisisCase):
         cls.drog_b = Partner.create({"name": "ZQX DROG B", "is_company": True})
         cls.buyer = new_test_user(cls.env, login="ai_proposal_buyer",
                                   groups="base.group_user,dromax_asistente_compras.group_ai_purchase_user",
-                                  company_id=cls.company.id, company_ids=[cls.company.id])
+                                  company_id=cls.company.id, company_ids=[cls.company.id, cls.matriz.id])
         cls.Proposal = cls.env["ai.purchase.proposal"]
 
     def _generate(self):
@@ -36,22 +36,26 @@ class TestProposal(AnalisisCase):
         self._offer(self.drog_a, self.ibuprofeno, 1.5, 100, lab="OTRO LAB", discount=10)
         self._offer(self.drog_b, self.ibuprofeno, 2.0, 100)
         self._weekly_sales(self.ibuprofeno, 10)
-        self._set_stock(self.ibuprofeno, 3)
+        self._set_stock(self.ibuprofeno, 3)                             # a la farmacia le faltan 7
+        self._so_weekly(self.matriz, self.ibuprofeno, 1)                # la matriz vende 1/sem
+        self._set_stock(self.ibuprofeno, 2, company=self.matriz)
         proposal = self._generate()
         self.assertEqual(proposal.state, "ready")
         self.assertEqual((proposal.window_weeks, proposal.coverage_weeks), (8, 1))
         self.assertTrue(proposal.offer_date)
         self.assertTrue(proposal.name.startswith("Compra de la semana del"))
         line = self._line(proposal, self.ibuprofeno)
-        self.assertEqual(line.company_id, self.company)
+        self.assertEqual(line.company_id, self.matriz)                   # compra la matriz
         self.assertEqual(line.laboratorio, "LAB ZQX")                      # del nombre, no de la droguería
-        self.assertEqual((line.demanda, line.stock, line.pendiente), (10, 3, 0))
-        self.assertEqual((line.cantidad_sugerida, line.cantidad_final), (7, 7))
+        self.assertEqual((line.demanda, line.demanda_propia, line.stock, line.pendiente), (11, 1, 2, 0))
+        self.assertEqual((line.faltas_farmacias, line.detalle_farmacias), (7, "%s (7)" % self.company.name))
+        self.assertEqual((line.cantidad_sugerida, line.cantidad_final), (6, 6))   # 7 + 1 − 2
         self.assertEqual((line.drogueria_sugerida_id, line.drogueria_id), (self.drog_a, self.drog_a))
         self.assertEqual((line.precio_sugerido, line.precio, line.descuento), (1.5, 1.5, 10))
-        self.assertEqual((line.monto, line.monto_sugerido), (10.5, 10.5))
+        self.assertEqual((line.monto, line.monto_sugerido), (9.0, 9.0))
         self.assertFalse(line.ajustada)
-        self.assertIn("Demanda 10/sem × 1 sem − stock 3 − pendiente 0 = 7.", line.motivo)
+        self.assertIn("Falta: farmacias 7 (%s (7)) + venta propia 1/sem × 1 sem − stock 2 − pendiente 0 = 6."
+                      % self.company.name, line.motivo)
         self.assertEqual(line.drogueria_opciones_ids, self.drog_a | self.drog_b)
 
     def test_laboratory_sources(self):
@@ -118,27 +122,22 @@ class TestProposal(AnalisisCase):
         lines[1].cantidad_final -= 5
         self.assertAlmostEqual(proposal.adjustment_pct, base + 100.0 * 10 / total)
 
-    def test_buyer_generates_for_all_pharmacies(self):
+    def test_buyer_generates_for_the_network(self):
         otra = self.env["res.company"].create({"name": "ZQX FARMACIA 2"})
-        self._set_stock(self.ibuprofeno, 30, company=otra)
+        self._set_stock(self.ibuprofeno, 30, company=otra)             # lo que le sobra no cubre a otra
         self._weekly_sales(self.ibuprofeno, 10)
         self.env.flush_all()
         action = self.Proposal.with_user(self.buyer).action_generate()
         proposal = self.Proposal.browse(action["res_id"])
-        self.assertEqual(self._line(proposal, self.ibuprofeno).excedente_otras, 30)
-        # El comprador solo ve las líneas de sus farmacias.
-        lines = self.env["ai.purchase.proposal.line"].with_user(self.buyer).search([("proposal_id", "=", proposal.id)])
-        self.assertEqual(lines.company_id, self.company)
-        # Al ajustar su línea, los totales siguen contando las de todas las farmacias.
-        self.env["ai.purchase.proposal.line"].create({
-            "proposal_id": proposal.id, "company_id": otra.id, "product_id": self.vitamina.id,
-            "cantidad_sugerida": 1, "cantidad_final": 1})
-        total = proposal.line_count
-        own = self.env["ai.purchase.proposal.line"].with_user(self.buyer).search([("proposal_id", "=", proposal.id)])
-        self.assertLess(len(own), total)
-        own.cantidad_final = 99
-        self.env.invalidate_all()
-        self.assertEqual(proposal.line_count, total)
+        line = self._line(proposal, self.ibuprofeno)
+        self.assertEqual((line.company_id, line.cantidad_sugerida), (self.matriz, 10))
+        # Las líneas son de la matriz: quien no tiene acceso a ella no las ve.
+        Line = self.env["ai.purchase.proposal.line"]
+        self.assertIn(line, Line.with_user(self.buyer).search([("proposal_id", "=", proposal.id)]))
+        sin_matriz = new_test_user(self.env, login="ai_proposal_sin_matriz",
+                                   groups="base.group_user,dromax_asistente_compras.group_ai_purchase_user",
+                                   company_id=self.company.id, company_ids=[self.company.id])
+        self.assertFalse(Line.with_user(sin_matriz).search([("proposal_id", "=", proposal.id)]))
         outsider = new_test_user(self.env, login="ai_proposal_outsider", groups="base.group_user")
         with self.assertRaises(AccessError):
             self.Proposal.with_user(outsider).action_generate()
@@ -158,7 +157,7 @@ class TestProposal(AnalisisCase):
     # -- borradores -------------------------------------------------------------
 
     def _purchase_buyer(self, companies=None):
-        companies = companies or self.company
+        companies = companies or self.matriz
         return new_test_user(self.env, login="ai_proposal_purchase_%s" % len(companies),
                              groups="base.group_user,purchase.group_purchase_user",
                              company_id=companies[0].id, company_ids=companies.ids)
@@ -174,20 +173,20 @@ class TestProposal(AnalisisCase):
         ibu.cantidad_final = 12
         # Solo estas dos líneas entran en el borrador; el resto de la propuesta, a 0.
         (proposal.line_ids - ibu - vit).cantidad_final = 0
-        buyer = self._purchase_buyer(self.company | otra)
+        buyer = self._purchase_buyer(self.matriz | otra)
         action = proposal.with_user(buyer).action_create_rfq()
         orders = proposal.purchase_order_ids
         self.assertEqual(len(orders), 2)                               # una por droguería
         self.assertEqual(set(action["domain"][0][2]), set(orders.ids))
         order_a = orders.filtered(lambda o: o.partner_id == self.drog_a)
-        self.assertEqual((order_a.state, order_a.company_id, order_a.origin), ("draft", self.company, proposal.name))
+        self.assertEqual((order_a.state, order_a.company_id, order_a.origin), ("draft", self.matriz, proposal.name))
         self.assertEqual(order_a.user_id, buyer)
         po_line = order_a.order_line
         self.assertEqual((po_line.product_id, po_line.product_qty, po_line.price_unit), (self.ibuprofeno, 12, 1.5))
         self.assertEqual(po_line.product_uom, self.ibuprofeno.uom_id)
         # Los mismos impuestos y descripción que pondría Odoo al elegir el producto a mano.
         self.assertEqual(po_line.taxes_id, self.ibuprofeno.supplier_taxes_id.filtered(
-            lambda t: t.company_id == self.company))
+            lambda t: t.company_id == self.matriz))
         self.assertIn("ZQX IBUPROFENO 400MG", po_line.name)
         self.assertTrue(po_line.date_planned)
         self.assertEqual(ibu.purchase_line_id, po_line)
@@ -195,7 +194,7 @@ class TestProposal(AnalisisCase):
         self.assertEqual(proposal.state, "done")
         self.assertIn(order_a.name, proposal.message_ids[0].body)
         # Las solicitudes nuevas se ven como "en solicitud" en los análisis.
-        self.assertEqual(self._row("ai.v.pendiente", self.ibuprofeno).en_solicitud, 12)
+        self.assertEqual(self._row("ai.v.pendiente", self.ibuprofeno, company=self.matriz).en_solicitud, 12)
 
     def test_create_rfq_in_parts(self):
         self._offer(self.drog_a, self.ibuprofeno, 1.5, 100)
@@ -221,7 +220,7 @@ class TestProposal(AnalisisCase):
         self.assertEqual(proposal.state, "done")
 
     def test_create_rfq_skips_lines_to_review(self):
-        self.ibuprofeno.with_company(self.company).standard_price = 1.0
+        self.ibuprofeno.with_company(self.matriz).standard_price = 1.0
         self._offer(self.drog_a, self.ibuprofeno, 45.0, 100)            # dispensador con el mismo código
         self._weekly_sales(self.ibuprofeno, 10)
         proposal = self._generate()
@@ -244,7 +243,7 @@ class TestProposal(AnalisisCase):
         (proposal.line_ids - line).cantidad_final = 0
         with self.assertRaisesRegex(AccessError, "permiso de Compras"):
             proposal.with_user(self.buyer).action_create_rfq()          # asistente sí, compras no
-        # Un comprador de una sola farmacia pide lo suyo; la propuesta sigue abierta por la otra.
+        # Una línea de una sucursal a la que el comprador no tiene acceso no se pide: la propuesta sigue abierta.
         other = self.env["ai.purchase.proposal.line"].create({
             "proposal_id": proposal.id, "company_id": otra.id, "product_id": self.vitamina.id,
             "cantidad_sugerida": 2, "cantidad_final": 2, "drogueria_id": self.drog_a.id, "precio": 1.0})

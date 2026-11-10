@@ -4,19 +4,10 @@ from collections import defaultdict
 from odoo import _, fields, models, tools
 from odoo.exceptions import AccessError, UserError
 
-from ..services.config import PARAM_PREFIX
+from ..services.network_sql import MATRIX_PARAM, network_ctes  # noqa: F401 (MATRIX_PARAM lo usan los tests)
 from ..services.prompt import DEFAULT_COVERAGE_WEEKS
 from .ai_v_oferta import grant_readonly
 from .ai_v_rotacion import _int_param
-
-MATRIX_PARAM = PARAM_PREFIX + "matrix_company_id"
-
-# Sucursal matriz: la del ajuste si existe; si no, la primera empresa con
-# «DROMAX» en el nombre (la droguería que distribuye a las farmacias).
-MATRIX_SQL = """COALESCE(
-    (SELECT c.id FROM res_company c
-      WHERE c.id::text = (SELECT trim(value) FROM ir_config_parameter WHERE key = '%s')),
-    (SELECT c.id FROM res_company c WHERE c.name ILIKE '%%DROMAX%%' ORDER BY c.id LIMIT 1))""" % MATRIX_PARAM
 
 
 class AiVReabastecimiento(models.Model):
@@ -84,70 +75,13 @@ class AiVReabastecimiento(models.Model):
         tools.drop_view_if_exists(self.env.cr, self._table)
         self.env.cr.execute("""
             CREATE VIEW ai_v_reabastecimiento AS
-            WITH params AS MATERIALIZED (
-                SELECT %(cobertura)s AS semanas, %(matriz)s AS matriz_id
-            ),
-            -- Materializadas: se usan dos veces y, si no, Postgres las recalcula
-            -- por cada fila de la unión (ai_v_rotacion es la parte cara).
-            rot AS MATERIALIZED (
-                SELECT company_id, product_id, demanda_depurada, demanda_media FROM ai_v_rotacion
-            ),
-            stk AS MATERIALIZED (
-                SELECT company_id, product_id, stock FROM ai_v_stock
-            ),
-            en_camino AS (
-                -- Llega a una ubicación interna de la farmacia desde otra sucursal o
-                -- desde tránsito (no cuenta los pasos internos de la propia farmacia
-                -- ni las recepciones de compra, que ya están en ai_v_pendiente).
-                SELECT ld.company_id, m.product_id, sum(m.product_qty) AS cantidad
-                  FROM stock_move m
-                  JOIN stock_location ld ON ld.id = m.location_dest_id AND ld.usage = 'internal'
-                  JOIN stock_location ls ON ls.id = m.location_id
-                 WHERE m.state NOT IN ('done', 'cancel')
-                   AND (ls.usage = 'transit' OR (ls.usage = 'internal' AND ls.company_id <> ld.company_id))
-                 GROUP BY 1, 2
-            ),
-            sale AS (
-                -- Sale de una ubicación interna hacia tránsito u otra sucursal.
-                SELECT ls.company_id, m.product_id, sum(m.product_qty) AS cantidad
-                  FROM stock_move m
-                  JOIN stock_location ls ON ls.id = m.location_id AND ls.usage = 'internal'
-                  JOIN stock_location ld ON ld.id = m.location_dest_id
-                 WHERE m.state NOT IN ('done', 'cancel')
-                   AND (ld.usage = 'transit' OR (ld.usage = 'internal' AND ld.company_id <> ls.company_id))
-                 GROUP BY 1, 2
-            ),
-            destinos AS (
-                SELECT r.company_id, r.product_id,
-                       greatest(COALESCE(s.stock, 0), 0) AS stock,
-                       COALESCE(p.pendiente, 0) AS pendiente,
-                       COALESCE(c.cantidad, 0) AS en_camino,
-                       CASE WHEN r.demanda_depurada > 0 THEN r.demanda_depurada
-                            WHEN COALESCE(s.stock, 0) <= 0 THEN r.demanda_media
-                            ELSE 0 END AS demanda
-                  FROM rot r
+            WITH %(red)s
+            disponible AS (
+                -- Lo que la matriz puede repartir: lo libre menos su propia venta de las semanas.
+                SELECT m.product_id, m.stock,
+                       floor(m.libre - ceil(m.demanda * params.semanas)) AS disponible
+                  FROM matriz m
                  CROSS JOIN params
-                  LEFT JOIN stk s ON s.company_id = r.company_id AND s.product_id = r.product_id
-                  LEFT JOIN ai_v_pendiente p ON p.company_id = r.company_id AND p.product_id = r.product_id
-                  LEFT JOIN en_camino c ON c.company_id = r.company_id AND c.product_id = r.product_id
-                 WHERE r.company_id <> params.matriz_id
-            ),
-            faltas AS (
-                SELECT d.*, ceil(d.demanda * params.semanas - d.stock - d.pendiente - d.en_camino)::int AS falta,
-                       (d.stock + d.pendiente + d.en_camino) / d.demanda AS cobertura
-                  FROM destinos d
-                 CROSS JOIN params
-                 WHERE d.demanda > 0 AND d.demanda * params.semanas - d.stock - d.pendiente - d.en_camino > 0
-            ),
-            matriz AS (
-                SELECT s.product_id, s.stock,
-                       floor(greatest(s.stock, 0) - COALESCE(x.cantidad, 0)
-                             - ceil(COALESCE(r.demanda_depurada, 0) * params.semanas)) AS disponible
-                  FROM stk s
-                 CROSS JOIN params
-                  LEFT JOIN rot r ON r.company_id = s.company_id AND r.product_id = s.product_id
-                  LEFT JOIN sale x ON x.company_id = s.company_id AND x.product_id = s.product_id
-                 WHERE s.company_id = params.matriz_id
             ),
             reparto AS (
                 SELECT f.*, m.stock AS stock_matriz, m.disponible,
@@ -155,7 +89,7 @@ class AiVReabastecimiento(models.Model):
                                           ORDER BY f.cobertura, f.demanda DESC, f.company_id
                                           ROWS UNBOUNDED PRECEDING) AS acumulado
                   FROM faltas f
-                  JOIN matriz m ON m.product_id = f.product_id AND m.disponible >= 1
+                  JOIN disponible m ON m.product_id = f.product_id AND m.disponible >= 1
             ),
             lineas AS (
                 SELECT r.*, least(r.falta, greatest(r.disponible - (r.acumulado - r.falta), 0))::int AS cantidad
@@ -201,10 +135,7 @@ class AiVReabastecimiento(models.Model):
               JOIN product_template pt ON pt.id = pp.product_tmpl_id
               LEFT JOIN costos k ON k.product_id = l.product_id
              WHERE l.cantidad > 0 AND pp.active AND pt.type = 'product'
-        """ % {
-            "cobertura": _int_param("coverage_weeks", DEFAULT_COVERAGE_WEEKS, 52),
-            "matriz": MATRIX_SQL,
-        })
+        """ % {"red": network_ctes(_int_param("coverage_weeks", DEFAULT_COVERAGE_WEEKS, 52))})
         grant_readonly(self.env, self._table)
 
     # -- borradores de traslado ------------------------------------------------

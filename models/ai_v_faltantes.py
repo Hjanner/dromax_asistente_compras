@@ -1,29 +1,33 @@
 # -*- coding: utf-8 -*-
 from odoo import fields, models, tools
 
-from ..services.prompt import DEFAULT_COVERAGE_WEEKS, DEFAULT_EXCESS_WEEKS
+from ..services.network_sql import network_ctes
+from ..services.prompt import DEFAULT_COVERAGE_WEEKS
 from .ai_v_oferta import grant_readonly
 from .ai_v_rotacion import _int_param
 
 
 class AiVFaltantes(models.Model):
-    """Lo que hace falta comprar por producto y farmacia.
+    """Lo que la sucursal matriz (Dromax) tiene que comprar para toda la red.
 
-    Faltante = demanda depurada × semanas de cobertura − stock − pendiente de
-    recibir (ai_v_rotacion, ai_v_stock y ai_v_pendiente). El stock negativo
-    cuenta como 0: no se compra para tapar ventas hechas sin existencia. Una
-    fila por producto y farmacia con faltante > 0; la cantidad sugerida es el
-    faltante redondeado hacia arriba. Las solicitudes sin confirmar no se
-    restan (en_solicitud solo avisa).
+    Toda compra entra por la matriz, que después reparte a las farmacias con
+    traslados (ai_v_reabastecimiento); entre farmacias no se traslada. Por
+    eso hay una fila por producto, con company_id = la matriz:
 
-    Como cualquier farmacia puede comprar o pedir para otra, informa también
-    el excedente en las demás: el stock que pasa de N semanas de su propia
-    demanda (contando lo que tienen pendiente; N de Ajustes, por defecto 4 y
-    nunca menos que la cobertura). No se descuenta: trasladar o comprar lo
-    decide el comprador.
+    necesidad = Σ faltas de las farmacias (venta semanal × semanas de
+                cobertura − stock − compras pendientes − en camino, por
+                farmacia: lo que le sobra a una no cubre a otra)
+              + venta propia de la matriz × semanas de cobertura;
+    faltante  = necesidad − stock libre de la matriz (su stock menos lo que ya
+                sale hacia las farmacias) − sus compras pendientes.
+
+    Solo las filas con faltante > 0; la cantidad sugerida es el faltante
+    redondeado hacia arriba. Las solicitudes sin confirmar de la matriz no se
+    restan (en_solicitud solo avisa). detalle_farmacias dice cuánto le falta a
+    cada farmacia.
 
     Droguería sugerida: entre las ofertas disponibles del producto, primero
-    las de precio coherente con el costo de la farmacia (hasta el triple:
+    las de precio coherente con el costo de la matriz (hasta el triple:
     algunas droguerías usan el mismo código de barras para un empaque mayor,
     p. ej. un dispensador de 50 blísteres), luego las que tienen stock para
     toda la cantidad y, entre ellas, la más barata. Si la elegida pasa del
@@ -31,36 +35,40 @@ class AiVFaltantes(models.Model):
     Ajustes en cada consulta.
     """
     _name = "ai.v.faltantes"
-    _description = "Faltantes por producto y farmacia"
+    _description = "Necesidad de compra de la red"
     _auto = False
-    _order = "company_id, cobertura_actual, demanda_semanal desc, product_id"
+    _order = "cobertura_actual, demanda_semanal desc, product_id"
     _rec_name = "product_id"
 
-    company_id = fields.Many2one("res.company", "Farmacia", readonly=True)
-    farmacia = fields.Char("Nombre de la farmacia", readonly=True)
+    company_id = fields.Many2one("res.company", "Compra", readonly=True,
+                                 help="Sucursal matriz, que compra para toda la red.")
+    farmacia = fields.Char("Nombre de la sucursal que compra", readonly=True)
     product_id = fields.Many2one("product.product", "Producto", readonly=True)
     product_tmpl_id = fields.Many2one("product.template", "Plantilla", readonly=True)
     producto = fields.Char("Nombre del producto", readonly=True)
     codigo = fields.Char("Código interno", readonly=True)
-    demanda_semanal = fields.Float("Demanda semanal", readonly=True,
-                                   help="Demanda depurada de la rotación.")
+    demanda_semanal = fields.Float("Venta semanal de la red", readonly=True,
+                                   help="Demanda depurada de todas las farmacias más la de la matriz.")
+    demanda_propia = fields.Float("Venta semanal de la matriz", readonly=True)
     semanas_cobertura = fields.Integer("Semanas de cobertura", readonly=True)
+    faltas_farmacias = fields.Integer("Falta en las farmacias", readonly=True,
+                                      help="Suma de lo que le falta a cada farmacia para la cobertura.")
+    farmacias_con_falta = fields.Integer("Farmacias con falta", readonly=True)
+    detalle_farmacias = fields.Char("Falta por farmacia", readonly=True,
+                                    help="Cuánto le falta a cada farmacia, de mayor a menor.")
     necesidad = fields.Float("Necesidad", readonly=True,
-                             help="Demanda semanal × semanas de cobertura.")
-    stock = fields.Float("Stock", readonly=True, help="Existencia actual; la negativa cuenta como 0.")
-    pendiente = fields.Float("Pendiente de recibir", readonly=True)
+                             help="Falta en las farmacias + venta de la matriz × semanas de cobertura.")
+    stock = fields.Float("Stock libre en la matriz", readonly=True,
+                         help="Stock de la matriz menos lo que ya sale hacia las farmacias; el negativo cuenta como 0.")
+    pendiente = fields.Float("Compras pendientes", readonly=True, help="De la matriz, por recibir.")
     atrasado = fields.Float("Atrasado", readonly=True, help="Parte de lo pendiente con la fecha prevista vencida.")
     en_solicitud = fields.Float("En solicitudes sin confirmar", readonly=True,
                                 help="No se resta: avisa de que ya se está pidiendo.")
     cobertura_actual = fields.Float("Cobertura actual (semanas)", readonly=True,
-                                    help="(Stock + pendiente) / demanda semanal.")
-    faltante = fields.Float("Faltante", readonly=True, help="Necesidad − stock − pendiente.")
+                                    help="(Stock libre + compras pendientes de la matriz) / venta semanal de la red.")
+    faltante = fields.Float("Faltante", readonly=True, help="Necesidad − stock libre − compras pendientes.")
     cantidad_sugerida = fields.Integer("Cantidad sugerida", readonly=True,
                                        help="Faltante redondeado hacia arriba.")
-    excedente_otras = fields.Float("Excedente en otras farmacias", readonly=True,
-                                   help="Stock de las demás farmacias que pasa de las semanas de "
-                                        "excedente de su propia demanda: se podría trasladar en vez de comprar.")
-    farmacias_con_excedente = fields.Char("Farmacias con excedente", readonly=True)
     drogueria_id = fields.Many2one("res.partner", "Droguería sugerida", readonly=True)
     drogueria = fields.Char("Nombre de la droguería", readonly=True)
     precio = fields.Float("Precio final", readonly=True, help="Precio con descuentos de la droguería sugerida.")
@@ -75,7 +83,7 @@ class AiVFaltantes(models.Model):
     fecha_vencimiento = fields.Date("Vencimiento", readonly=True, help="Vencimiento del lote ofrecido.")
     laboratorio = fields.Char("Laboratorio (droguería)", readonly=True,
                               help="Laboratorio que informa la droguería, si lo informa.")
-    costo = fields.Float("Costo actual", readonly=True, help="Costo del producto en la farmacia.")
+    costo = fields.Float("Costo actual", readonly=True, help="Costo del producto en la matriz.")
     revisar_presentacion = fields.Boolean(
         "Revisar presentación", readonly=True,
         help="El precio de la droguería pasa del triple del costo: puede ser otro empaque "
@@ -85,90 +93,97 @@ class AiVFaltantes(models.Model):
         tools.drop_view_if_exists(self.env.cr, self._table)
         self.env.cr.execute("""
             CREATE VIEW ai_v_faltantes AS
-            WITH params AS (
-                SELECT %(cobertura)s AS semanas, %(excedente)s AS semanas_excedente
+            WITH %(red)s
+            red AS (
+                SELECT f.product_id, sum(f.falta) AS faltas, count(*) AS farmacias,
+                       string_agg(c.name || ' (' || f.falta || ')', ', '
+                                  ORDER BY f.falta DESC, c.name) AS detalle
+                  FROM faltas f
+                  JOIN res_company c ON c.id = f.company_id
+                 GROUP BY f.product_id
             ),
-            estado AS (
-                -- Todo producto con venta o con stock en alguna farmacia.
-                SELECT COALESCE(r.company_id, s.company_id) AS company_id,
-                       COALESCE(r.product_id, s.product_id) AS product_id,
-                       COALESCE(r.demanda_depurada, 0) AS demanda,
-                       greatest(COALESCE(s.stock, 0), 0) AS stock,
-                       COALESCE(p.pendiente, 0) AS pendiente,
-                       COALESCE(p.atrasado, 0) AS atrasado,
-                       COALESCE(p.en_solicitud, 0) AS en_solicitud,
-                       COALESCE(r.demanda_depurada, 0) * params.semanas AS necesidad,
-                       COALESCE(r.demanda_depurada, 0)
-                           * greatest(params.semanas_excedente, params.semanas) AS reserva
-                  FROM ai_v_rotacion r
-                  FULL JOIN ai_v_stock s ON s.company_id = r.company_id AND s.product_id = r.product_id
-                  LEFT JOIN ai_v_pendiente p ON p.company_id = COALESCE(r.company_id, s.company_id)
-                                            AND p.product_id = COALESCE(r.product_id, s.product_id)
+            demanda_farmacias AS (
+                SELECT product_id, sum(demanda) AS demanda FROM farmacias WHERE demanda > 0 GROUP BY 1
+            ),
+            propia AS (
+                SELECT r.product_id, r.demanda_depurada AS demanda
+                  FROM rot r
                  CROSS JOIN params
+                 WHERE r.company_id = params.matriz_id AND r.demanda_depurada > 0
+            ),
+            compra AS (
+                SELECT p.product_id,
+                       COALESCE(red.faltas, 0) AS faltas,
+                       COALESCE(red.farmacias, 0) AS farmacias,
+                       red.detalle,
+                       COALESCE(pr.demanda, 0) AS demanda_propia,
+                       COALESCE(df.demanda, 0) + COALESCE(pr.demanda, 0) AS demanda,
+                       COALESCE(red.faltas, 0) + COALESCE(pr.demanda, 0) * params.semanas AS necesidad,
+                       greatest(COALESCE(m.libre, 0), 0) AS stock,
+                       COALESCE(pd.pendiente, 0) AS pendiente,
+                       COALESCE(pd.atrasado, 0) AS atrasado,
+                       COALESCE(pd.en_solicitud, 0) AS en_solicitud
+                  FROM (SELECT product_id FROM red UNION SELECT product_id FROM propia) p
+                 CROSS JOIN params
+                  LEFT JOIN red ON red.product_id = p.product_id
+                  LEFT JOIN demanda_farmacias df ON df.product_id = p.product_id
+                  LEFT JOIN propia pr ON pr.product_id = p.product_id
+                  LEFT JOIN matriz m ON m.product_id = p.product_id
+                  LEFT JOIN pend pd ON pd.company_id = params.matriz_id AND pd.product_id = p.product_id
             ),
             faltantes AS (
-                SELECT e.*, e.necesidad - e.stock - e.pendiente AS faltante,
-                       ceil(e.necesidad - e.stock - e.pendiente)::int AS cantidad
-                  FROM estado e
-                 WHERE e.demanda > 0 AND e.necesidad - e.stock - e.pendiente > 0
-            ),
-            excedentes AS (
-                SELECT e.company_id, e.product_id,
-                       floor(least(e.stock, e.stock + e.pendiente - e.reserva)) AS excedente
-                  FROM estado e
-                 WHERE floor(least(e.stock, e.stock + e.pendiente - e.reserva)) >= 1
-            ),
-            otras AS (
-                SELECT f.company_id, f.product_id,
-                       sum(x.excedente) AS excedente,
-                       string_agg(c.name || ' (' || x.excedente::int || ')', ', '
-                                  ORDER BY x.excedente DESC, c.name) AS farmacias
-                  FROM faltantes f
-                  JOIN excedentes x ON x.product_id = f.product_id AND x.company_id <> f.company_id
-                  JOIN res_company c ON c.id = x.company_id
-                 GROUP BY 1, 2
+                SELECT c.*, c.necesidad - c.stock - c.pendiente AS faltante,
+                       ceil(c.necesidad - c.stock - c.pendiente)::int AS cantidad
+                  FROM compra c
+                 WHERE c.necesidad - c.stock - c.pendiente > 0
             ),
             costos AS (
-                -- standard_price depende de la empresa: está en ir_property.
-                SELECT f.company_id, f.product_id, nullif(ip.value_float, 0) AS costo
+                -- standard_price depende de la empresa: está en ir_property (el de
+                -- la matriz o, si no tiene, el valor por defecto sin empresa).
+                SELECT DISTINCT ON (f.product_id) f.product_id, nullif(ip.value_float, 0) AS costo
                   FROM faltantes f
+                 CROSS JOIN params
                   JOIN ir_property ip ON ip.name = 'standard_price'
                                      AND ip.res_id = 'product.product,' || f.product_id
-                                     AND ip.company_id = f.company_id
+                                     AND (ip.company_id = params.matriz_id OR ip.company_id IS NULL)
+                 ORDER BY f.product_id, ip.company_id NULLS LAST
             ),
             ofertas AS (
-                SELECT f.company_id, f.product_id, o.partner_id, o.drogueria, o.precio_final,
+                SELECT f.product_id, o.partner_id, o.drogueria, o.precio_final,
                        o.descuento_pct, o.stock_drogueria, o.fecha_vencimiento, o.laboratorio,
                        o.stock_drogueria >= f.cantidad AS suficiente,
                        o.precio_final > 3 * k.costo AS revisar,
                        o.mejor_precio, o.droguerias_con_stock AS droguerias,
-                       row_number() OVER (PARTITION BY f.company_id, f.product_id
+                       row_number() OVER (PARTITION BY f.product_id
                                           ORDER BY o.precio_final > 3 * k.costo IS TRUE,
                                                    o.stock_drogueria >= f.cantidad DESC,
                                                    o.precio_final, o.partner_id, o.id) AS puesto
                   FROM faltantes f
                   JOIN ai_v_oferta o ON o.product_id = f.product_id AND o.disponible
-                  LEFT JOIN costos k ON k.company_id = f.company_id AND k.product_id = f.product_id
+                  LEFT JOIN costos k ON k.product_id = f.product_id
             )
-            SELECT row_number() OVER (ORDER BY f.company_id, f.product_id) AS id,
-                   f.company_id,
+            SELECT f.product_id AS id,
+                   params.matriz_id AS company_id,
                    c.name AS farmacia,
                    f.product_id,
                    pp.product_tmpl_id,
                    COALESCE(pt.name->>'es_VE', pt.name->>'en_US') AS producto,
                    pp.default_code AS codigo,
                    round(f.demanda::numeric, 2) AS demanda_semanal,
+                   round(f.demanda_propia::numeric, 2) AS demanda_propia,
                    params.semanas AS semanas_cobertura,
+                   f.faltas AS faltas_farmacias,
+                   f.farmacias AS farmacias_con_falta,
+                   f.detalle AS detalle_farmacias,
                    round(f.necesidad::numeric, 2) AS necesidad,
                    round(f.stock::numeric, 2) AS stock,
                    round(f.pendiente::numeric, 2) AS pendiente,
                    round(f.atrasado::numeric, 2) AS atrasado,
                    round(f.en_solicitud::numeric, 2) AS en_solicitud,
-                   round(((f.stock + f.pendiente) / f.demanda)::numeric, 2) AS cobertura_actual,
+                   round(COALESCE((f.stock + f.pendiente) / nullif(f.demanda, 0), 0)::numeric, 2)
+                       AS cobertura_actual,
                    round(f.faltante::numeric, 2) AS faltante,
                    f.cantidad AS cantidad_sugerida,
-                   round(COALESCE(x.excedente, 0)::numeric, 2) AS excedente_otras,
-                   x.farmacias AS farmacias_con_excedente,
                    o.partner_id AS drogueria_id,
                    o.drogueria,
                    o.precio_final AS precio,
@@ -183,17 +198,12 @@ class AiVFaltantes(models.Model):
                    round(k.costo::numeric, 2) AS costo,
                    COALESCE(o.revisar, false) AS revisar_presentacion
               FROM faltantes f
-              JOIN res_company c ON c.id = f.company_id
+             CROSS JOIN params
+              JOIN res_company c ON c.id = params.matriz_id
               JOIN product_product pp ON pp.id = f.product_id
               JOIN product_template pt ON pt.id = pp.product_tmpl_id
-              LEFT JOIN otras x ON x.company_id = f.company_id AND x.product_id = f.product_id
-              LEFT JOIN costos k ON k.company_id = f.company_id AND k.product_id = f.product_id
-              LEFT JOIN ofertas o ON o.company_id = f.company_id AND o.product_id = f.product_id
-                                 AND o.puesto = 1
-             CROSS JOIN params
+              LEFT JOIN costos k ON k.product_id = f.product_id
+              LEFT JOIN ofertas o ON o.product_id = f.product_id AND o.puesto = 1
              WHERE pp.active AND pt.purchase_ok
-        """ % {
-            "cobertura": _int_param("coverage_weeks", DEFAULT_COVERAGE_WEEKS, 52),
-            "excedente": _int_param("excess_weeks", DEFAULT_EXCESS_WEEKS, 52),
-        })
+        """ % {"red": network_ctes(_int_param("coverage_weeks", DEFAULT_COVERAGE_WEEKS, 52))})
         grant_readonly(self.env, self._table)

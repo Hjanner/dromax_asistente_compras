@@ -34,7 +34,7 @@
                     <button name="action_create_rfq" type="object" string="Generar borradores"
                             class="btn-primary" groups="purchase.group_purchase_user"
                             invisible="state in ('done', 'discarded')"
-                            confirm="Se creará una orden de compra en borrador por farmacia y droguería con las líneas que tienen cantidad final y droguería. ¿Continuar?"/>
+                            confirm="Se creará una orden de compra en borrador de la sucursal matriz por droguería con las líneas que tienen cantidad final y droguería. ¿Continuar?"/>
                     <button name="action_discard" type="object" string="Descartar"
                             invisible="state in ('done', 'discarded')"
                             confirm="¿Descartar esta propuesta? Ya no se podrá modificar."/>
@@ -76,9 +76,9 @@
                                     <field name="drogueria_opciones_ids" column_invisible="1"/>
                                     <field name="purchase_line_id" column_invisible="1"/>
                                     <field name="laboratorio"/>
-                                    <field name="company_id" groups="base.group_multi_company"/>
                                     <field name="product_id"/>
-                                    <field name="demanda" optional="show"/>
+                                    <field name="detalle_farmacias" optional="show"/>
+                                    <field name="demanda" optional="hide"/>
                                     <field name="stock" optional="show"/>
                                     <field name="pendiente" optional="show"/>
                                     <field name="cantidad_sugerida"/>
@@ -142,15 +142,16 @@
                 <field name="purchase_line_id" column_invisible="1"/>
                 <field name="proposal_id" optional="hide"/>
                 <field name="laboratorio" optional="hide"/>
-                <field name="company_id" groups="base.group_multi_company"/>
+                <field name="company_id" optional="hide"/>
                 <field name="product_id"/>
+                <field name="detalle_farmacias" optional="show"/>
+                <field name="faltas_farmacias" optional="hide"/>
                 <field name="demanda" optional="show"/>
+                <field name="demanda_propia" optional="hide"/>
                 <field name="stock" optional="show"/>
                 <field name="pendiente" optional="show"/>
                 <field name="en_solicitud" optional="hide"/>
                 <field name="cobertura_actual" optional="hide"/>
-                <field name="excedente_otras" optional="show" decoration-info="excedente_otras &gt; 0"/>
-                <field name="farmacias_con_excedente" optional="hide"/>
                 <field name="cantidad_sugerida" sum="Total"/>
                 <field name="cantidad_final" sum="Total" decoration-bf="ajustada"
                        readonly="state in ('done', 'discarded') or purchase_line_id"/>
@@ -170,22 +171,6 @@
         </field>
     </record>
 
-    <!-- Lo que se cubre con traslado (botón del chat): con las farmacias de origen a la vista. -->
-    <record id="view_ai_purchase_proposal_line_tree_transfer" model="ir.ui.view">
-        <field name="name">ai.purchase.proposal.line.tree.transfer</field>
-        <field name="model">ai.purchase.proposal.line</field>
-        <field name="inherit_id" ref="view_ai_purchase_proposal_line_tree"/>
-        <field name="mode">primary</field>
-        <field name="arch" type="xml">
-            <field name="farmacias_con_excedente" position="attributes">
-                <attribute name="optional">show</attribute>
-            </field>
-            <field name="laboratorio" position="attributes">
-                <attribute name="optional">show</attribute>
-            </field>
-        </field>
-    </record>
-
     <record id="view_ai_purchase_proposal_line_search" model="ir.ui.view">
         <field name="name">ai.purchase.proposal.line.search</field>
         <field name="model">ai.purchase.proposal.line</field>
@@ -193,7 +178,7 @@
             <search>
                 <field name="product_id"/>
                 <field name="laboratorio"/>
-                <field name="company_id" groups="base.group_multi_company"/>
+                <field name="detalle_farmacias" string="Farmacia con falta"/>
                 <field name="drogueria_id"/>
                 <field name="proposal_id"/>
                 <filter name="a_pedir" string="A pedir" domain="[('cantidad_final', '>', 0)]"/>
@@ -204,13 +189,8 @@
                 <filter name="por_pedir" string="Por pedir"
                         domain="[('cantidad_final', '>', 0), ('drogueria_id', '!=', False), ('purchase_line_id', '=', False)]"/>
                 <filter name="pedidas" string="En órdenes de compra" domain="[('purchase_line_id', '!=', False)]"/>
-                <filter name="excedente" string="Con excedente en otras farmacias"
-                        domain="[('excedente_otras', '>', 0)]"/>
-                <filter name="se_cubre_con_traslado" string="Se cubre con traslado"
-                        domain="[('se_cubre_con_traslado', '=', True), ('purchase_line_id', '=', False)]"/>
                 <group expand="0" string="Agrupar por">
                     <filter name="group_laboratorio" string="Laboratorio" context="{'group_by': 'laboratorio'}"/>
-                    <filter name="group_company" string="Farmacia" context="{'group_by': 'company_id'}"/>
                     <filter name="group_drogueria" string="Droguería" context="{'group_by': 'drogueria_id'}"/>
                 </group>
             </search>
