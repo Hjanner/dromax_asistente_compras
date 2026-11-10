@@ -90,11 +90,13 @@
         <field name="search_view_id" ref="view_ai_v_reabastecimiento_search"/>
         <field name="help" type="html">
             <p class="o_view_nocontent_empty_folder">Ninguna farmacia necesita mercancía que tenga la matriz</p>
-            <p>Productos en cero o por agotarse en cada farmacia (venta semanal × semanas de
-               cobertura − stock − compras pendientes − lo que ya viene por traslado) que la
-               sucursal matriz puede mandar sin quedarse sin su propia venta. Elige las líneas
+            <p>Productos en cero o por agotarse en cada farmacia (lo que tiene, más lo pendiente
+               y lo que ya viene por traslado, bajó al punto de pedido) que la sucursal matriz
+               puede mandar sin quedarse sin su propia venta. Se repone hasta la venta de las
+               semanas de cobertura más el margen de seguridad. Elige las líneas
                y pulsa «Generar borradores de traslado»; después, en cada borrador, «Generar
-               Traslados Definitivos». La matriz y las semanas se cambian en Compras IA →
+               Traslados Definitivos». La matriz, las semanas, el punto de pedido y el margen
+               se cambian en Compras IA →
                Configuración → Ajustes.</p>
         </field>
     </record>

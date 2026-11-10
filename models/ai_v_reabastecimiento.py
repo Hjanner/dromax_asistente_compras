@@ -5,20 +5,22 @@ from odoo import _, fields, models, tools
 from odoo.exceptions import AccessError, UserError
 
 from ..services.network_sql import MATRIX_PARAM, network_ctes  # noqa: F401 (MATRIX_PARAM lo usan los tests)
-from ..services.prompt import DEFAULT_COVERAGE_WEEKS
 from .ai_v_oferta import grant_readonly
-from .ai_v_rotacion import _int_param
+from .ai_v_rotacion import network_params_sql
 
 
 class AiVReabastecimiento(models.Model):
     """Lo que la sucursal matriz (Dromax) puede mandar a cada farmacia.
 
-    Por producto y farmacia (que no sea la matriz), lo que le falta para cubrir
-    las semanas de cobertura de Ajustes: demanda depurada × semanas − stock −
-    compras pendientes − lo que ya viene en camino por traslado (borradores y
-    traslados sin terminar que llegan a la farmacia desde otra sucursal o desde
-    tránsito). Estado: «En cero» si no tiene stock, «Por agotarse» si tiene
-    pero no le alcanza. Con stock en cero también entra un producto de venta
+    Por producto y farmacia (que no sea la matriz), lo que le falta para volver
+    al objetivo: demanda depurada × semanas de cobertura más el margen de
+    seguridad − stock − compras pendientes − lo que ya viene en camino por
+    traslado (borradores y traslados sin terminar que llegan a la farmacia
+    desde otra sucursal o desde tránsito). Solo entra cuando lo que tiene baja
+    al punto de pedido (un % de la venta de esas semanas), para no mover una o
+    dos unidades. Cobertura, punto y margen se leen de Ajustes. Estado: «En
+    cero» si no tiene stock, «Por agotarse» si tiene pero llegó al punto. Con
+    stock en cero también entra un producto de venta
     esporádica (demanda depurada 0 pero con venta en el período): se repone su
     venta media.
 
@@ -59,7 +61,8 @@ class AiVReabastecimiento(models.Model):
     cobertura_actual = fields.Float("Cobertura actual (semanas)", readonly=True,
                                     help="(Stock + compras pendientes + en camino) / venta semanal.")
     falta = fields.Integer("Falta", readonly=True,
-                           help="Venta semanal × semanas de cobertura − stock − pendiente − en camino.")
+                           help="Objetivo (venta semanal × semanas de cobertura + margen de seguridad) − stock − "
+                                "pendiente − en camino. Solo si llegó al punto de pedido.")
     cantidad = fields.Integer("A trasladar", readonly=True,
                               help="Lo que la matriz puede mandar: la falta, o lo que le quede si no alcanza.")
     parcial = fields.Boolean("Parcial", readonly=True, help="La matriz no alcanza para toda la falta.")
@@ -135,7 +138,7 @@ class AiVReabastecimiento(models.Model):
               JOIN product_template pt ON pt.id = pp.product_tmpl_id
               LEFT JOIN costos k ON k.product_id = l.product_id
              WHERE l.cantidad > 0 AND pp.active AND pt.type = 'product'
-        """ % {"red": network_ctes(_int_param("coverage_weeks", DEFAULT_COVERAGE_WEEKS, 52))})
+        """ % {"red": network_ctes(*network_params_sql())})
         grant_readonly(self.env, self._table)
 
     # -- borradores de traslado ------------------------------------------------

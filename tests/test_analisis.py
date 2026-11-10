@@ -27,6 +27,10 @@ class AnalisisCase(TransactionCase):
         ICP.set_param("dromax_asistente_compras.rotation_window_weeks", "8")
         ICP.set_param("dromax_asistente_compras.outlier_mad_factor", "3")
         ICP.set_param("dromax_asistente_compras.coverage_weeks", "1")
+        # Sin punto de pedido ni margen: falta = venta de la semana − lo que hay
+        # (los umbrales tienen sus propios tests en test_reabastecimiento).
+        ICP.set_param("dromax_asistente_compras.reorder_point_pct", "100")
+        ICP.set_param("dromax_asistente_compras.safety_margin_pct", "0")
         Product = cls.env["product.product"]
         cls.ibuprofeno = Product.create({"name": "ZQX IBUPROFENO 400MG", "detailed_type": "product",
                                          "default_code": "ZQX1"})
@@ -258,6 +262,54 @@ class TestAnalisis(AnalisisCase):
         self.assertFalse(self._row("ai.v.faltantes", self.ibuprofeno))   # la farmacia no compra
         self.env["ir.config_parameter"].sudo().set_param("dromax_asistente_compras.coverage_weeks", "2")
         self.assertEqual(self._buy(self.ibuprofeno).cantidad_sugerida, 16)   # 17 + 4 − 4 − 1
+
+    def test_shortage_thresholds(self):
+        """La matriz compra la falta de las farmacias (con margen) y, para su propia venta,
+        solo al llegar a su punto de pedido."""
+        self._thresholds()
+        self._so_weekly(self.matriz, self.ibuprofeno, 10)         # venta propia: 10/sem, objetivo 12
+        self._set_stock(self.ibuprofeno, 6, company=self.matriz)  # 6 > 5: no compra
+        self.assertFalse(self._row("ai.v.faltantes", self.ibuprofeno, company=self.matriz))
+        self._set_stock(self.ibuprofeno, -1, company=self.matriz)  # _set_stock suma: queda en 5
+        row = self._buy(self.ibuprofeno)
+        self.assertEqual((row.necesidad, row.cantidad_sugerida), (12, 7))
+        # Con falta en una farmacia (en cero, 10/sem → 12) se compra aunque la matriz no esté en su punto.
+        self._set_stock(self.ibuprofeno, 3, company=self.matriz)   # 8
+        self._weekly_sales(self.ibuprofeno, 10)
+        row = self._buy(self.ibuprofeno)
+        self.assertEqual((row.faltas_farmacias, row.necesidad, row.cantidad_sugerida), (12, 24, 16))
+
+    def _thresholds(self, point=50, margin=20):
+        ICP = self.env["ir.config_parameter"].sudo()
+        ICP.set_param("dromax_asistente_compras.reorder_point_pct", str(point))
+        ICP.set_param("dromax_asistente_compras.safety_margin_pct", str(margin))
+
+    def test_purchase_only_when_matrix_reaches_its_point(self):
+        """Si la matriz puede mandar lo que falta y le queda más que su punto de pedido, no compra."""
+        self._thresholds()
+        self._so_weekly(self.matriz, self.ibuprofeno, 10)         # matriz: 10/sem, punto 5
+        self._set_stock(self.ibuprofeno, 20, company=self.matriz)
+        self._weekly_sales(self.ibuprofeno, 10)                   # farmacia en cero: le faltan 12
+        self.assertFalse(self._buy(self.ibuprofeno))              # 20 − 12 = 8 > 5
+        self._set_stock(self.ibuprofeno, -5, company=self.matriz)  # 15 − 12 = 3 ≤ 5: compra
+        row = self._buy(self.ibuprofeno)
+        self.assertEqual((row.faltas_farmacias, row.necesidad, row.cantidad_sugerida), (12, 24, 9))
+
+    def test_purchase_tops_up_every_pharmacy(self):
+        """Cuando se compra, se repone a todas las farmacias debajo del objetivo, no solo a la que llegó al punto."""
+        self._thresholds()
+        otra = self.env["res.company"].create({"name": "ZQX FARMACIA 3"})
+        self._weekly_sales(self.ibuprofeno, 10)                   # en cero: le faltan 12 (en su punto)
+        self._so_weekly(otra, self.ibuprofeno, 10)
+        self._set_stock(self.ibuprofeno, 8, company=otra)         # 8 > 5: no está en su punto; le faltan 4
+        row = self._buy(self.ibuprofeno)
+        self.assertEqual((row.faltas_farmacias, row.farmacias_con_falta, row.cantidad_sugerida), (16, 2, 16))
+        # El reabastecimiento solo manda a la que llegó a su punto.
+        self._set_stock(self.ibuprofeno, 30, company=self.matriz)
+        self.env.flush_all()
+        self.env.invalidate_all()
+        rows = self.env["ai.v.reabastecimiento"].search([("product_id", "=", self.ibuprofeno.id)])
+        self.assertEqual(rows.mapped("company_id"), self.company)
 
     def test_excess_in_a_pharmacy_does_not_cover_another(self):
         otra = self.env["res.company"].create({"name": "ZQX FARMACIA 2"})

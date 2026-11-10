@@ -44,7 +44,7 @@
                     </block>
                     <block title="Cálculo de faltantes" name="ai_purchase_calc">
                         <setting id="ai_purchase_calc_params" string="Demanda y cobertura"
-                                 help="Demanda semanal depurada de las últimas N semanas, descartando las que se alejan de la mediana más del umbral. Cantidad sugerida = demanda × cobertura − stock − pendiente.">
+                                 help="Demanda semanal depurada de las últimas N semanas, descartando las que se alejan de la mediana más del umbral. Una farmacia entra cuando lo que tiene baja al punto de pedido (un % de la venta de las semanas de cobertura) y se repone hasta esa venta más el margen de seguridad.">
                             <div class="content-group">
                                 <div class="row mt8">
                                     <label for="ai_purchase_rotation_window_weeks" class="col-lg-6 o_light_label"/>
@@ -57,6 +57,14 @@
                                 <div class="row">
                                     <label for="ai_purchase_coverage_weeks" class="col-lg-6 o_light_label"/>
                                     <field name="ai_purchase_coverage_weeks" class="col-lg-3"/>
+                                </div>
+                                <div class="row">
+                                    <label for="ai_purchase_reorder_point_pct" class="col-lg-6 o_light_label"/>
+                                    <field name="ai_purchase_reorder_point_pct" class="col-lg-3"/>
+                                </div>
+                                <div class="row">
+                                    <label for="ai_purchase_safety_margin_pct" class="col-lg-6 o_light_label"/>
+                                    <field name="ai_purchase_safety_margin_pct" class="col-lg-3"/>
                                 </div>
                                 <div class="row">
                                     <label for="ai_purchase_matrix_company_id" class="col-lg-6 o_light_label"/>

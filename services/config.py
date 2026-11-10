@@ -26,12 +26,12 @@ def get_setting(env, name, default=None, env_aliases=()):
     return value if value not in (None, "", False) else default
 
 
-def get_int_setting(env, name, default, maximum=None):
+def get_int_setting(env, name, default, maximum=None, minimum=1):
     try:
         value = int(get_setting(env, name, default))
     except (TypeError, ValueError):
         value = default
-    value = max(1, value)
+    value = max(minimum, value)
     return min(value, maximum) if maximum else value
 
 

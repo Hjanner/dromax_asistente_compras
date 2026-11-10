@@ -106,15 +106,33 @@ Es la base de la propuesta. Comparte el cálculo con el reabastecimiento
 (`services/network_sql.py`), para que lo que se compra y lo que se reparte
 salgan de la misma cuenta.
 
-- **Falta de cada farmacia** = ⌈demanda depurada × semanas de cobertura −
-  stock − pendiente − lo que ya viene en camino por traslado⌉. El stock
-  negativo cuenta como 0 (no se compra para tapar ventas sin existencia). Con
-  stock en cero también entra la venta esporádica (demanda depurada 0): se
-  repone su venta media. Lo que le sobra a una farmacia no cubre a otra.
-- **Cantidad sugerida** = ⌈Σ faltas de las farmacias + venta de la matriz ×
-  semanas de cobertura − stock libre de la matriz (su stock menos lo que ya
-  sale hacia las farmacias) − compras pendientes de la matriz⌉. Las
-  solicitudes sin confirmar no se restan (`en_solicitud` avisa).
+- **Punto de pedido y objetivo** (Ajustes, en `services/network_sql.py`):
+  una farmacia solo tiene falta cuando lo que tiene (stock + pendiente + en
+  camino) baja al *punto de pedido*, un % de la venta de las semanas de
+  cobertura (`reorder_point_pct`, 50). Entonces se repone hasta el
+  *objetivo*: esa venta más el *margen de seguridad* (`safety_margin_pct`,
+  20), en unidades enteras (al menos la venta redondeada hacia arriba; el
+  margen se redondea al más cercano, para que en poca venta no duplique el
+  pedido). Así no se mueve ni se compra por una o dos unidades debajo de la
+  venta, y queda margen para una semana alta. Ejemplo con 1 semana: venta
+  10/sem → entra con 5 o menos y se repone hasta 12. Con 100 y 0 se vuelve al
+  cálculo sin umbrales.
+- **Falta de cada farmacia** = ⌈objetivo − stock − pendiente − lo que ya
+  viene en camino por traslado⌉. El stock negativo cuenta como 0 (no se
+  compra para tapar ventas sin existencia). Con stock en cero también entra la
+  venta esporádica (demanda depurada 0): se repone su venta media. Lo que le
+  sobra a una farmacia no cubre a otra.
+- **Cuándo compra la matriz**: si, después de mandar lo que les falta a las
+  farmacias que llegaron a su punto de pedido, le queda su propio punto de
+  pedido o menos (el de su venta propia; 0 si no vende). Así no compra una
+  unidad cuando todavía tiene para mandar, y sin falta en las farmacias solo
+  compra para su venta al llegar a su punto.
+- **Cantidad sugerida** = ⌈Σ faltas de todas las farmacias debajo del
+  objetivo (también las que aún no llegaron a su punto: si se compra, se
+  repone a todas) + objetivo de la venta de la matriz − stock libre de la
+  matriz (su stock menos lo que ya sale hacia las farmacias) − compras
+  pendientes de la matriz⌉. Las solicitudes sin confirmar no se restan
+  (`en_solicitud` avisa).
   `detalle_farmacias` dice cuánto le falta a cada farmacia («FARMAX (10), LA
   45 (5)»). `cobertura_actual` = (stock libre + pendiente) / venta semanal de
   la red: menor = más urgente, y es el orden de la lista.
@@ -126,12 +144,17 @@ salgan de la misma cuenta.
   mayor (p. ej. un dispensador de 50 blísteres frente al blíster que vende la
   farmacia). También trae precio, mejor precio, monto, stock de la droguería,
   vencimiento y laboratorio según la droguería.
-- Ajustes: semanas de cobertura (`coverage_weeks`, 1) y *Sucursal matriz*
-  (`matrix_company_id`; vacío = la que tenga DROMAX en el nombre), leídos en
-  cada consulta.
+- Ajustes: semanas de cobertura (`coverage_weeks`, 1), punto de pedido
+  (`reorder_point_pct`, 50 %), margen de seguridad (`safety_margin_pct`, 20 %;
+  el 0 se guarda explícito, porque Odoo guarda un entero 0 como vacío) y
+  *Sucursal matriz* (`matrix_company_id`; vacío = la que tenga DROMAX en el
+  nombre), leídos en cada consulta.
 
-En `dromax_ai_inventario` (inventario real + 26 semanas simuladas): 708
-productos a comprar por DROMAX (8159 unidades), 491 con droguería, ~2 s.
+En `dromax_ai_inventario` (inventario real + 26 semanas simuladas), con 1
+semana, 50 % y 20 %: 371 productos a comprar por DROMAX (7082 unidades), ~3 s.
+Sin umbrales eran 709 (8160 unidades) y 381 de ellos de 1 o 2 unidades; ahora
+son 183, y son productos de poca venta en la sucursal que los necesita (61 con
+venta de la red de 2/sem o menos).
 
 ## Reabastecimiento desde la matriz (`ai_v_reabastecimiento`)
 
@@ -139,10 +162,12 @@ Menú *Compras IA → Reabastecimiento*. Lo que la sucursal matriz (Dromax, la
 droguería del grupo que distribuye a las farmacias) puede mandar por traslado
 a cada farmacia. Una fila por producto y farmacia:
 
-- **Falta** = venta semanal (demanda depurada) × semanas de cobertura − stock −
-  compras pendientes − lo que **ya viene en camino por traslado** (borradores
-  y traslados sin terminar que llegan a la farmacia desde otra sucursal o desde
-  tránsito). Estado **En cero** (sin stock) o **Por agotarse**. Con stock en
+- **Falta** = objetivo (venta semanal × semanas de cobertura + margen de
+  seguridad) − stock − compras pendientes − lo que **ya viene en camino por
+  traslado** (borradores y traslados sin terminar que llegan a la farmacia
+  desde otra sucursal o desde tránsito). Solo entra al llegar al **punto de
+  pedido** (ver la necesidad de compra). Estado **En cero** (sin stock) o
+  **Por agotarse**. Con stock en
   cero también entra la venta esporádica (demanda depurada 0 pero con venta en
   el período): se repone su venta media.
 - **Disponible en la matriz** = su stock − lo que ya sale hacia las
@@ -162,12 +187,15 @@ a cada farmacia. Una fila por producto y farmacia:
   y los pasos de cada almacén. Las cantidades se vuelven a leer al pulsar, y
   lo ya generado deja de sugerirse (si se cancela un borrador, vuelve).
 - Ajustes: *Sucursal matriz* (`matrix_company_id`; vacío = la que tenga
-  DROMAX en el nombre) y las semanas de historial y de cobertura de siempre.
+  DROMAX en el nombre), las semanas de historial y de cobertura, el punto de
+  pedido y el margen de seguridad.
 - Chat: *¿A quién abastezco desde Dromax?* (nivel medio) resume la vista por
   farmacia y estado.
 
-En `dromax_ai_inventario`: 305 líneas en 7 farmacias (1919 unidades, 6243 de
-valor), ~1,5 s.
+En `dromax_ai_inventario`, con 1 semana, 50 % y 20 %: 111 líneas (1210
+unidades, 3173 de valor), ~2,5 s. Sin umbrales eran 272 (1648 unidades) y 145
+de 1 o 2 unidades; ahora son 46, casi todas (40) de productos que la farmacia
+vende 2/sem o menos.
 
 ## Propuesta de compra (`ai.purchase.proposal`)
 

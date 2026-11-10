@@ -67,11 +67,16 @@ Reglas para sugerir cantidades (evitar el sobre-stock):
 últimas {window} semanas completas, sin las semanas atípicas (las que se alejan \
 de la mediana más de {mad} veces la desviación absoluta mediana, MAD). Ya está \
 calculada en ai_v_rotacion.demanda_depurada: úsala, no la recalcules.
-2. Falta de cada farmacia = demanda depurada × {coverage} semana(s) de \
-cobertura − stock − lo pendiente y lo que ya viene por traslado. Cantidad a \
-comprar (Dromax) = suma de las faltas de las farmacias + venta de Dromax × \
-{coverage} semana(s) − stock libre de Dromax − compras pendientes de Dromax, \
-redondeada hacia arriba. Ya está calculada en ai_v_faltantes, una fila por \
+2. Objetivo = demanda depurada × {coverage} semana(s) de cobertura + \
+{margin} % de margen de seguridad. Falta = objetivo − stock − pendiente − en \
+camino. Una farmacia solo se reabastece cuando su stock + lo pendiente + lo \
+que ya viene por traslado baja al {point} % de la demanda de esas semanas \
+(punto de pedido): así no se mueven una o dos unidades. Cantidad a \
+comprar (Dromax) = suma de lo que les falta a las farmacias para llegar al \
+objetivo + objetivo de la venta de Dromax − stock libre de Dromax − compras \
+pendientes de Dromax, redondeada hacia arriba; Dromax solo compra si, después \
+de mandar lo que les falta a las farmacias que llegaron a su punto, le queda \
+su propio punto de pedido o menos. Ya está calculada en ai_v_faltantes, una fila por \
 producto (cantidad_sugerida, detalle_farmacias, droguería sugerida y precio), \
 y la propuesta semanal guardada es una foto de esa vista: para la compra de la \
 semana, usa la propuesta (get_proposal), no la vista. Si un producto no está en \
@@ -160,19 +165,26 @@ def _schema_text(env):
 DEFAULT_WINDOW_WEEKS = 8
 DEFAULT_OUTLIER_MAD = 3
 DEFAULT_COVERAGE_WEEKS = 1
+# Punto de pedido: una farmacia entra cuando lo que tiene (stock + pendiente +
+# en camino) baja a este % de la venta de las semanas de cobertura. Margen de
+# seguridad: se pide hasta la venta de esas semanas más este %.
+DEFAULT_REORDER_POINT_PCT = 50
+DEFAULT_SAFETY_MARGIN_PCT = 20
 
 
 def build_system_prompt(env):
     window = get_int_setting(env, "rotation_window_weeks", DEFAULT_WINDOW_WEEKS, 104)
     mad = get_int_setting(env, "outlier_mad_factor", DEFAULT_OUTLIER_MAD, 20)
     coverage = get_int_setting(env, "coverage_weeks", DEFAULT_COVERAGE_WEEKS, 52)
+    point = get_int_setting(env, "reorder_point_pct", DEFAULT_REORDER_POINT_PCT, 100)
+    margin = get_int_setting(env, "safety_margin_pct", DEFAULT_SAFETY_MARGIN_PCT, 200, minimum=0)
     today = fields.Date.context_today(env.user)
     company = env.company
     return "\n\n".join([
         ROLE.format(max_steps=get_agent_max_steps(env)),
         "Fecha de hoy: %s. Empresa del usuario: %s (id %s)." % (today.isoformat(), company.name, company.id),
         BUSINESS,
-        OVERSTOCK_RULES.format(window=window, mad=mad, coverage=coverage),
+        OVERSTOCK_RULES.format(window=window, mad=mad, coverage=coverage, point=point, margin=margin),
         PROPOSAL,
         FORMAT,
         SQL_TIPS,

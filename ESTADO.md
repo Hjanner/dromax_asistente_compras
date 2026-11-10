@@ -1,6 +1,6 @@
 # Estado del proyecto
 
-Última actualización: 2026-11-10 (asistente `17.0.0.16.1`, 137 tests; módulo
+Última actualización: 2026-11-10 (asistente `17.0.0.17.0`, 143 tests; módulo
 FTP 1.5 con 38). Qué está hecho, qué decidimos y qué falta.
 El README explica cómo funciona lo que ya existe.
 
@@ -340,6 +340,28 @@ El README explica cómo funciona lo que ya existe.
     final trae el botón *Ver en Compras*, que abre esas órdenes en la misma
     pestaña. Antes los enlaces del aviso no se veían: `display_notification`
     solo los pone donde el mensaje tiene `%s`. 137 tests.
+  - Revisión de precios contra el portal de compras de las droguerías
+    (2026-11-10, solo lectura): con los archivos FTP del mismo día, el precio
+    final cuadra al ±0,6 % en ~135 casos de las cinco droguerías. La cascada y
+    el descuento de cabecera están bien (es el «descuento comercial» del
+    portal: VITALCLINIC y ZAKIPHARMA 12 %; INSUAMINCA e INTERCONTINENTAL traen
+    su 15 % en el archivo). Lo que se veía como error de descuentos era oferta
+    de un día antes: las promociones cambian a diario. Hallazgos: INSUAMINCA
+    publica el precio **con IVA** en los productos gravados (las demás, sin
+    IVA; su archivo no tiene columna de IVA; sus facturas en el FTP sí traen
+    el IVA por línea, pero cubren pocos productos); las droguerías en Bs se
+    convierten con la última tasa cargada en Odoo (hay que cargarla a diario).
+  - Asistente `17.0.0.17.0` (pedido del usuario, 2026-11-10): **punto de
+    pedido y margen de seguridad** en Ajustes (50 % y 20 %, provisionales).
+    Una farmacia entra en el reabastecimiento solo cuando lo que tiene (stock +
+    pendiente + en camino) baja al punto (un % de la venta de las semanas de
+    cobertura) y se repone hasta esa venta más el margen. La matriz compra
+    solo si, después de mandar a las farmacias que llegaron a su punto, le
+    queda su propio punto o menos, y entonces repone a todas las que están
+    debajo del objetivo. En `dromax_ai_inventario`: traslados de 272 a 111
+    líneas (las de 1–2 unidades, de 145 a 46) y compra de 709 a 371 productos
+    (de 1–2 unidades, de 381 a 183: lo que queda es venta baja en la sucursal
+    que lo necesita). Con 100 % y 0 % se vuelve al cálculo anterior. 143 tests.
   - Respuestas de Daniel (reunión): códigos de barras y ventas de `ODOO2026`
     los resuelve él; no restringir su módulo de traslados (se permiten
     traslados manuales entre farmacias); historial de 8 semanas; la
@@ -361,6 +383,10 @@ El README explica cómo funciona lo que ya existe.
 - Compra semanal: las órdenes se hacen lunes y martes.
 - Historial de **8 semanas** para la rotación (confirmado por Daniel el
   2026-11-09).
+- **Punto de pedido y margen de seguridad** (propuesta del usuario,
+  2026-11-10): no se mueve ni se compra por una o dos unidades debajo de la
+  venta, y se repone con margen para semanas altas. Valores iniciales 50 % y
+  20 %, a calibrar con el comprador.
 - **Toda compra pasa por Dromax** (2026-11-09, reemplaza la decisión del
   2026-10-27 de que cualquier farmacia podía comprar para otra): la sucursal
   matriz recibe cada compra y la distribuye a las farmacias con traslados
@@ -441,9 +467,13 @@ descuentos encadenados = precio final en todas las filas.
    no es una droguería con FTP, la necesidad de compra lo marca como compra
    directa y no lo manda a una droguería. Depende de que Daniel migre los
    proveedores por producto a `ODOO2026`.
-4. **Descuentos que no vienen en los archivos FTP** (p. ej. el de volumen de
-   INSUAMINCA o uno opcional): Daniel agregó un descuento de cabecera por
-   droguería; falta saber si hacen falta escalas por volumen.
+4. **Precios de la oferta**: los descuentos de los archivos se aplican bien
+   (revisión del 2026-11-10). Falta: el IVA de INSUAMINCA (pedirle que
+   publique sin IVA, o descontarlo en los productos gravados cuando Odoo
+   tenga bien el impuesto de cada producto: hoy todos tienen 16 %), la
+   descarga diaria con aviso si falla y la tasa del día. Los descuentos que no
+   vienen en ningún archivo (pronto pago, escalas por volumen de INSUAMINCA)
+   no aparecen ni en el portal: si se quieren, se cargan a mano por droguería.
 5. **Ideas de la reunión, sin pedir aún**: borradores automáticos (compra
    semanal y traslados diarios desde la matriz) y exportar la compra por
    laboratorio con la cantidad de cada farmacia.

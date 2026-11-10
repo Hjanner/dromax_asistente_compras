@@ -39,6 +39,17 @@ class ResConfigSettings(models.TransientModel):
     ai_purchase_coverage_weeks = fields.Integer(
         "Semanas de cobertura", config_parameter=PARAM_PREFIX + "coverage_weeks",
         default=prompt.DEFAULT_COVERAGE_WEEKS)
+    ai_purchase_reorder_point_pct = fields.Integer(
+        "Punto de pedido (%)", config_parameter=PARAM_PREFIX + "reorder_point_pct",
+        default=prompt.DEFAULT_REORDER_POINT_PCT,
+        help="Una farmacia (o la matriz, para su propia venta) entra en el reabastecimiento y en la "
+             "necesidad de compra cuando su stock, más lo pendiente y lo que viene en camino, baja a "
+             "este % de la venta de las semanas de cobertura. 100 = apenas le falte algo. De 1 a 100.")
+    ai_purchase_safety_margin_pct = fields.Integer(
+        "Margen de seguridad (%)", config_parameter=PARAM_PREFIX + "safety_margin_pct",
+        default=prompt.DEFAULT_SAFETY_MARGIN_PCT,
+        help="Al reponer se pide hasta la venta de las semanas de cobertura más este %, para no "
+             "quedarse corto en una semana alta. 0 = sin margen. De 0 a 200.")
     ai_purchase_laboratory_field = fields.Char(
         "Campo de laboratorio", config_parameter=PARAM_PREFIX + "laboratory_field",
         help="Nombre técnico del campo del producto con el laboratorio (p. ej. el del módulo de "
@@ -48,6 +59,13 @@ class ResConfigSettings(models.TransientModel):
         "res.company", "Sucursal matriz", config_parameter=PARAM_PREFIX + "matrix_company_id",
         help="Sucursal que recibe todas las compras y reabastece a las farmacias con traslados "
              "(Compras IA → Reabastecimiento). Vacío: la que tenga DROMAX en el nombre.")
+
+    def set_values(self):
+        super().set_values()
+        # Odoo guarda un entero 0 como vacío (y se volvería al valor por defecto):
+        # el margen 0 es válido, así que se guarda explícito.
+        if not self.ai_purchase_safety_margin_pct:
+            self.env["ir.config_parameter"].sudo().set_param(PARAM_PREFIX + "safety_margin_pct", "0")
 
     def action_ai_purchase_test_openrouter(self):
         """Comprueba la llave guardada y muestra su tope de crédito y consumo."""

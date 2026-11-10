@@ -2,20 +2,29 @@
 from odoo import fields, models, tools
 
 from ..services.config import PARAM_PREFIX
-from ..services.prompt import DEFAULT_OUTLIER_MAD, DEFAULT_WINDOW_WEEKS
+from ..services.prompt import (DEFAULT_COVERAGE_WEEKS, DEFAULT_OUTLIER_MAD, DEFAULT_REORDER_POINT_PCT,
+                               DEFAULT_SAFETY_MARGIN_PCT, DEFAULT_WINDOW_WEEKS)
 from .ai_v_oferta import grant_readonly
 
 # Hora de Venezuela para cortar las semanas si la sucursal no tiene zona horaria.
 DEFAULT_TZ = "America/Caracas"
 
 
-def _int_param(name, default, maximum):
+def _int_param(name, default, maximum, minimum=1):
     """SQL que lee un parámetro entero de Ajustes, con los mismos límites que
-    get_int_setting (mínimo 1, máximo `maximum`, `default` si falta o no es un número)."""
-    return """COALESCE((SELECT least(greatest(trim(value)::int, 1), %d)
+    get_int_setting (`minimum`, `maximum`, `default` si falta o no es un número)."""
+    return """COALESCE((SELECT least(greatest(trim(value)::int, %d), %d)
                           FROM ir_config_parameter
                          WHERE key = '%s%s' AND trim(value) ~ '^[0-9]{1,4}$'), %d)""" % (
-        maximum, PARAM_PREFIX, name, default)
+        minimum, maximum, PARAM_PREFIX, name, default)
+
+
+def network_params_sql():
+    """SQL de los parámetros de network_ctes: semanas de cobertura, punto de
+    pedido (% de la venta de esas semanas) y margen de seguridad (%)."""
+    return (_int_param("coverage_weeks", DEFAULT_COVERAGE_WEEKS, 52),
+            _int_param("reorder_point_pct", DEFAULT_REORDER_POINT_PCT, 100),
+            _int_param("safety_margin_pct", DEFAULT_SAFETY_MARGIN_PCT, 200, minimum=0))
 
 
 class AiVRotacion(models.Model):

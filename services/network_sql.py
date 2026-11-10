@@ -28,10 +28,23 @@ def matrix_company(env):
     return env["res.company"].browse(row[0] if row and row[0] else [])
 
 
-def network_ctes(coverage_sql):
+def target_sql(demand, params="params"):
+    """SQL del objetivo de stock para una demanda semanal: la venta de las
+    semanas de cobertura más el margen de seguridad, en unidades enteras.
+
+    Al menos la venta de las semanas redondeada hacia arriba; el margen se
+    redondea al entero más cercano para que en productos de poca venta no
+    duplique el pedido (1/sem con 20 % → 1, no 2).
+    """
+    return ("greatest(ceil(%(d)s * %(p)s.semanas), round(%(d)s * %(p)s.semanas * (1 + %(p)s.margen)))"
+            % {"d": demand, "p": params})
+
+
+def network_ctes(coverage_sql, reorder_sql, margin_sql):
     """CTE comunes (sin el WITH inicial; terminan en coma).
 
-    - params: semanas de cobertura y matriz_id.
+    - params: semanas de cobertura, punto de pedido y margen de seguridad
+      (como fracción: 50 % → 0,5) y matriz_id.
     - rot, stk, pend: rotación, stock y compras pendientes, materializadas
       (se usan varias veces y ai_v_rotacion es la parte cara).
     - en_camino: lo que llega a una ubicación interna de una sucursal desde
@@ -42,14 +55,21 @@ def network_ctes(coverage_sql):
     - farmacias: por producto y farmacia (toda sucursal menos la matriz),
       demanda semanal (la depurada; con stock en cero y venta esporádica, la
       media), stock (negativo = 0), compras pendientes y en camino.
-    - faltas: las farmacias a las que no les alcanza para la cobertura, con
-      la falta en unidades enteras y su cobertura actual en semanas.
+    - reponer: las farmacias por debajo del objetivo (target_sql), con lo que
+      les falta para llegar en unidades enteras, su cobertura actual en
+      semanas y si ya llegaron al punto de pedido (stock + pendiente + en
+      camino ≤ venta de las semanas × punto).
+    - faltas: las de reponer que llegaron al punto de pedido: son las que se
+      reabastecen y las que disparan la compra. Así no se mueve una o dos
+      unidades debajo de la venta, y lo que se manda deja un margen para
+      semanas altas.
     - matriz: stock de la matriz, lo libre (stock − lo que ya sale) y su
       propia demanda semanal.
     """
     return """
             params AS MATERIALIZED (
-                SELECT %(cobertura)s AS semanas, %(matriz)s AS matriz_id
+                SELECT %(cobertura)s AS semanas, %(punto)s / 100.0 AS punto,
+                       %(margen)s / 100.0 AS margen, %(matriz)s AS matriz_id
             ),
             rot AS MATERIALIZED (
                 SELECT company_id, product_id, demanda_depurada, demanda_media FROM ai_v_rotacion
@@ -93,13 +113,18 @@ def network_ctes(coverage_sql):
                   LEFT JOIN en_camino c ON c.company_id = r.company_id AND c.product_id = r.product_id
                  WHERE r.company_id <> params.matriz_id
             ),
-            faltas AS (
+            reponer AS (
                 SELECT f.*,
-                       ceil(f.demanda * params.semanas - f.stock - f.pendiente - f.en_camino)::int AS falta,
-                       (f.stock + f.pendiente + f.en_camino) / f.demanda AS cobertura
+                       ceil(%(objetivo)s - f.stock - f.pendiente - f.en_camino)::int AS falta,
+                       (f.stock + f.pendiente + f.en_camino) / f.demanda AS cobertura,
+                       f.stock + f.pendiente + f.en_camino <= f.demanda * params.semanas * params.punto
+                           AS en_punto
                   FROM farmacias f
                  CROSS JOIN params
-                 WHERE f.demanda > 0 AND f.demanda * params.semanas - f.stock - f.pendiente - f.en_camino > 0
+                 WHERE f.demanda > 0 AND %(objetivo)s - f.stock - f.pendiente - f.en_camino > 0
+            ),
+            faltas AS (
+                SELECT * FROM reponer WHERE en_punto
             ),
             matriz AS (
                 SELECT s.product_id, s.stock,
@@ -110,4 +135,5 @@ def network_ctes(coverage_sql):
                   LEFT JOIN rot r ON r.company_id = s.company_id AND r.product_id = s.product_id
                   LEFT JOIN sale x ON x.company_id = s.company_id AND x.product_id = s.product_id
                  WHERE s.company_id = params.matriz_id
-            ),""" % {"cobertura": coverage_sql, "matriz": MATRIX_SQL}
+            ),""" % {"cobertura": coverage_sql, "punto": reorder_sql, "margen": margin_sql,
+                     "matriz": MATRIX_SQL, "objetivo": target_sql("f.demanda")}

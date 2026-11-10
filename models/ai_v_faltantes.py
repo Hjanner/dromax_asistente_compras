@@ -1,10 +1,9 @@
 # -*- coding: utf-8 -*-
 from odoo import fields, models, tools
 
-from ..services.network_sql import network_ctes
-from ..services.prompt import DEFAULT_COVERAGE_WEEKS
+from ..services.network_sql import network_ctes, target_sql
 from .ai_v_oferta import grant_readonly
-from .ai_v_rotacion import _int_param
+from .ai_v_rotacion import network_params_sql
 
 
 class AiVFaltantes(models.Model):
@@ -14,17 +13,23 @@ class AiVFaltantes(models.Model):
     traslados (ai_v_reabastecimiento); entre farmacias no se traslada. Por
     eso hay una fila por producto, con company_id = la matriz:
 
-    necesidad = Σ faltas de las farmacias (venta semanal × semanas de
-                cobertura − stock − compras pendientes − en camino, por
-                farmacia: lo que le sobra a una no cubre a otra)
-              + venta propia de la matriz × semanas de cobertura;
+    necesidad = Σ faltas de las farmacias debajo del objetivo (objetivo −
+                stock − compras pendientes − en camino, por farmacia; lo que
+                le sobra a una no cubre a otra)
+              + objetivo de la venta propia de la matriz;
     faltante  = necesidad − stock libre de la matriz (su stock menos lo que ya
                 sale hacia las farmacias) − sus compras pendientes.
 
-    Solo las filas con faltante > 0; la cantidad sugerida es el faltante
-    redondeado hacia arriba. Las solicitudes sin confirmar de la matriz no se
-    restan (en_solicitud solo avisa). detalle_farmacias dice cuánto le falta a
-    cada farmacia.
+    Objetivo = venta semanal × semanas de cobertura más el margen de
+    seguridad; punto de pedido = un % de esa venta (los dos en Ajustes, ver
+    network_sql). Se compra solo si, después de mandar lo que les falta a las
+    farmacias que llegaron a su punto de pedido, a la matriz le queda su
+    propio punto de pedido o menos: así no se compra una unidad cuando la
+    matriz todavía tiene, ni se compra solo la unidad de una farmacia cuando
+    la matriz está vacía (se repone a todas las que están debajo del
+    objetivo). La cantidad sugerida es el faltante redondeado hacia arriba.
+    Las solicitudes sin confirmar de la matriz no se restan (en_solicitud solo
+    avisa). detalle_farmacias dice cuánto le falta a cada farmacia.
 
     Droguería sugerida: entre las ofertas disponibles del producto, primero
     las de precio coherente con el costo de la matriz (hasta el triple:
@@ -52,12 +57,14 @@ class AiVFaltantes(models.Model):
     demanda_propia = fields.Float("Venta semanal de la matriz", readonly=True)
     semanas_cobertura = fields.Integer("Semanas de cobertura", readonly=True)
     faltas_farmacias = fields.Integer("Falta en las farmacias", readonly=True,
-                                      help="Suma de lo que le falta a cada farmacia para la cobertura.")
+                                      help="Suma de lo que le falta a cada farmacia para llegar al objetivo "
+                                           "(cobertura + margen de seguridad).")
     farmacias_con_falta = fields.Integer("Farmacias con falta", readonly=True)
     detalle_farmacias = fields.Char("Falta por farmacia", readonly=True,
                                     help="Cuánto le falta a cada farmacia, de mayor a menor.")
     necesidad = fields.Float("Necesidad", readonly=True,
-                             help="Falta en las farmacias + venta de la matriz × semanas de cobertura.")
+                             help="Falta en las farmacias + venta de la matriz × semanas de cobertura, "
+                                  "más el margen de seguridad.")
     stock = fields.Float("Stock libre en la matriz", readonly=True,
                          help="Stock de la matriz menos lo que ya sale hacia las farmacias; el negativo cuenta como 0.")
     pendiente = fields.Float("Compras pendientes", readonly=True, help="De la matriz, por recibir.")
@@ -96,9 +103,10 @@ class AiVFaltantes(models.Model):
             WITH %(red)s
             red AS (
                 SELECT f.product_id, sum(f.falta) AS faltas, count(*) AS farmacias,
+                       COALESCE(sum(f.falta) FILTER (WHERE f.en_punto), 0) AS urgentes,
                        string_agg(c.name || ' (' || f.falta || ')', ', '
                                   ORDER BY f.falta DESC, c.name) AS detalle
-                  FROM faltas f
+                  FROM reponer f
                   JOIN res_company c ON c.id = f.company_id
                  GROUP BY f.product_id
             ),
@@ -115,10 +123,12 @@ class AiVFaltantes(models.Model):
                 SELECT p.product_id,
                        COALESCE(red.faltas, 0) AS faltas,
                        COALESCE(red.farmacias, 0) AS farmacias,
+                       COALESCE(red.urgentes, 0) AS urgentes,
                        red.detalle,
                        COALESCE(pr.demanda, 0) AS demanda_propia,
                        COALESCE(df.demanda, 0) + COALESCE(pr.demanda, 0) AS demanda,
-                       COALESCE(red.faltas, 0) + COALESCE(pr.demanda, 0) * params.semanas AS necesidad,
+                       COALESCE(red.faltas, 0) + COALESCE(%(objetivo_propio)s, 0) AS necesidad,
+                       COALESCE(pr.demanda, 0) * params.semanas * params.punto AS punto_propio,
                        greatest(COALESCE(m.libre, 0), 0) AS stock,
                        COALESCE(pd.pendiente, 0) AS pendiente,
                        COALESCE(pd.atrasado, 0) AS atrasado,
@@ -136,6 +146,11 @@ class AiVFaltantes(models.Model):
                        ceil(c.necesidad - c.stock - c.pendiente)::int AS cantidad
                   FROM compra c
                  WHERE c.necesidad - c.stock - c.pendiente > 0
+                   -- Se compra cuando, después de mandar a las farmacias que llegaron a su
+                   -- punto de pedido, a la matriz le queda su propio punto de pedido o menos;
+                   -- y entonces se repone a todas las que están debajo del objetivo.
+                   AND (c.urgentes > 0 OR c.punto_propio > 0)
+                   AND c.stock + c.pendiente - c.urgentes <= c.punto_propio
             ),
             costos AS (
                 -- standard_price depende de la empresa: está en ir_property (el de
@@ -205,5 +220,5 @@ class AiVFaltantes(models.Model):
               LEFT JOIN costos k ON k.product_id = f.product_id
               LEFT JOIN ofertas o ON o.product_id = f.product_id AND o.puesto = 1
              WHERE pp.active AND pt.purchase_ok
-        """ % {"red": network_ctes(_int_param("coverage_weeks", DEFAULT_COVERAGE_WEEKS, 52))})
+        """ % {"red": network_ctes(*network_params_sql()), "objetivo_propio": target_sql("pr.demanda")})
         grant_readonly(self.env, self._table)

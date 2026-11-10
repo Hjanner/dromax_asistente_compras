@@ -74,8 +74,10 @@ CATALOG = {
     "ai_v_faltantes": (
         "Lo que tiene que comprar Dromax (la sucursal matriz, que recibe todas las compras y "
         "reparte a las farmacias) para toda la red: una fila por producto con faltante > 0. "
-        "Faltante = suma de lo que les falta a las farmacias + venta de Dromax × semanas de "
-        "cobertura − stock libre de Dromax − sus compras pendientes. Si no hay fila, no hace "
+        "Se compra cuando, después de mandar lo que les falta a las farmacias que llegaron a su "
+        "punto de pedido, a Dromax le queda su propio punto de pedido o menos. Faltante = suma de "
+        "lo que les falta a las farmacias para llegar a la cobertura más el margen de seguridad + "
+        "objetivo de la venta de Dromax − stock libre de Dromax − sus compras pendientes. Si no hay fila, no hace "
         "falta comprarlo. Trae la droguería sugerida: la más barata que tiene toda la cantidad "
         "(o la más barata si ninguna alcanza), prefiriendo precios coherentes con el costo. Es "
         "la base de la propuesta de compra.",
@@ -88,10 +90,11 @@ CATALOG = {
             ("demanda_semanal", "venta semanal de toda la red (farmacias + Dromax, demanda depurada)"),
             ("demanda_propia", "venta semanal de Dromax"),
             ("semanas_cobertura", "semanas de cobertura configuradas"),
-            ("faltas_farmacias", "suma de lo que les falta a las farmacias para la cobertura"),
+            ("faltas_farmacias", "suma de lo que les falta a las farmacias para llegar a la cobertura "
+                                 "más el margen de seguridad"),
             ("farmacias_con_falta", "cuántas farmacias tienen falta"),
             ("detalle_farmacias", "cuánto le falta a cada farmacia, p. ej. 'FARMAX (10), LA 45 (5)'"),
-            ("necesidad", "faltas_farmacias + demanda_propia × semanas_cobertura"),
+            ("necesidad", "faltas_farmacias + demanda_propia × semanas_cobertura más el margen de seguridad"),
             ("stock", "stock libre de Dromax (sin lo que ya sale a las farmacias)"),
             ("pendiente", "compras confirmadas de Dromax por recibir (ya restadas)"),
             ("atrasado", "parte de lo pendiente con la fecha prevista vencida"),
@@ -117,8 +120,8 @@ CATALOG = {
     ),
     "ai_v_reabastecimiento": (
         "Lo que la sucursal matriz (Dromax, la droguería del grupo) puede mandar por traslado a "
-        "cada farmacia: una fila por producto y farmacia en cero o por agotarse que la matriz "
-        "tiene disponible. Ya descuenta lo que viene en camino y reserva la venta de la matriz; "
+        "cada farmacia: una fila por producto y farmacia en cero o por agotarse (llegó al punto de "
+        "pedido de Ajustes) que la matriz tiene disponible. Ya descuenta lo que viene en camino y reserva la venta de la matriz; "
         "si no alcanza para todas, reparte primero a la más urgente. Usa sus cantidades tal cual.",
         [
             ("company_id", "farmacia que recibe"),
@@ -127,14 +130,14 @@ CATALOG = {
             ("product_id", "product_product.id"),
             ("producto", "nombre del producto"),
             ("codigo", "código interno"),
-            ("estado", "'cero' (sin stock) o 'por_agotarse' (no le alcanza para la cobertura)"),
+            ("estado", "'cero' (sin stock) o 'por_agotarse' (llegó al punto de pedido)"),
             ("demanda_semanal", "venta semanal de la farmacia (demanda depurada)"),
             ("semanas_cobertura", "semanas de cobertura configuradas"),
             ("stock", "stock en la farmacia (negativo = 0)"),
             ("pendiente_compra", "compras confirmadas pendientes de recibir en la farmacia"),
             ("en_camino", "traslados en borrador o sin terminar que ya van hacia la farmacia"),
             ("cobertura_actual", "semanas que cubre lo que tiene y lo que viene: menor = más urgente"),
-            ("falta", "lo que le falta para la cobertura"),
+            ("falta", "lo que le falta para la cobertura más el margen de seguridad"),
             ("cantidad", "unidades a trasladar desde la matriz"),
             ("parcial", "TRUE si la matriz no alcanza para toda la falta"),
             ("stock_matriz", "stock de la matriz"),

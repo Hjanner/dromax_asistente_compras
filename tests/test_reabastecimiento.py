@@ -77,6 +77,46 @@ class TestReabastecimiento(AnalisisCase):
         self._set_stock(self.vitamina, 1)                            # con stock ya no entra
         self.assertFalse(self._rows(self.vitamina))
 
+    def _thresholds(self, point, margin):
+        ICP = self.env["ir.config_parameter"].sudo()
+        ICP.set_param("dromax_asistente_compras.reorder_point_pct", str(point))
+        ICP.set_param("dromax_asistente_compras.safety_margin_pct", str(margin))
+
+    def test_reorder_point_and_safety_margin(self):
+        """Entra al bajar al punto de pedido y se repone hasta la cobertura más el margen."""
+        self._thresholds(50, 20)
+        self._weekly_sales(self.ibuprofeno, 10)                     # objetivo 10 × 1,2 = 12; punto 5
+        self._set_stock(self.ibuprofeno, 30, company=self.matriz)
+        self._set_stock(self.ibuprofeno, 6)                         # 6 > 5: todavía no
+        self.assertFalse(self._rows(self.ibuprofeno))
+        self._set_stock(self.ibuprofeno, -1)                        # _set_stock suma: queda en 5
+        row = self._rows(self.ibuprofeno)[self.company]
+        self.assertEqual((row.estado, row.falta, row.cantidad), ("por_agotarse", 7, 7))
+        self._set_stock(self.ibuprofeno, -5)
+        self.assertEqual(self._rows(self.ibuprofeno)[self.company].falta, 12)
+        # Venta de 3/sem: el margen se redondea (3 × 1,2 = 3,6 → 4).
+        self._so(self.otra, self.ibuprofeno, 3)                     # otra farmacia, en cero
+        self.assertEqual(self._rows(self.ibuprofeno)[self.otra].falta, 4)
+
+    def test_safety_margin_low_rotation(self):
+        """El margen se redondea: en poca venta no duplica el pedido."""
+        self._thresholds(50, 20)
+        self._pos_sale(self.vitamina, 8, self._week_date(2))        # media 1/sem, en cero
+        self._set_stock(self.vitamina, 10, company=self.matriz)
+        self.assertEqual(self._rows(self.vitamina)[self.company].cantidad, 1)
+        self._thresholds(100, 100)                                  # con 100 % ya son 2
+        self.assertEqual(self._rows(self.vitamina)[self.company].cantidad, 2)
+
+    def test_settings_keep_zero_margin(self):
+        """Odoo guarda un entero 0 como vacío: el margen 0 se guarda explícito."""
+        settings = self.env["res.config.settings"].create({
+            "ai_purchase_safety_margin_pct": 0, "ai_purchase_reorder_point_pct": 40})
+        settings.execute()
+        ICP = self.env["ir.config_parameter"].sudo()
+        self.assertEqual(ICP.get_param("dromax_asistente_compras.safety_margin_pct"), "0")
+        self.assertEqual(ICP.get_param("dromax_asistente_compras.reorder_point_pct"), "40")
+        self.assertEqual(self.env["res.config.settings"].create({}).ai_purchase_safety_margin_pct, 0)
+
     def test_generate_transfers(self):
         self._weekly_sales(self.ibuprofeno, 10)
         self._set_stock(self.ibuprofeno, 3)
