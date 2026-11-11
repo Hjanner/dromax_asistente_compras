@@ -176,7 +176,7 @@ a cada farmacia. Una fila por producto y farmacia:
   todas, se reparte primero a la farmacia más urgente (menor cobertura) y la
   línea queda **Parcial**. Solo productos almacenables, en su unidad.
 - **Valor** = a trasladar × costo de la matriz (el costo que pasa el traslado).
-  Vista de tabla dinámica y gráfico con el valor por farmacia y estado.
+  Vista de tabla dinámica con el valor por farmacia y estado.
 - **Generar borradores de traslado** (botón de la lista al elegir líneas;
   requiere Inventario / Usuario y acceso a la matriz y a las farmacias): un
   *Traslado interno* en borrador de la matriz a cada farmacia, del tipo de
@@ -186,6 +186,11 @@ a cada farmacia. Una fila por producto y farmacia:
   Definitivos** arma la cadena por tránsito con el costo de origen, los lotes
   y los pasos de cada almacén. Las cantidades se vuelven a leer al pulsar, y
   lo ya generado deja de sugerirse (si se cancela un borrador, vuelve).
+- **Cancelar varias operaciones** (`ai.picking.cancel`): en cualquier lista
+  de operaciones de inventario, *Acciones → Cancelar* abre un diálogo con las
+  elegidas que aún se pueden cancelar (las hechas o canceladas no se tocan) y
+  las cancela juntas. Requiere Inventario / Usuario. Odoo solo trae
+  cancelarlas de una en una.
 - Ajustes: *Sucursal matriz* (`matrix_company_id`; vacío = la que tenga
   DROMAX en el nombre), las semanas de historial y de cobertura, el punto de
   pedido y el margen de seguridad.

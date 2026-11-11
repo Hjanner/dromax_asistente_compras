@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Cancelar varias operaciones de inventario desde la lista (Acciones → Cancelar). -->
+    <record id="view_ai_picking_cancel_form" model="ir.ui.view">
+        <field name="name">ai.picking.cancel.form</field>
+        <field name="model">ai.picking.cancel</field>
+        <field name="arch" type="xml">
+            <form string="Cancelar operaciones">
+                <field name="picking_ids" invisible="1"/>
+                <p invisible="not to_cancel_count">
+                    Se cancelarán <b><field name="to_cancel_count" class="oe_inline"/></b> operaciones.
+                    No se puede deshacer: para volver a mandar la mercancía hay que crear otra.
+                </p>
+                <p invisible="to_cancel_count" class="text-warning">
+                    Ninguna de las operaciones elegidas se puede cancelar: ya están hechas o canceladas.
+                </p>
+                <p invisible="not skipped_count" class="text-muted">
+                    <field name="skipped_count" class="oe_inline"/> ya están hechas o canceladas y no se tocan.
+                </p>
+                <field name="to_cancel_ids" invisible="not to_cancel_count" readonly="1">
+                    <tree>
+                        <field name="name"/>
+                        <field name="location_id" string="Desde"/>
+                        <field name="location_dest_id" string="Hacia"/>
+                        <field name="scheduled_date"/>
+                        <field name="state" widget="badge"/>
+                    </tree>
+                </field>
+                <footer>
+                    <button name="action_confirm" type="object" string="Cancelar operaciones"
+                            class="btn-primary" invisible="not to_cancel_count"/>
+                    <button string="Volver" special="cancel" class="btn-secondary"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_ai_picking_cancel" model="ir.actions.act_window">
+        <field name="name">Cancelar</field>
+        <field name="res_model">ai.picking.cancel</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+        <field name="binding_model_id" ref="stock.model_stock_picking"/>
+        <field name="binding_view_types">list</field>
+        <field name="groups_id" eval="[(6, 0, [ref('stock.group_stock_user')])]"/>
+    </record>
+</odoo>

@@ -75,13 +75,14 @@
                                     <field name="state" column_invisible="1"/>
                                     <field name="drogueria_opciones_ids" column_invisible="1"/>
                                     <field name="purchase_line_id" column_invisible="1"/>
-                                    <field name="laboratorio"/>
+                                    <!-- A la vista solo lo necesario para decidir; lo demás, en el menú de columnas. -->
+                                    <field name="laboratorio" optional="hide"/>
                                     <field name="product_id"/>
                                     <field name="detalle_farmacias" optional="show"/>
                                     <field name="demanda" optional="hide"/>
-                                    <field name="stock" optional="show"/>
-                                    <field name="pendiente" optional="show"/>
-                                    <field name="cantidad_sugerida"/>
+                                    <field name="stock" optional="hide"/>
+                                    <field name="pendiente" optional="hide"/>
+                                    <field name="cantidad_sugerida" optional="hide"/>
                                     <field name="cantidad_final" decoration-bf="ajustada"
                                            readonly="purchase_line_id"/>
                                     <field name="drogueria_id" options="{'no_create': True, 'no_open': True}"
@@ -90,7 +91,7 @@
                                     <field name="monto" sum="Total"/>
                                     <field name="revisar_presentacion" optional="show"/>
                                     <field name="ajustada" optional="hide"/>
-                                    <field name="purchase_order_id" optional="show"/>
+                                    <field name="purchase_order_id" optional="hide"/>
                                     <field name="motivo" optional="hide"/>
                                 </tree>
                             </field>
@@ -147,13 +148,13 @@
                 <field name="product_id"/>
                 <field name="detalle_farmacias" optional="show"/>
                 <field name="faltas_farmacias" optional="hide"/>
-                <field name="demanda" optional="show"/>
+                <field name="demanda" optional="hide"/>
                 <field name="demanda_propia" optional="hide"/>
-                <field name="stock" optional="show"/>
-                <field name="pendiente" optional="show"/>
+                <field name="stock" optional="hide"/>
+                <field name="pendiente" optional="hide"/>
                 <field name="en_solicitud" optional="hide"/>
                 <field name="cobertura_actual" optional="hide"/>
-                <field name="cantidad_sugerida" sum="Total"/>
+                <field name="cantidad_sugerida" sum="Total" optional="hide"/>
                 <field name="cantidad_final" sum="Total" decoration-bf="ajustada"
                        readonly="state in ('done', 'discarded') or purchase_line_id"/>
                 <field name="drogueria_sugerida_id" optional="hide"/>
@@ -166,8 +167,8 @@
                 <field name="monto" sum="Total"/>
                 <field name="revisar_presentacion" optional="show"/>
                 <field name="ajustada" optional="hide"/>
-                <field name="purchase_order_id" optional="show"/>
-                <field name="motivo" optional="show" readonly="state in ('done', 'discarded')"/>
+                <field name="purchase_order_id" optional="hide"/>
+                <field name="motivo" optional="hide" readonly="state in ('done', 'discarded')"/>
             </tree>
         </field>
     </record>

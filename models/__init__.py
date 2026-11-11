@@ -15,3 +15,4 @@ from . import ai_v_faltantes
 from . import ai_v_reabastecimiento
 from . import ai_purchase_proposal
 from . import ai_barcode_mismatch
+from . import ai_picking_cancel

@@ -49,18 +49,6 @@
         </field>
     </record>
 
-    <record id="view_ai_v_reabastecimiento_graph" model="ir.ui.view">
-        <field name="name">ai.v.reabastecimiento.graph</field>
-        <field name="model">ai.v.reabastecimiento</field>
-        <field name="arch" type="xml">
-            <graph string="Valor a trasladar por farmacia" type="bar" stacked="1">
-                <field name="company_id"/>
-                <field name="estado"/>
-                <field name="valor" type="measure"/>
-            </graph>
-        </field>
-    </record>
-
     <record id="view_ai_v_reabastecimiento_search" model="ir.ui.view">
         <field name="name">ai.v.reabastecimiento.search</field>
         <field name="model">ai.v.reabastecimiento</field>
@@ -86,7 +74,7 @@
         <field name="name">Reabastecimiento desde la matriz</field>
         <field name="res_model">ai.v.reabastecimiento</field>
         <field name="groups_id" eval="[(6, 0, [ref('group_ai_purchase_user')])]"/>
-        <field name="view_mode">tree,pivot,graph</field>
+        <field name="view_mode">tree,pivot</field>
         <field name="search_view_id" ref="view_ai_v_reabastecimiento_search"/>
         <field name="help" type="html">
             <p class="o_view_nocontent_empty_folder">Ninguna farmacia necesita mercancía que tenga la matriz</p>

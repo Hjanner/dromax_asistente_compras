@@ -16,3 +16,4 @@ access_ai_purchase_proposal_user,ai.purchase.proposal compradores,model_ai_purch
 access_ai_purchase_proposal_system,ai.purchase.proposal administradores,model_ai_purchase_proposal,base.group_system,1,1,1,1
 access_ai_purchase_proposal_line_user,ai.purchase.proposal.line compradores,model_ai_purchase_proposal_line,group_ai_purchase_user,1,1,1,0
 access_ai_purchase_proposal_line_system,ai.purchase.proposal.line administradores,model_ai_purchase_proposal_line,base.group_system,1,1,1,1
+access_ai_picking_cancel_stock_user,ai.picking.cancel inventario,model_ai_picking_cancel,stock.group_stock_user,1,1,1,0

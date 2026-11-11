@@ -161,7 +161,7 @@ class TestUi(HttpCase):
                        ".o_list_view .o_data_row td[name='%s']" % column, login=buyer.login)
 
     def test_replenishment_screens(self):
-        """Reabastecimiento desde la matriz: lista (con el botón al elegir líneas), tabla dinámica y gráfico."""
+        """Reabastecimiento desde la matriz: lista (con el botón al elegir líneas) y tabla dinámica."""
         matriz = self.env["res.company"].create({"name": "ZQX MATRIZ UI"})
         self.env["ir.config_parameter"].sudo().set_param(
             "dromax_asistente_compras.matrix_company_id", str(matriz.id))
@@ -205,7 +205,52 @@ class TestUi(HttpCase):
             })();
         """, login=user.login)
         self._open(action + "&view_type=pivot", ".o_pivot table", login=user.login)
-        self._open(action + "&view_type=graph", ".o_graph_renderer canvas", login=user.login)
+        # Sin vista de gráfico (pedido del usuario): solo lista y tabla dinámica.
+        act = self.env.ref("dromax_asistente_compras.action_ai_v_reabastecimiento")
+        self.assertEqual(act.view_mode, "tree,pivot")
+
+    def test_cancel_several_transfers(self):
+        """Acciones → Cancelar en la lista de operaciones: diálogo y cancelación de las elegidas."""
+        user = new_test_user(self.env, login="ai_cancel_ui", groups="base.group_user,stock.group_stock_user")
+        user.password = user.login
+        product = self.env["product.product"].create({"name": "ZQX UI CANCELAR", "detailed_type": "product"})
+        wh = self.env["stock.warehouse"].search([("company_id", "=", self.env.company.id)], limit=1)
+        pickings = self.env["stock.picking"].create([{
+            "picking_type_id": wh.int_type_id.id,
+            "location_id": wh.lot_stock_id.id, "location_dest_id": wh.lot_stock_id.id,
+            "move_ids": [(0, 0, {"name": product.name, "product_id": product.id, "product_uom_qty": 2,
+                                 "product_uom": product.uom_id.id, "location_id": wh.lot_stock_id.id,
+                                 "location_dest_id": wh.lot_stock_id.id})],
+        } for _i in range(2)])
+        action = self.env["ir.actions.act_window"].create({
+            "name": "ZQX operaciones", "res_model": "stock.picking", "view_mode": "tree,form",
+            "domain": [("id", "in", pickings.ids)]})
+        self.browser_js("/web#action=%s" % action.id, """
+            const until = (sel, text) => new Promise((resolve, reject) => {
+                let n = 0;
+                const t = setInterval(() => {
+                    const el = [...document.querySelectorAll(sel)].find((e) => !text || e.textContent.includes(text));
+                    if (el) { clearInterval(t); resolve(el); }
+                    else if (++n > 150) { clearInterval(t); reject(new Error("No apareció " + sel + " " + (text || ""))); }
+                }, 100);
+            });
+            (async () => {
+                try {
+                    await until(".o_list_view .o_data_row");
+                    (await until(".o_list_view thead .o_list_record_selector input")).click();
+                    (await until(".o_cp_action_menus .dropdown-toggle", "Acciones")).click();
+                    (await until(".o-dropdown--menu .dropdown-item", "Cancelar")).click();
+                    await until(".modal p", "Se cancelarán");
+                    (await until(".modal button[name='action_confirm']")).click();
+                    await until(".o_list_view .o_data_row td[name='state']", "Cancelado");
+                    console.log("test successful");
+                } catch (e) {
+                    console.error(e.message);
+                }
+            })();
+        """, login=user.login)
+        pickings.invalidate_recordset(["state"])
+        self.assertEqual(pickings.mapped("state"), ["cancel", "cancel"])
 
     def test_proposal_screens(self):
         # La propuesta es de la matriz: el comprador de Dromax la tiene como empresa activa.

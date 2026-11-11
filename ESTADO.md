@@ -1,6 +1,6 @@
 # Estado del proyecto
 
-Última actualización: 2026-11-11 (asistente `17.0.0.18.0`, 148 tests; módulo
+Última actualización: 2026-11-11 (asistente `17.0.0.18.1`, 153 tests; módulo
 FTP 1.5 con 38). Qué está hecho, qué decidimos y qué falta.
 El README explica cómo funciona lo que ya existe.
 
@@ -375,6 +375,18 @@ El README explica cómo funciona lo que ya existe.
     nueva crea los borradores de traslado. Cada una le deja una actividad a
     su responsable (Ajustes) y tiene un botón *Ejecutar ahora*. Las dos
     vienen apagadas. 148 tests.
+  - Asistente `17.0.0.18.1` (pedido del usuario, 2026-11-11), para que el
+    personal de compras tenga menos que ver:
+    - sin la vista de gráfico en *Reabastecimiento desde la matriz* (queda
+      lista y tabla dinámica);
+    - la propuesta muestra solo producto, falta por farmacia, cantidad final,
+      droguería, precio, monto y «revisar» (lo demás, en el menú de columnas);
+    - *Acciones → Cancelar* en la lista de operaciones de inventario: cancela
+      varias a la vez tras un diálogo (las hechas o canceladas no se tocan).
+    Descartado: que la tarea diaria deje los traslados ya en definitivo.
+    Pendientes de validar con un compañero: menú reducido para compras (grupo
+    avanzado para análisis, chat y comparador) y botón «Confirmar órdenes» en
+    la propuesta con la lista por droguería para el vendedor.
   - Respuestas de Daniel (reunión): códigos de barras y ventas de `ODOO2026`
     los resuelve él; no restringir su módulo de traslados (se permiten
     traslados manuales entre farmacias); historial de 8 semanas; la
