@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 {
-    'name': "Dromax - Asistente de Compras IA",
+    'name': "Dromax - Agente IA",
     'summary': "Propuesta de compra semanal por laboratorio, ajustable en el chat "
                "y convertible en solicitudes de presupuesto en borrador.",
     'description': """
-Agente de Compras IA para Dromax.
+Agente IA de Dromax: compras y reabastecimiento.
 
 - Flujo cotidiano: un cron precalcula los faltantes el lunes en la madrugada
   y deja la propuesta semanal de la sucursal matriz (Dromax), que compra para
@@ -22,7 +22,7 @@ cuando el comprador se lo pide; las órdenes en borrador las crea el botón.
     """,
     'author': "Hjanner",
     'category': 'Inventory/Purchase',
-    'version': '17.0.0.17.0',
+    'version': '17.0.0.17.1',
     'license': 'LGPL-3',
     'application': True,
     'installable': True,

@@ -1,6 +1,6 @@
 # Instalación en el servidor de Dromax
 
-Guía para instalar el **Asistente de Compras IA** (`dromax_asistente_compras`)
+Guía para instalar el **Agente IA** (`dromax_asistente_compras`)
 y el módulo de inventarios FTP de las droguerías (`advanced_interbranch_transfer`)
 en la base de producción. Se hace una sola vez. Al final hay una lista para
 comprobar que todo funciona y cómo actualizar después.
@@ -106,7 +106,7 @@ Qué hace la instalación:
   internos* hay que activar *Ajustes → Inventario → Ubicaciones de
   almacenamiento* (y, si alguna sucursal no la muestra, activar su tipo de
   operación).
-- El asistente crea el menú **Compras IA**, sus vistas de análisis
+- El asistente crea el menú **Agente IA**, sus vistas de análisis
   (`ai_v_*`) y dos tareas programadas (ver el paso 7).
 
 ## 4. Rol de solo lectura de Postgres
@@ -169,7 +169,7 @@ de instalar el asistente (así recibe permiso sobre sus vistas).
 
 ## 5. Ajustes del asistente
 
-En **Ajustes → Asistente de Compras IA** (o *Compras IA → Configuración*):
+En **Ajustes → Agente IA** (o *Agente IA → Configuración*):
 
 | Ajuste | Valor |
 |---|---|
@@ -217,7 +217,7 @@ En **Ajustes → Técnico → Acciones planificadas**:
   cuando las droguerías carguen bien a mano (paso 6). Corre cada 30 minutos;
   cambiar la frecuencia si se prefiere. Si un archivo llega vacío o con menos
   de la mitad de los productos, se conserva la oferta anterior.
-- **Compras IA: propuesta de compra semanal**: activa, los lunes a las 03:00
+- **Agente IA: propuesta de compra semanal**: activa, los lunes a las 03:00
   de Caracas (07:00 UTC). Calcula la propuesta de la semana a partir de los
   faltantes; no llama a la IA ni crea órdenes. Para cambiar el día o la hora,
   editar la fecha de la próxima ejecución de la tarea.
@@ -238,7 +238,7 @@ En **Ajustes → Técnico → Acciones planificadas**:
   principal). El chat las ve igual, sin depender del selector.
 - Zona horaria de los usuarios y de las farmacias: `America/Caracas` (las
   semanas de venta se cuentan en hora local).
-- La configuración y el consumo de IA (*Compras IA → Configuración → Consumo
+- La configuración y el consumo de IA (*Agente IA → Configuración → Consumo
   de IA*) solo los ven los administradores.
 
 ## 9. Impuestos
@@ -262,15 +262,15 @@ farmacéutico) son **exentos**:
 | Dónde | Qué debería verse |
 |---|---|
 | *Inventario → Productos → Oferta de droguerías* | Las filas de cada droguería. Un usuario sin permisos de administración puede verlas pero no editarlas ni borrarlas. |
-| *Compras IA → Comparador de precios* | Un producto por fila con la droguería más barata, la segunda y el ahorro; al hacer clic, una ventana con el precio de cada droguería. Al marcar productos, **Añadir a borrador de compra** (permiso de Compras y acceso a la matriz) los agrega a una solicitud en borrador de la matriz por droguería, sin pasar del stock de la droguería; el aviso trae **Ver en Compras**. |
-| *Compras IA → Oferta por droguería* | Productos propios con oferta, cruzados por código de barras. Si sale vacío, revisar los códigos de barras de los productos. |
-| *Compras IA → Códigos de barras* → **Actualizar reporte** | Las incoherencias entre los códigos propios y los de las droguerías, para corregir. |
-| *Compras IA → Análisis → Necesidad de compra* | Lo que tiene que comprar la matriz para toda la red, con la falta de cada farmacia y la droguería sugerida. |
-| *Compras IA → Reabastecimiento* | Lo que la sucursal matriz (Ajustes → *Sucursal matriz*; por defecto la que tenga DROMAX en el nombre) puede mandar a cada farmacia. Al elegir líneas, **Generar borradores de traslado** crea los *Traslados internos* en borrador; en cada uno, **Generar Traslados Definitivos**. Requiere Inventario / Usuario y el tipo *Traslados internos* activo en el almacén de la matriz. |
-| *Compras IA → Propuestas* → **Calcular propuesta** | La propuesta de la semana, agrupada por laboratorio. |
-| *Compras IA → Chat* → **Arma la compra de esta semana** | El resumen de la propuesta, con los botones **Generar todos los borradores** y **Abrir propuesta** debajo. |
-| *Compras IA → Chat* → **Revisa un laboratorio** → **Generar borradores de …** | Una solicitud de presupuesto en borrador de la matriz por droguería, en *Compras*, solo con ese laboratorio. |
-| *Compras IA → Configuración → Consumo de IA* | Una línea por cada llamada al modelo, con su costo. |
+| *Agente IA → Comparador de precios* | Un producto por fila con la droguería más barata, la segunda y el ahorro; al hacer clic, una ventana con el precio de cada droguería. Al marcar productos, **Añadir a borrador de compra** (permiso de Compras y acceso a la matriz) los agrega a una solicitud en borrador de la matriz por droguería, sin pasar del stock de la droguería; el aviso trae **Ver en Compras**. |
+| *Agente IA → Oferta por droguería* | Productos propios con oferta, cruzados por código de barras. Si sale vacío, revisar los códigos de barras de los productos. |
+| *Agente IA → Códigos de barras* → **Actualizar reporte** | Las incoherencias entre los códigos propios y los de las droguerías, para corregir. |
+| *Agente IA → Análisis → Necesidad de compra* | Lo que tiene que comprar la matriz para toda la red, con la falta de cada farmacia y la droguería sugerida. |
+| *Agente IA → Reabastecimiento* | Lo que la sucursal matriz (Ajustes → *Sucursal matriz*; por defecto la que tenga DROMAX en el nombre) puede mandar a cada farmacia. Al elegir líneas, **Generar borradores de traslado** crea los *Traslados internos* en borrador; en cada uno, **Generar Traslados Definitivos**. Requiere Inventario / Usuario y el tipo *Traslados internos* activo en el almacén de la matriz. |
+| *Agente IA → Propuestas* → **Calcular propuesta** | La propuesta de la semana, agrupada por laboratorio. |
+| *Agente IA → Chat* → **Arma la compra de esta semana** | El resumen de la propuesta, con los botones **Generar todos los borradores** y **Abrir propuesta** debajo. |
+| *Agente IA → Chat* → **Revisa un laboratorio** → **Generar borradores de …** | Una solicitud de presupuesto en borrador de la matriz por droguería, en *Compras*, solo con ese laboratorio. |
+| *Agente IA → Configuración → Consumo de IA* | Una línea por cada llamada al modelo, con su costo. |
 
 ## 11. Actualizar más adelante
 
@@ -339,7 +339,7 @@ reiniciar el servicio:
 | «No se pudo descifrar la clave FTP» | La llave no es la que se usó al guardar la clave. Revisar `ftp_secret_key` en `odoo.conf` (o la variable `FTP_SECRET_KEY`) o volver a escribir la clave en el contacto. |
 | Tras actualizar, las pantallas del asistente o del módulo FTP fallan en una base (columna o campo que no existe) | Esa base no se actualizó y el servicio ya usa el código nuevo: actualizarla con `-u` (ver el paso 11). |
 | El chat responde que no puede consultar la base | Faltan los parámetros `ro_user` / `ro_password`, la clave no coincide (el script del rol la cambia cada vez que se ejecuta), o `pg_hba.conf` no tiene la línea de esa base para `dromax_ai_ro` (paso 4). |
-| «El Asistente de Compras IA es solo para el personal de compras…» | El usuario no tiene *Compras / Usuario*. |
+| «El Agente IA es solo para el personal de compras…» | El usuario no tiene *Compras / Usuario*. |
 | «Para generar órdenes de compra hace falta el permiso de Compras» | Igual que el anterior: falta *Compras / Usuario*. |
 | La propuesta no trae droguería en muchos productos | Sus códigos de barras no coinciden con los de las droguerías: revisar el reporte de *Códigos de barras*. |
 | «Probar llave» falla | Llave de OpenRouter errónea o sin crédito, o el servidor no tiene salida a `openrouter.ai`. |

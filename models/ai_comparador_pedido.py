@@ -43,7 +43,7 @@ class AiComparadorPedido(models.TransientModel):
         """Asistente con una línea por producto del catálogo; los demás quedan en sin_catalogo."""
         company = matrix_company(self.env)
         if not company:
-            raise UserError(_("No hay sucursal matriz: elígela en Compras IA → Configuración → Ajustes."))
+            raise UserError(_("No hay sucursal matriz: elígela en Agente IA → Configuración → Ajustes."))
         in_catalog = rows.filtered("product_id")
         self.env.cr.execute("SELECT product_id, cantidad_sugerida FROM ai_v_faltantes WHERE product_id = ANY(%s)",
                             (in_catalog.product_id.ids,))

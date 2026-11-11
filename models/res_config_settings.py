@@ -58,7 +58,7 @@ class ResConfigSettings(models.TransientModel):
     ai_purchase_matrix_company_id = fields.Many2one(
         "res.company", "Sucursal matriz", config_parameter=PARAM_PREFIX + "matrix_company_id",
         help="Sucursal que recibe todas las compras y reabastece a las farmacias con traslados "
-             "(Compras IA → Reabastecimiento). Vacío: la que tenga DROMAX en el nombre.")
+             "(Agente IA → Reabastecimiento). Vacío: la que tenga DROMAX en el nombre.")
 
     def set_values(self):
         super().set_values()

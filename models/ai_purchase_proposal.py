@@ -2,7 +2,7 @@
 """Propuesta de compra semanal.
 
 Una propuesta por semana: toda compra la hace la sucursal matriz (Dromax)
-para toda la red y después reparte a las farmacias con traslados (Compras IA
+para toda la red y después reparte a las farmacias con traslados (Agente IA
 → Reabastecimiento). Una línea por producto de ai_v_faltantes, guardada como
 foto del momento (falta en cada farmacia, venta propia de la matriz, stock y
 compras pendientes de la matriz, droguería y precio). Se organiza por laboratorio en las líneas, no
@@ -110,7 +110,7 @@ class AiPurchaseProposal(models.Model):
 
     def _check_buyer(self):
         if not self.env.user.has_group(GROUP_XMLID):
-            raise AccessError(_("Solo los usuarios del Asistente de Compras IA pueden calcular propuestas."))
+            raise AccessError(_("Solo los usuarios del Agente IA pueden calcular propuestas."))
 
     def action_generate(self):
         """Botón de la lista: calcula una propuesta nueva y la abre.

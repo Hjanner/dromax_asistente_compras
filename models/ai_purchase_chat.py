@@ -15,7 +15,7 @@ LEVELS = [("basic", "Básico"), ("medium", "Medio"), ("advanced", "Avanzado")]
 class AiPurchaseChatSession(models.Model):
     """Una conversación del comprador con el agente. Cada uno ve solo las suyas."""
     _name = "ai.purchase.chat.session"
-    _description = "Conversación con el Asistente de Compras IA"
+    _description = "Conversación con el Agente IA"
     _order = "last_message_date desc, id desc"
 
     name = fields.Char("Título", default=lambda self: _("Nueva conversación"), required=True)
@@ -35,7 +35,7 @@ class AiPurchaseChatSession(models.Model):
     def _check_ai_access(self):
         """Mensaje claro para quien abra el chat por URL sin ser de compras ni administrador."""
         if not self.env.user.has_group(GROUP_XMLID):
-            raise AccessError(_("El Asistente de Compras IA es solo para el personal de compras "
+            raise AccessError(_("El Agente IA es solo para el personal de compras "
                                 "y los administradores."))
 
     @api.model
@@ -154,7 +154,7 @@ class AiPurchaseChatSession(models.Model):
 
 class AiPurchaseChatMessage(models.Model):
     _name = "ai.purchase.chat.message"
-    _description = "Mensaje del Asistente de Compras IA"
+    _description = "Mensaje del Agente IA"
     _order = "id"
 
     session_id = fields.Many2one("ai.purchase.chat.session", required=True,

@@ -54,7 +54,7 @@ PRESETS = [
             "Di cuántas líneas son parciales porque la matriz no alcanza. Calcula los totales "
             "(por farmacia y el general) en la misma consulta SQL, con GROUP BY ROLLUP, y "
             "cópialos tal cual: no sumes tú ni inventes cantidades. Termina diciendo que los borradores se generan "
-            "en Compras IA → Reabastecimiento, eligiendo las líneas."
+            "en Agente IA → Reabastecimiento, eligiendo las líneas."
         ),
     },
     {

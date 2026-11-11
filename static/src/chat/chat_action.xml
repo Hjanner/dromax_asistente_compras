@@ -29,7 +29,7 @@
             <main class="d-flex flex-column flex-grow-1 o_ai_main">
                 <header class="d-flex align-items-center gap-2 px-3 py-2 border-bottom">
                     <h5 class="m-0 flex-grow-1 text-truncate"
-                        t-esc="activeSession ? activeSession.name : 'Asistente de Compras IA'"/>
+                        t-esc="activeSession ? activeSession.name : 'Agente IA'"/>
                 </header>
 
                 <div class="o_ai_thread flex-grow-1 overflow-auto px-3 py-3" t-ref="thread">

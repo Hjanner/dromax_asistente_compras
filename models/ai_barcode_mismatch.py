@@ -163,7 +163,7 @@ class AiBarcodeMismatch(models.Model):
         registros seleccionados (o ninguno), que aquí no se usan.
         """
         if not self.env.user.has_group(GROUP_XMLID):
-            raise AccessError(_("Solo los usuarios del Asistente de Compras IA pueden generar el reporte."))
+            raise AccessError(_("Solo los usuarios del Agente IA pueden generar el reporte."))
         count = self._generate()
         return {
             "type": "ir.actions.client",

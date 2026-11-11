@@ -8,7 +8,7 @@
              través de los grupos que lo implican más abajo. Así nadie ajeno a
              compras puede tenerlo por una casilla marcada de más. -->
         <record id="group_ai_purchase_user" model="res.groups">
-            <field name="name">Asistente de Compras IA</field>
+            <field name="name">Agente IA</field>
             <field name="category_id" ref="base.module_category_hidden"/>
             <!-- Antes implicaba Compras; ahora es al revés (evita un ciclo). -->
             <field name="implied_ids" eval="[(3, ref('purchase.group_purchase_user'))]"/>

@@ -3,7 +3,7 @@
 
 El agente trabaja sobre la propuesta guardada (la del cron del lunes o la del
 botón Calcular propuesta), no sobre una lista que arma él: lo que el comprador
-ve en el chat y en Compras IA → Propuestas es lo mismo, y lo que ajusta en el
+ve en el chat y en Agente IA → Propuestas es lo mismo, y lo que ajusta en el
 chat queda en la propuesta.
 
 update_proposal_lines es la única escritura del agente: cambia la cantidad
@@ -13,7 +13,7 @@ comprador con el botón.
 
 Toda compra la hace la sucursal matriz (Dromax) para toda la red: una línea
 por producto, con lo que le falta a cada farmacia en detalle_farmacias. Las
-farmacias se abastecen después desde la matriz con traslados (Compras IA →
+farmacias se abastecen después desde la matriz con traslados (Agente IA →
 Reabastecimiento); entre farmacias no se traslada. Las herramientas ven todas
 las sucursales del usuario, no solo las marcadas en el selector de empresas.
 """
@@ -146,7 +146,7 @@ def _proposal(env, proposal_id):
         raise ProposalToolError(_(
             "Todavía no hay ninguna propuesta de compra. Se calcula sola los lunes en la madrugada; "
             "también se puede calcular con «Arma la compra de esta semana» o con el botón Calcular "
-            "propuesta en Compras IA → Propuestas."))
+            "propuesta en Agente IA → Propuestas."))
     return proposal
 
 

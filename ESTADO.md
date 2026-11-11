@@ -1,6 +1,6 @@
 # Estado del proyecto
 
-Última actualización: 2026-11-10 (asistente `17.0.0.17.0`, 143 tests; módulo
+Última actualización: 2026-11-11 (asistente `17.0.0.17.1`, 143 tests; módulo
 FTP 1.5 con 38). Qué está hecho, qué decidimos y qué falta.
 El README explica cómo funciona lo que ya existe.
 
@@ -12,7 +12,7 @@ El README explica cómo funciona lo que ya existe.
     (`ai.usage.log`).
   - Ajustes: llave, modelos por nivel, parámetros del cálculo de faltantes y
     límites SQL.
-- **Chat del agente** (menú *Compras IA → Chat*) con preguntas predefinidas,
+- **Chat del agente** (menú *Agente IA → Chat*) con preguntas predefinidas,
   selector de nivel y traza de las consultas SQL de cada respuesta.
 - **Módulo FTP** (`advanced_interbranch_transfer`, fuera de este repo):
   instalado y probado con tres droguerías reales (VITALCLINIC,
@@ -121,7 +121,7 @@ El README explica cómo funciona lo que ya existe.
 
 - **Vistas de rotación, stock y pendiente** (versión `17.0.0.7.0`, 88 tests,
   2026-10-26): `ai_v_rotacion`, `ai_v_stock` y `ai_v_pendiente` (ver
-  README), menú *Compras IA → Análisis*, regla por empresa en las pantallas,
+  README), menú *Agente IA → Análisis*, regla por empresa en las pantallas,
   catálogo y prompt del agente (usa la demanda depurada ya calculada). El
   módulo ahora depende de `purchase_stock` y `pos_sale`. Decisiones propias,
   a validar con compras: semanas completas en hora local; atípicas por ambos
@@ -141,7 +141,7 @@ El README explica cómo funciona lo que ya existe.
   simulados no coinciden con la oferta: para propuestas, usar esta base.
 
 - **Vista de faltantes** (versión `17.0.0.8.0`, 94 tests, 2026-10-27):
-  `ai_v_faltantes` (ver README), menú *Compras IA → Análisis → Faltantes*,
+  `ai_v_faltantes` (ver README), menú *Agente IA → Análisis → Faltantes*,
   catálogo y prompt (el agente parte de ahí para armar compras). Cantidad
   sugerida = ⌈demanda depurada × cobertura − stock − pendiente⌉; stock
   negativo = 0; droguería sugerida con precio coherente con el costo,
@@ -152,7 +152,7 @@ El README explica cómo funciona lo que ya existe.
   1412 faltantes, 1004 con droguería, 41 a revisar por presentación, ~2 s.
 
 - **Propuesta de compra** (versión `17.0.0.9.0`, 102 tests, 2026-10-27):
-  `ai.purchase.proposal` y sus líneas (ver README), menú *Compras IA →
+  `ai.purchase.proposal` y sus líneas (ver README), menú *Agente IA →
   Propuestas*, tarea programada del lunes 03:00 y botón *Calcular
   propuesta*. **Una propuesta semanal agrupada por laboratorio**, no una por
   laboratorio como decía el diseño (decidido con el usuario: ~190
@@ -282,7 +282,7 @@ El README explica cómo funciona lo que ya existe.
 
 - **Reabastecimiento desde la matriz** (versión `17.0.0.14.0`, 2026-11-07,
   pedido de Daniel en sus audios del 5 y 6 de noviembre, versión sencilla para
-  su presentación del día 8): vista `ai_v_reabastecimiento`, menú *Compras IA →
+  su presentación del día 8): vista `ai_v_reabastecimiento`, menú *Agente IA →
   Reabastecimiento* (lista, tabla dinámica y gráfico con el valor por
   farmacia), botón *Generar borradores de traslado* que crea el borrador del
   módulo de traslados (Daniel pidió respetar las reglas de Odoo: el asistente
@@ -362,6 +362,11 @@ El README explica cómo funciona lo que ya existe.
     líneas (las de 1–2 unidades, de 145 a 46) y compra de 709 a 371 productos
     (de 1–2 unidades, de 381 a 183: lo que queda es venta baja en la sucursal
     que lo necesita). Con 100 % y 0 % se vuelve al cálculo anterior. 143 tests.
+  - Asistente `17.0.0.17.1` (orden del supervisor, 2026-11-11): en la
+    interfaz el módulo pasa a llamarse **Agente IA** (antes «Compras IA» y
+    «Asistente de Compras IA»): menú, app de Ajustes, grupo, tarea programada,
+    título del chat y mensajes. El nombre técnico `dromax_asistente_compras`
+    no cambia.
   - Respuestas de Daniel (reunión): códigos de barras y ventas de `ODOO2026`
     los resuelve él; no restringir su módulo de traslados (se permiten
     traslados manuales entre farmacias); historial de 8 semanas; la
@@ -525,8 +530,8 @@ Comentadas al usuario el 2026-11-04; el código no se cambió:
 - Comentarle a Daniel que su botón *Descargar* ahora deshace la carga
   fallida, así que el error no queda en *Última carga*.
 - Usuario de prueba sin permisos de administración en `DROMAX_AI_DEV`:
-  `comprador.prueba` (id 83; Compras, Inventario y Asistente de Compras IA).
+  `comprador.prueba` (id 83; Compras, Inventario y Agente IA).
 - Usuario de prueba sin compras ni administración: `empleado.prueba` (id 207;
-  Inventario, Ventas y contactos). No debe ver Compras IA ni la pestaña FTP.
+  Inventario, Ventas y contactos). No debe ver Agente IA ni la pestaña FTP.
 - Contactos de droguerías en `DROMAX_AI_DEV`: VITALCLINIC (69),
   INTERCONTINENTAL (70) e INSUAMINCA (71).

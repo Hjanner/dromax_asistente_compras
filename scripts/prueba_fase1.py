@@ -17,7 +17,7 @@ Variables opcionales: NIVEL=basic|medium|advanced (defecto basic, el más barato
 y PREGUNTA="..." para cambiar la pregunta al modelo.
 
 Gasta crédito de OpenRouter: con el nivel básico, una fracción de centavo.
-Las llamadas quedan en Compras IA → Configuración → Consumo de IA.
+Las llamadas quedan en Agente IA → Configuración → Consumo de IA.
 """
 import json
 import os
@@ -40,7 +40,7 @@ user = env["res.users"].search([
     ("groups_id", "in", env.ref("dromax_asistente_compras.group_ai_purchase_user").id),
 ], limit=1)
 if not user:
-    raise SystemExit("Ningún usuario tiene el grupo Asistente de Compras IA / Usuario.")
+    raise SystemExit("Ningún usuario tiene el grupo Agente IA / Usuario.")
 uenv = env(user=user)
 print("Usuario:", user.login, "| nivel:", NIVEL)
 

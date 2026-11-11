@@ -77,7 +77,7 @@
             <p>Lo que tiene que comprar la sucursal matriz para toda la red: lo que les falta a
                las farmacias más su propia venta, menos su stock libre y sus compras pendientes,
                con la droguería más barata que tiene la cantidad. La matriz y las semanas de
-               cobertura se ajustan en Compras IA → Configuración → Ajustes.</p>
+               cobertura se ajustan en Agente IA → Configuración → Ajustes.</p>
         </field>
     </record>
 
@@ -138,7 +138,7 @@
             <p class="o_view_nocontent_empty_folder">No hay ventas en la ventana de rotación</p>
             <p>Demanda semanal por producto y farmacia (TPV + pedidos de venta) en las últimas
                semanas completas, sin las semanas atípicas. La ventana y el umbral se ajustan en
-               Compras IA → Configuración → Ajustes.</p>
+               Agente IA → Configuración → Ajustes.</p>
         </field>
     </record>
 

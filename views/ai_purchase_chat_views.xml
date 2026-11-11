@@ -4,7 +4,7 @@
     <!-- Las acciones de cliente no admiten grupos en Odoo 17: el acceso lo
          cortan los permisos de ai.purchase.chat.session y _check_ai_access(). -->
     <record id="action_ai_purchase_chat" model="ir.actions.client">
-        <field name="name">Asistente de Compras IA</field>
+        <field name="name">Agente IA</field>
         <field name="tag">dromax_ai_purchase_chat</field>
     </record>
 

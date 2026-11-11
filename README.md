@@ -1,4 +1,4 @@
-# Dromax · Asistente de Compras IA (Odoo 17)
+# Dromax · Agente IA (Odoo 17)
 
 Módulo de Odoo 17 que arma, en un chat, una propuesta de compra semanal por
 laboratorio y, con el visto bueno del comprador, la convierte en solicitudes de
@@ -25,7 +25,7 @@ Instalación en el servidor de Dromax: ver [INSTALACION.md](INSTALACION.md).
   compra cuando el comprador se lo pide (`update_proposal_lines`). Las
   `purchase.order` en borrador las crea un botón, nunca el modelo.
 - **Acceso restringido** al personal de compras y a los administradores: el
-  grupo técnico *Asistente de Compras IA* lo implican *Compras / Usuario* y
+  grupo técnico *Agente IA* lo implican *Compras / Usuario* y
   *Ajustes* (no es una casilla de la ficha del usuario). La configuración y el
   consumo de IA son solo para administradores.
 
@@ -69,7 +69,7 @@ módulo y su `init()` vuelve a dar el permiso al rol configurado en `ro_user`.
 ## Rotación, stock y pendientes (`ai_v_rotacion`, `ai_v_stock`, `ai_v_pendiente`)
 
 Vistas SQL por producto y farmacia (`company_id`), en la unidad del producto,
-en el menú *Compras IA → Análisis* y consultables por el agente. Las
+en el menú *Agente IA → Análisis* y consultables por el agente. Las
 pantallas muestran solo las farmacias permitidas del usuario (regla por
 empresa, como el resto de Odoo); el chat, que consulta con el rol de solo
 lectura, las ve todas (la compra es de la matriz para toda la red).
@@ -101,7 +101,7 @@ En `dromax_ai_multi` (3 años simulados): 5186 filas de rotación (~3,5 s),
 ## Necesidad de compra (`ai_v_faltantes`)
 
 Lo que tiene que comprar la sucursal matriz para toda la red: una fila por
-producto con faltante > 0, en *Compras IA → Análisis → Necesidad de compra*.
+producto con faltante > 0, en *Agente IA → Análisis → Necesidad de compra*.
 Es la base de la propuesta. Comparte el cálculo con el reabastecimiento
 (`services/network_sql.py`), para que lo que se compra y lo que se reparte
 salgan de la misma cuenta.
@@ -158,7 +158,7 @@ venta de la red de 2/sem o menos).
 
 ## Reabastecimiento desde la matriz (`ai_v_reabastecimiento`)
 
-Menú *Compras IA → Reabastecimiento*. Lo que la sucursal matriz (Dromax, la
+Menú *Agente IA → Reabastecimiento*. Lo que la sucursal matriz (Dromax, la
 droguería del grupo que distribuye a las farmacias) puede mandar por traslado
 a cada farmacia. Una fila por producto y farmacia:
 
@@ -199,12 +199,12 @@ vende 2/sem o menos.
 
 ## Propuesta de compra (`ai.purchase.proposal`)
 
-Menú *Compras IA → Propuestas*. **Una propuesta por semana de la sucursal
+Menú *Agente IA → Propuestas*. **Una propuesta por semana de la sucursal
 matriz para toda la red, con una línea por producto**, organizada por
 laboratorio en las líneas (no una propuesta por laboratorio: con datos reales
 saldrían ~190 por semana con una mediana de 3 líneas).
 
-- **Cálculo:** la tarea programada *Compras IA: propuesta de compra
+- **Cálculo:** la tarea programada *Agente IA: propuesta de compra
   semanal* (lunes 03:00 de Caracas, 07:00 UTC; `noupdate`, se ajusta en
   producción) o el botón *Calcular propuesta* de la lista. Copia
   `ai_v_faltantes` como foto: una línea por producto, con la falta de cada
@@ -246,7 +246,7 @@ saldrían ~190 por semana con una mediana de 3 líneas).
 
 La oferta llega del módulo FTP (`advanced_interbranch_transfer`, dependencia
 del módulo): una fila de `supplier.product.staging` por producto y droguería.
-La vista `ai_v_oferta` (menú *Compras IA → Oferta por producto*) la une a los
+La vista `ai_v_oferta` (menú *Agente IA → Oferta por producto*) la une a los
 productos propios por **código de barras normalizado** y añade la comparación
 entre droguerías: cada una entra con su mejor oferta disponible (con stock),
 aunque traiga varios lotes; `orden_precio` es su puesto (1 = la más barata) y
@@ -263,7 +263,7 @@ código normalizado, la vista toma el más antiguo.
 
 ## Comparador de precios (`ai_v_comparador`)
 
-Menú *Compras IA → Comparador de precios* (pedido en la reunión del
+Menú *Agente IA → Comparador de precios* (pedido en la reunión del
 2026-11-09, inspirado en el portal i-compra 360). **Una fila por producto**
 (código de barras válido), aunque cada droguería lo escriba distinto: nombre
 de nuestro catálogo (o el de la droguería más barata), droguerías con stock,
@@ -315,7 +315,7 @@ sigue como *Oferta por droguería*.
 
 ## Reporte de códigos de barras (`ai.barcode.mismatch`)
 
-Menú *Compras IA → Códigos de barras*, botón **Actualizar reporte** (lo rehace
+Menú *Agente IA → Códigos de barras*, botón **Actualizar reporte** (lo rehace
 completo; ~11 s con la oferta actual). Tipos de incoherencia:
 
 | Tipo | Qué es |
@@ -395,7 +395,7 @@ SIM_DB=<base> python3 odoo/odoo-bin shell -c odoo/debian/odoo.conf -d <base> --n
 
 ## Chat del agente
 
-Menú **Compras IA → Chat** (grupo *Asistente de Compras IA / Usuario*).
+Menú **Agente IA → Chat** (grupo *Agente IA / Usuario*).
 
 - Preguntas predefinidas (`services/presets.py`), cada una con su nivel de
   modelo: *Arma la compra de esta semana* (avanzado), *Revisa un laboratorio*
@@ -452,7 +452,7 @@ son provisionales hasta hablar con el encargado de compras.
 ## OpenRouter: niveles de modelo y consumo
 
 Una sola llave y tres niveles, configurables en **Ajustes → Asistente de
-Compras IA** (o en el menú *Compras IA → Configuración*):
+Agente IA** (o en el menú *Agente IA → Configuración*):
 
 | Nivel | Modelo inicial | Uso |
 |---|---|---|
@@ -465,7 +465,7 @@ Compras IA** (o en el menú *Compras IA → Configuración*):
 avanzado, las pida quien las pida. El botón *Probar llave* muestra el consumo y
 el tope de crédito de la llave.
 
-Cada llamada, buena o fallida, queda en `ai.usage.log` (*Compras IA →
+Cada llamada, buena o fallida, queda en `ai.usage.log` (*Agente IA →
 Configuración → Consumo de IA*): usuario, nivel, modelo, tokens de entrada,
 salida, caché y razonamiento, costo que informa OpenRouter y duración. Se
 guarda en una transacción aparte, para que el gasto quede registrado aunque la

@@ -94,7 +94,7 @@ PROPOSAL = """\
 La propuesta de compra semanal:
 - Se calcula sola los lunes en la madrugada y queda guardada, con una línea \
 por producto: lo que compra Dromax para toda la red, con cuánto le falta a cada \
-farmacia (falta_por_farmacia). El comprador la revisa contigo o en Compras IA \
+farmacia (falta_por_farmacia). El comprador la revisa contigo o en Agente IA \
 → Propuestas; lo que cambies con update_proposal_lines se ve en las dos partes.
 - get_proposal sin filtros da el resumen. Para ver productos concretos, filtra \
 por laboratorio, producto (buscar), farmacia (las líneas en que a esa farmacia \
@@ -112,7 +112,7 @@ comprador cambie su cantidad o su droguería: señálalas siempre.
 crea una orden de Dromax por droguería con las líneas por pedir. Si en la \
 respuesta solo leíste o ajustaste líneas de un laboratorio, el botón pide solo \
 ese laboratorio; si no, toda la propuesta. Lo que llega a Dromax se reparte \
-después a las farmacias en Compras IA → Reabastecimiento."""
+después a las farmacias en Agente IA → Reabastecimiento."""
 
 FORMAT = """\
 Formato de respuesta:

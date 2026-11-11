@@ -80,7 +80,7 @@ def tool_definitions(env):
 def call_tool(env, name, args):
     """Ejecuta la herramienta `name` con `args` (dict) en nombre de env.user."""
     if not env.user.has_group(GROUP_XMLID):
-        return {"error": "El usuario no tiene acceso al Asistente de Compras IA."}
+        return {"error": "El usuario no tiene acceso al Agente IA."}
     impl = _IMPLEMENTATIONS.get(name)
     if impl is None:
         return {"error": "Herramienta desconocida: %s." % name}

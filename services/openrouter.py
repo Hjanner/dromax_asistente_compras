@@ -142,7 +142,7 @@ class OpenRouterClient:
         api_key = get_setting(self.env, "openrouter_api_key", env_aliases=("OPENROUTER_API_KEY",))
         if not api_key:
             raise OpenRouterError(
-                "Falta la llave de OpenRouter (Ajustes → Asistente de Compras IA).")
+                "Falta la llave de OpenRouter (Ajustes → Agente IA).")
         base_url = self.env["ir.config_parameter"].sudo().get_param("web.base.url") or "http://localhost"
         return {
             "Authorization": "Bearer %s" % api_key,

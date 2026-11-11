@@ -4,7 +4,7 @@
          o la frecuencia que se cambien en producción no las pisa una actualización. -->
     <data noupdate="1">
         <record id="cron_ai_purchase_proposal" model="ir.cron">
-            <field name="name">Compras IA: propuesta de compra semanal</field>
+            <field name="name">Agente IA: propuesta de compra semanal</field>
             <field name="model_id" ref="model_ai_purchase_proposal"/>
             <field name="state">code</field>
             <field name="code">model._cron_generate()</field>

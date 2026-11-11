@@ -8,7 +8,7 @@
         <field name="inherit_id" ref="base.res_config_settings_view_form"/>
         <field name="arch" type="xml">
             <xpath expr="//form" position="inside">
-                <app data-string="Asistente de Compras IA" string="Asistente de Compras IA"
+                <app data-string="Agente IA" string="Agente IA"
                      name="dromax_asistente_compras" groups="base.group_system">
                     <block title="OpenRouter" name="ai_purchase_openrouter">
                         <setting id="ai_purchase_api_key" string="Llave de OpenRouter"
