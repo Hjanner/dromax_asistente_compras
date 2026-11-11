@@ -80,6 +80,36 @@
                             </div>
                         </setting>
                     </block>
+                    <block title="Automatización" name="ai_purchase_automation">
+                        <setting id="ai_purchase_auto_rfq_setting" string="Compra semanal"
+                                 help="El lunes a las 03:00 se calcula la propuesta de la semana. Activado, también se crean las órdenes de compra en borrador (una por droguería) y se cancelan las de semanas anteriores que nadie confirmó. El responsable recibe una actividad para revisarlas.">
+                            <field name="ai_purchase_auto_rfq"/>
+                            <div class="content-group">
+                                <div class="row mt8">
+                                    <label for="ai_purchase_responsible_id" class="col-lg-5 o_light_label"/>
+                                    <field name="ai_purchase_responsible_id" class="col-lg-7"
+                                           options="{'no_create': True}"/>
+                                </div>
+                                <button name="action_ai_run_weekly_purchase" type="object" string="Ejecutar ahora"
+                                        icon="oi-arrow-right" class="btn-link mt8"
+                                        confirm="Se calcula la propuesta de la semana y, si está activado, se crean los borradores de compra. ¿Continuar?"/>
+                            </div>
+                        </setting>
+                        <setting id="ai_purchase_auto_transfers_setting" string="Reabastecimiento diario"
+                                 help="Cada día a las 06:00 se crean los borradores de traslado de la matriz a las farmacias que llegaron a su punto de pedido. El responsable recibe una actividad en cada uno para generar el traslado definitivo.">
+                            <field name="ai_purchase_auto_transfers"/>
+                            <div class="content-group">
+                                <div class="row mt8">
+                                    <label for="ai_purchase_transfer_responsible_id" class="col-lg-5 o_light_label"/>
+                                    <field name="ai_purchase_transfer_responsible_id" class="col-lg-7"
+                                           options="{'no_create': True}"/>
+                                </div>
+                                <button name="action_ai_run_replenishment" type="object" string="Ejecutar ahora"
+                                        icon="oi-arrow-right" class="btn-link mt8"
+                                        confirm="Se crean los borradores de traslado de todas las farmacias que llegaron a su punto de pedido. ¿Continuar?"/>
+                            </div>
+                        </setting>
+                    </block>
                     <block title="Consultas a la base de datos" name="ai_purchase_sql">
                         <setting id="ai_purchase_sql_limits" string="Límites"
                                  help="Tope de filas que se envían al modelo por consulta y tiempo máximo de cada consulta.">

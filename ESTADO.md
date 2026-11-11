@@ -1,6 +1,6 @@
 # Estado del proyecto
 
-Última actualización: 2026-11-11 (asistente `17.0.0.17.1`, 143 tests; módulo
+Última actualización: 2026-11-11 (asistente `17.0.0.18.0`, 148 tests; módulo
 FTP 1.5 con 38). Qué está hecho, qué decidimos y qué falta.
 El README explica cómo funciona lo que ya existe.
 
@@ -367,6 +367,14 @@ El README explica cómo funciona lo que ya existe.
     «Asistente de Compras IA»): menú, app de Ajustes, grupo, tarea programada,
     título del chat y mensajes. El nombre técnico `dromax_asistente_compras`
     no cambia.
+  - Asistente `17.0.0.18.0` (pedido del usuario, 2026-11-11):
+    **automatización** de los borradores (ver README, *Automatización*). El
+    lunes, la tarea de la propuesta además crea los borradores de compra por
+    droguería (cancela los de semanas anteriores sin confirmar y deja fuera
+    lo que ya está en otras solicitudes); cada día a las 06:00, una tarea
+    nueva crea los borradores de traslado. Cada una le deja una actividad a
+    su responsable (Ajustes) y tiene un botón *Ejecutar ahora*. Las dos
+    vienen apagadas. 148 tests.
   - Respuestas de Daniel (reunión): códigos de barras y ventas de `ODOO2026`
     los resuelve él; no restringir su módulo de traslados (se permiten
     traslados manuales entre farmacias); historial de 8 semanas; la
@@ -479,9 +487,11 @@ descuentos encadenados = precio final en todas las filas.
    descarga diaria con aviso si falla y la tasa del día. Los descuentos que no
    vienen en ningún archivo (pronto pago, escalas por volumen de INSUAMINCA)
    no aparecen ni en el portal: si se quieren, se cargan a mano por droguería.
-5. **Ideas de la reunión, sin pedir aún**: borradores automáticos (compra
-   semanal y traslados diarios desde la matriz) y exportar la compra por
-   laboratorio con la cantidad de cada farmacia.
+5. **Automatización en producción**: decidir con el comprador y con Daniel
+   quiénes son los responsables y activar los dos ajustes; activar también la
+   descarga FTP (para que la compra del lunes use la oferta del día). Queda
+   como idea de la reunión: exportar la compra por laboratorio con la
+   cantidad de cada farmacia (la lista para el vendedor).
 6. **Con los datos de `ODOO2026`:** validar y calibrar la necesidad de compra,
    el reabastecimiento y la propuesta con ventas reales, conectar el campo
    laboratorio y revisar el reporte de códigos de barras con el catálogo real.

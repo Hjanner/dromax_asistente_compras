@@ -1,12 +1,16 @@
 # -*- coding: utf-8 -*-
+import logging
 from collections import defaultdict
 
-from odoo import _, fields, models, tools
+from odoo import _, api, fields, models, tools
 from odoo.exceptions import AccessError, UserError
 
+from ..services import automation
 from ..services.network_sql import MATRIX_PARAM, network_ctes  # noqa: F401 (MATRIX_PARAM lo usan los tests)
 from .ai_v_oferta import grant_readonly
 from .ai_v_rotacion import network_params_sql
+
+_logger = logging.getLogger(__name__)
 
 
 class AiVReabastecimiento(models.Model):
@@ -167,7 +171,22 @@ class AiVReabastecimiento(models.Model):
         if missing:
             raise UserError(_("No tienes acceso a: %s. Pide acceso a esas sucursales o quita sus líneas.",
                               ", ".join(missing.sudo().mapped("name"))))
+        pickings = lines._create_transfers(user.company_ids)
+        return {
+            "type": "ir.actions.act_window",
+            "name": _("Borradores de traslado"),
+            "res_model": "stock.picking",
+            "view_mode": "tree,form",
+            "domain": [("id", "in", pickings.ids)],
+            "context": {"create": False},
+        }
 
+    def _create_transfers(self, companies):
+        """Crea los borradores de estas líneas (sin revisar permisos): uno por farmacia.
+
+        `companies`: las sucursales del contexto, además de la matriz.
+        """
+        lines = self
         by_route = defaultdict(lambda: self.browse())
         for line in lines:
             by_route[(line.matriz_id, line.company_id)] |= line
@@ -189,7 +208,7 @@ class AiVReabastecimiento(models.Model):
                     wh=src_wh.name, company=matriz.name))
             src_loc, dest_loc = src_wh.lot_stock_id, dest_wh.lot_stock_id
             Picking = self.env["stock.picking"].with_context(
-                allowed_company_ids=(matriz | user.company_ids).ids).with_company(matriz)
+                allowed_company_ids=(matriz | companies).ids).with_company(matriz)
             pickings |= Picking.create({
                 "picking_type_id": pick_type.id,
                 "location_id": src_loc.id,
@@ -204,11 +223,34 @@ class AiVReabastecimiento(models.Model):
                     "location_dest_id": dest_loc.id,
                 }) for line in route_lines.sorted(lambda l: l.producto or "")],
             })
-        return {
-            "type": "ir.actions.act_window",
-            "name": _("Borradores de traslado"),
-            "res_model": "stock.picking",
-            "view_mode": "tree,form",
-            "domain": [("id", "in", pickings.ids)],
-            "context": {"create": False},
-        }
+        return pickings
+
+    @api.model
+    def _cron_generate_transfers(self):
+        """Tarea programada diaria: con el ajuste activo, crea los borradores de
+        traslado de todas las líneas y le deja una actividad al responsable en
+        cada uno. Lo que ya va en borrador cuenta como en camino: no se duplica."""
+        if not automation.is_enabled(self.env, automation.AUTO_TRANSFERS):
+            return self.env["stock.picking"]
+        self.env.flush_all()
+        lines = self.sudo().search([("cantidad", ">", 0)])
+        if not lines:
+            _logger.info("Reabastecimiento automático: nada que trasladar.")
+            return self.env["stock.picking"]
+        try:
+            pickings = lines._create_transfers(lines.matriz_id | lines.company_id)
+        except UserError as exc:
+            # Falta un almacén o el tipo de traslado: se registra y la tarea no se reintenta en bucle.
+            _logger.error("Reabastecimiento automático: %s", exc)
+            return self.env["stock.picking"]
+        user = automation.responsible(self.env, automation.TRANSFER_RESPONSIBLE)
+        for picking in pickings:
+            picking.message_post(body=_("Borrador creado por el Agente IA (reabastecimiento diario)."))
+            if user:
+                picking.activity_schedule(
+                    "mail.mail_activity_data_todo", user_id=user.id,
+                    summary=_("Despachar reabastecimiento a %s", picking.location_dest_id.company_id.name),
+                    note=_("Revisa las cantidades, pulsa «Generar Traslados Definitivos» y valida la salida."))
+        _logger.info("Reabastecimiento automático: %s borradores (%s).", len(pickings),
+                     ", ".join(pickings.mapped("name")))
+        return pickings

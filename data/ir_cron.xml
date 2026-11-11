@@ -15,5 +15,20 @@
             <field name="nextcall" eval="(DateTime.now() + relativedelta(weekday=0, days=1, hour=7, minute=0, second=0)).strftime('%Y-%m-%d %H:%M:%S')"/>
             <field name="active" eval="True"/>
         </record>
+
+        <!-- Reabastecimiento diario: 06:00 en Caracas (10:00 UTC). Solo crea
+             borradores con el ajuste «Borradores de traslado automáticos». -->
+        <record id="cron_ai_replenishment" model="ir.cron">
+            <field name="name">Agente IA: borradores de reabastecimiento diario</field>
+            <field name="model_id" ref="model_ai_v_reabastecimiento"/>
+            <field name="state">code</field>
+            <field name="code">model._cron_generate_transfers()</field>
+            <field name="user_id" ref="base.user_root"/>
+            <field name="interval_number">1</field>
+            <field name="interval_type">days</field>
+            <field name="numbercall">-1</field>
+            <field name="nextcall" eval="(DateTime.now() + relativedelta(days=1, hour=10, minute=0, second=0)).strftime('%Y-%m-%d %H:%M:%S')"/>
+            <field name="active" eval="True"/>
+        </record>
     </data>
 </odoo>

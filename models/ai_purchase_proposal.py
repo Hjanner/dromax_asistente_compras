@@ -13,9 +13,14 @@ El comprador solo cambia la cantidad final, la droguería y el motivo. La
 cantidad y la droguería sugeridas quedan fijas, para medir cuánto corrige el
 comprador al agente.
 
-Borradores (action_create_rfq, botón del comprador, nunca del modelo): una
-orden de compra en borrador por droguería, a nombre de la matriz, con las
-líneas que tienen cantidad final y droguería. Se puede hacer por partes (p. ej.
+Borradores (action_create_rfq, botón del comprador, nunca del modelo de IA):
+una orden de compra en borrador por droguería, a nombre de la matriz, con las
+líneas que tienen cantidad final y droguería. Con el ajuste «Borradores de
+compra automáticos», la tarea programada del lunes los crea sola al calcular
+la propuesta (_cron_generate): antes cancela los borradores de propuestas
+anteriores que nadie confirmó, deja fuera lo que ya está en otras solicitudes
+sin confirmar, y le deja al responsable de compras una actividad para
+revisarlos. Se puede hacer por partes (p. ej.
 un laboratorio el lunes y otro el martes): lo nuevo se suma al borrador que
 esta misma propuesta ya creó para esa droguería; los borradores hechos a
 mano no se tocan. Las líneas marcadas para revisar la presentación no entran
@@ -35,10 +40,12 @@ import re
 from datetime import datetime, time, timedelta
 
 import pytz
+from markupsafe import Markup
 
 from odoo import Command, _, api, fields, models
 from odoo.exceptions import AccessError, UserError, ValidationError
 
+from ..services import automation
 from ..services.config import get_int_setting, get_setting
 from ..services.prompt import DEFAULT_COVERAGE_WEEKS, DEFAULT_WINDOW_WEEKS
 from .ai_barcode_mismatch import GROUP_XMLID
@@ -66,7 +73,7 @@ def _num(value):
 class AiPurchaseProposal(models.Model):
     _name = "ai.purchase.proposal"
     _description = "Propuesta de compra"
-    _inherit = ["mail.thread"]
+    _inherit = ["mail.thread", "mail.activity.mixin"]
     _order = "date_computed desc, id desc"
 
     name = fields.Char("Propuesta", required=True, readonly=True)
@@ -131,7 +138,93 @@ class AiPurchaseProposal(models.Model):
 
     @api.model
     def _cron_generate(self):
-        self._generate()
+        """Tarea programada del lunes: calcula la propuesta y, con el ajuste
+        activo, crea los borradores de compra; avisa al responsable."""
+        auto = automation.is_enabled(self.env, automation.AUTO_RFQ)
+        cancelled = self._cancel_stale_drafts() if auto else self.env["purchase.order"]
+        proposal = self._generate()
+        orders, skipped = proposal._auto_create_rfqs() if auto else (self.env["purchase.order"], {})
+        proposal._notify_purchase_responsible(auto, orders, skipped, cancelled)
+        return proposal
+
+    @api.model
+    def _cancel_stale_drafts(self):
+        """Cancela los borradores de propuestas anteriores que siguen sin confirmar.
+
+        Los reemplaza la compra nueva (con la oferta y el stock de hoy): si se
+        quedaran, la cantidad se pediría dos veces. Solo los de las propuestas
+        (los hechos a mano en Compras no se tocan) y solo en borrador (una
+        solicitud ya enviada a la droguería sigue su curso).
+        """
+        orders = self.search([]).purchase_order_ids.filtered(lambda o: o.state == "draft")
+        if orders:
+            orders.button_cancel()
+            for order in orders:
+                order.message_post(body=_(
+                    "Cancelada por el Agente IA: la reemplazan los borradores de la compra de esta semana."))
+            _logger.info("Borradores de compra anteriores cancelados: %s.", ", ".join(orders.mapped("name")))
+        return orders
+
+    def _auto_create_rfqs(self):
+        """Borradores de todas las líneas por pedir, sin revisar permisos (tarea programada).
+
+        Quedan fuera, y se informan: las líneas sin droguería, las marcadas
+        para revisar la presentación y las de productos que ya están en otras
+        solicitudes sin confirmar (se pedirían dos veces).
+        """
+        self.ensure_one()
+        lines = self.env["ai.purchase.proposal.line"].sudo().search([
+            ("proposal_id", "=", self.id), ("cantidad_final", ">", 0), ("purchase_line_id", "=", False)])
+        skipped = {
+            "sin_drogueria": lines.filtered(lambda l: not l.drogueria_id),
+            "revisar": lines.filtered(lambda l: l.drogueria_id and l.revisar_presentacion),
+            "en_solicitud": lines.filtered(
+                lambda l: l.drogueria_id and not l.revisar_presentacion and l.en_solicitud > 0),
+        }
+        for group in skipped.values():
+            lines -= group
+        buyer = automation.responsible(self.env, automation.PURCHASE_RESPONSIBLE)
+        orders = lines._create_orders(buyer, _("el Agente IA (tarea programada)")) if lines \
+            else self.env["purchase.order"]
+        return orders, skipped
+
+    def _notify_purchase_responsible(self, auto, orders, skipped, cancelled):
+        """Actividad «Por hacer» en la propuesta para el responsable de compras."""
+        self.ensure_one()
+        user = automation.responsible(self.env, automation.PURCHASE_RESPONSIBLE)
+        if not user:
+            return
+        note = Markup()
+        if auto:
+            note += automation.html_list(
+                _("Borradores de compra creados: %s.", len(orders)) if orders
+                else _("No se creó ningún borrador de compra."),
+                [_("%(order)s · %(partner)s · %(lines)s líneas · %(amount)s",
+                   order=o.name, partner=o.partner_id.name, lines=len(o.order_line),
+                   amount=o.currency_id.format(o.amount_untaxed)) for o in orders])
+            labels = {
+                "sin_drogueria": _("Sin droguería con oferta (comprar por otra vía): %s"),
+                "revisar": _("Para revisar la presentación (el precio pasa del triple del costo): %s"),
+                "en_solicitud": _("Ya están en solicitudes sin confirmar: %s"),
+            }
+            missing = [labels[key] % len(group) for key, group in skipped.items() if group]
+            if missing:
+                note += automation.html_list(_("Quedaron fuera, para decidir en la propuesta:"), missing)
+            if cancelled:
+                names = cancelled.mapped("name")
+                note += automation.html_list(
+                    _("Se cancelaron %s borradores de semanas anteriores sin confirmar:", len(names)),
+                    names[:10] + ([_("y %s más", len(names) - 10)] if len(names) > 10 else []))
+        else:
+            note += automation.html_list(
+                _("La propuesta tiene %s líneas. Revísala y pulsa «Generar borradores».", self.line_count), [])
+        if not self.offer_date or self.offer_date < fields.Datetime.now() - timedelta(days=1):
+            note += automation.html_list(_(
+                "Atención: la oferta de las droguerías es del %s. Descárgala antes de confirmar los pedidos.",
+                fields.Datetime.to_string(self.offer_date) if self.offer_date else _("(sin oferta)")), [])
+        self.activity_schedule(
+            "mail.mail_activity_data_todo", user_id=user.id,
+            summary=_("Revisar la compra de la semana"), note=note)
 
     @api.model
     def _generate(self, mode="daily"):
@@ -435,7 +528,22 @@ class AiPurchaseProposalLine(models.Model):
         if missing:
             raise UserError(_("No tienes acceso a: %s. Pide acceso a esa sucursal para generar las órdenes.",
                               ", ".join(missing.mapped("name"))))
+        orders = lines._create_orders(self.env.user, self.env.user.name)
+        action = self.env["ir.actions.act_window"]._for_xml_id("purchase.purchase_rfq")
+        action["domain"] = [("id", "in", orders.ids)]
+        action["context"] = {}
+        if len(orders) == 1:
+            action.update({"view_mode": "form", "views": [(False, "form")], "res_id": orders.id})
+        return action
 
+    def _create_orders(self, buyer, author):
+        """Crea o completa las órdenes en borrador de estas líneas (sin revisar permisos).
+
+        Una por propuesta, matriz y droguería; lo nuevo se suma al borrador
+        que la propuesta ya creó para esa droguería. `buyer` queda como
+        comprador de las órdenes nuevas; `author` firma el mensaje.
+        """
+        lines = self
         groups = {}
         for line in lines:
             groups.setdefault((line.proposal_id, line.company_id, line.drogueria_id), self.browse())
@@ -449,7 +557,7 @@ class AiPurchaseProposalLine(models.Model):
                     "partner_id": partner.id,
                     "company_id": company.id,
                     "origin": proposal.name,
-                    "user_id": self.env.uid,
+                    "user_id": buyer.id or self.env.uid,
                 })
                 proposal.purchase_order_ids = [Command.link(order.id)]
             POLine = self.env["purchase.order.line"].with_company(company)
@@ -478,11 +586,6 @@ class AiPurchaseProposalLine(models.Model):
             proposal.state = "done" if done else "in_review"
             proposal.message_post(body=_(
                 "%(user)s generó %(lines)s líneas en borradores: %(orders)s.",
-                user=self.env.user.name, lines=len(lines.filtered(lambda l: l.proposal_id == proposal)),
+                user=author, lines=len(lines.filtered(lambda l: l.proposal_id == proposal)),
                 orders=", ".join(orders.filtered(lambda o: o in proposal.purchase_order_ids).mapped("name"))))
-        action = self.env["ir.actions.act_window"]._for_xml_id("purchase.purchase_rfq")
-        action["domain"] = [("id", "in", orders.ids)]
-        action["context"] = {}
-        if len(orders) == 1:
-            action.update({"view_mode": "form", "views": [(False, "form")], "res_id": orders.id})
-        return action
+        return orders

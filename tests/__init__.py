@@ -9,6 +9,7 @@ from . import test_proposal
 from . import test_proposal_chat
 from . import test_reabastecimiento
 from . import test_comparador_pedido
+from . import test_automation
 from . import test_barcode_mismatch
 from . import test_access
 from . import test_ui

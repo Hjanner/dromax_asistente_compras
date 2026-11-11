@@ -242,6 +242,45 @@ saldrían ~190 por semana con una mediana de 3 líneas).
   administradores. Las líneas son de la matriz: las ve quien tiene acceso a
   ella.
 
+## Automatización: borradores de compra y de traslado
+
+Para que compras no dependa de que alguien entre a pulsar botones ni de que
+una farmacia avise que algo falta. Se activa en *Ajustes → Agente IA →
+Automatización* (cada una con su responsable y un botón **Ejecutar ahora**,
+que hace lo mismo que la tarea programada).
+
+**Compra semanal** (tarea *Agente IA: propuesta de compra semanal*, lunes
+03:00 en Caracas; ajuste *Borradores de compra automáticos*):
+
+1. Cancela los borradores de propuestas anteriores que siguen sin confirmar
+   (los reemplaza la compra de hoy; los hechos a mano en Compras y las
+   solicitudes ya enviadas no se tocan).
+2. Calcula la propuesta de la semana (siempre, aunque el ajuste esté
+   apagado).
+3. Crea las órdenes de compra en borrador de la matriz, una por droguería,
+   con todas las líneas por pedir. Quedan fuera, para decidir en la
+   propuesta: las líneas sin droguería, las marcadas para revisar la
+   presentación y los productos que ya están en otras solicitudes sin
+   confirmar (se pedirían dos veces).
+4. Deja al *Responsable de compras* una actividad «Revisar la compra de la
+   semana» en la propuesta: los borradores creados con su monto, lo que quedó
+   fuera, lo cancelado y un aviso si la oferta tiene más de un día. Él queda
+   como comprador de las órdenes. Sin el ajuste, la actividad solo avisa que
+   la propuesta está lista.
+
+**Reabastecimiento diario** (tarea *Agente IA: borradores de reabastecimiento
+diario*, 06:00 en Caracas; ajuste *Borradores de traslado automáticos*):
+crea los borradores de traslado de todas las líneas de *Reabastecimiento*
+(uno por farmacia) y deja al *Responsable de despacho* una actividad en cada
+uno («Despachar reabastecimiento a …»). Lo que ya va en borrador cuenta como
+en camino, así que al día siguiente no se duplica; lo que la matriz no tiene
+para mandar entra en la compra del lunes.
+
+Probado sobre `dromax_ai_inventario` (y deshecho): la compra crea 3
+borradores (75, 134 y 37 líneas; 123 líneas sin droguería y 2 para revisar
+quedan fuera) en ~13 s; el reabastecimiento, 6 borradores en ~7 s, y una
+segunda corrida no crea ninguno.
+
 ## Oferta de droguerías (`ai_v_oferta`)
 
 La oferta llega del módulo FTP (`advanced_interbranch_transfer`, dependencia
