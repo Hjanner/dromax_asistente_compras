@@ -114,7 +114,8 @@ CATALOG = {
             ("fecha_vencimiento", "vencimiento del lote ofrecido"),
             ("laboratorio", "laboratorio según la droguería sugerida (texto)"),
             ("costo", "costo actual del producto en Dromax"),
-            ("revisar_presentacion", "TRUE si el precio de la droguería pasa del triple del costo: "
+            ("revisar_presentacion", "TRUE si el precio de la droguería pasa del triple del costo o no "
+                                     "llega a un tercio (sin costo: las ofertas difieren más del triple): "
                                      "posible empaque distinto con el mismo código; no comprar sin revisar"),
         ],
     ),

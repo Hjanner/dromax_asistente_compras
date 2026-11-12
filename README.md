@@ -17,13 +17,16 @@ Instalación en el servidor de Dromax: ver [INSTALACION.md](INSTALACION.md).
 ## Principios
 
 - **Reactivo, no autónomo**: el comprador dispara el análisis con preguntas
-  predefinidas; el cron del lunes solo precalcula.
+  predefinidas. Las tareas programadas solo calculan y, si se activan en
+  Ajustes, dejan **borradores** con una actividad para que alguien los revise
+  (ver *Automatización*); nada se confirma solo.
 - **Solo lectura** sobre Postgres: SQL validado (una sola sentencia
   `SELECT`/`WITH … SELECT`, lista blanca de tablas y vistas) ejecutado con el
   rol `dromax_ai_ro`.
 - **Escrituras acotadas**: el modelo solo ajusta líneas de la propuesta de
   compra cuando el comprador se lo pide (`update_proposal_lines`). Las
-  `purchase.order` en borrador las crea un botón, nunca el modelo.
+  `purchase.order` y los traslados en borrador los crea un botón o una tarea
+  programada, nunca el modelo. La IA (OpenRouter) solo se usa en el chat.
 - **Acceso restringido** al personal de compras y a los administradores: el
   grupo técnico *Agente IA* lo implican *Compras / Usuario* y
   *Ajustes* (no es una casilla de la ficha del usuario). La configuración y el
@@ -137,12 +140,14 @@ salgan de la misma cuenta.
   45 (5)»). `cobertura_actual` = (stock libre + pendiente) / venta semanal de
   la red: menor = más urgente, y es el orden de la lista.
 - **Droguería sugerida**, entre las ofertas disponibles (`ai_v_oferta`):
-  primero las de precio coherente con el costo de la matriz (hasta el
-  triple), luego las que tienen stock para toda la cantidad, y entre ellas la
-  más barata. `revisar_presentacion` avisa si la elegida pasa del triple del
-  costo: algunas droguerías usan el mismo código de barras para un empaque
-  mayor (p. ej. un dispensador de 50 blísteres frente al blíster que vende la
-  farmacia). También trae precio, mejor precio, monto, stock de la droguería,
+  primero las de precio coherente con el costo de la matriz (entre un tercio
+  y el triple), luego las que tienen stock para toda la cantidad, y entre
+  ellas la más barata. `revisar_presentacion` avisa si la elegida pasa del
+  triple del costo o no llega a un tercio: algunas droguerías usan el mismo
+  código de barras para otro empaque (p. ej. un dispensador de 50 blísteres
+  frente al blíster que vende la farmacia, o una ampolla suelta frente a la
+  caja de 10). Sin costo en la matriz, se comparan las ofertas entre sí: si
+  la más cara pasa del triple de la más barata, se marca para revisar. También trae precio, mejor precio, monto, stock de la droguería,
   vencimiento y laboratorio según la droguería.
 - Ajustes: semanas de cobertura (`coverage_weeks`, 1), punto de pedido
   (`reorder_point_pct`, 50 %), margen de seguridad (`safety_margin_pct`, 20 %;
@@ -222,9 +227,21 @@ saldrían ~190 por semana con una mediana de 3 líneas).
   (*Campo de laboratorio*, para el módulo de laboratorios de Dromax); si no
   hay, el texto entre corchetes al final del nombre («… [LETI]»); si no, el
   que informa la droguería; si no, «SIN LABORATORIO».
+- **Columnas:** a la vista solo producto, falta por farmacia, cantidad final,
+  droguería, stock en la droguería, precio final, monto y *Revisar
+  presentación* (pensado para personal con poca experiencia); laboratorio,
+  stock y pendiente de la matriz, cantidad sugerida, orden de compra y motivo
+  quedan en el menú de columnas.
 - **Revisión:** el comprador cambia la cantidad final (0 = no pedir), la
   droguería (entre las que tienen oferta del producto; el precio, descuento,
-  stock y vencimiento se actualizan solos) y el motivo. La cantidad y la
+  stock, vencimiento y *Revisar presentación* se ven al elegirla, sin
+  guardar) y el motivo. La columna *Stock en la droguería* se pone en rojo
+  si la cantidad final lo pasa. Lo que cambia el comprador **no puede pasar
+  del stock de la droguería**: al elegir una droguería con menos, o al
+  escribir más, la cantidad baja a su stock con un aviso, y al guardar se
+  rechaza (también desde el chat). Las líneas que el cálculo dejó por encima
+  del stock (ninguna droguería tenía toda la cantidad) se ven en rojo hasta
+  que se cambien. La cantidad y la
   droguería sugeridas no cambian: *Líneas ajustadas* y *Ajuste del
   comprador (%)* (Σ |final − sugerida| / Σ sugerida) miden cuánto corrige al
   agente. Al primer cambio la propuesta pasa a *En revisión*.

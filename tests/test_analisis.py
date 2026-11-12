@@ -393,6 +393,37 @@ class TestAnalisis(AnalisisCase):
         self.assertEqual(row.drogueria_id, dispensador.partner_id)
         self.assertTrue(row.revisar_presentacion)
 
+    def test_shortage_flags_smaller_presentations(self):
+        # Costo 8,76 por caja de 10 ampollas; una droguería vende la ampolla suelta a 1,44.
+        self.ibuprofeno.barcode = _ean("759999900095")
+        self.ibuprofeno.with_company(self.matriz).standard_price = 8.76
+        drogs = {name: self.env["res.partner"].create({"name": "ZQX DROG %s" % name, "is_company": True})
+                 for name in ("AMPOLLA", "CAJA", "CAJA CARA")}
+        offers = {name: self._offer(drogs[name], self.ibuprofeno, price, stock)
+                  for name, price, stock in (("AMPOLLA", 1.44, 50), ("CAJA", 9.05, 59), ("CAJA CARA", 10.33, 196))}
+        self._weekly_sales(self.ibuprofeno, 10)
+        row = self._buy(self.ibuprofeno)
+        self.assertEqual(row.drogueria_id, drogs["CAJA"])          # la ampolla no es la más barata de verdad
+        self.assertFalse(row.revisar_presentacion)
+        (offers["CAJA"] | offers["CAJA CARA"]).unlink()
+        row = self._buy(self.ibuprofeno)
+        self.assertEqual(row.drogueria_id, drogs["AMPOLLA"])
+        self.assertTrue(row.revisar_presentacion)                  # menos de un tercio del costo
+
+    def test_shortage_flags_disparate_prices_without_cost(self):
+        self.ibuprofeno.barcode = _ean("759999900096")
+        self.ibuprofeno.with_company(self.matriz).standard_price = 0.0
+        drog_a = self.env["res.partner"].create({"name": "ZQX DROG SIN COSTO A", "is_company": True})
+        drog_b = self.env["res.partner"].create({"name": "ZQX DROG SIN COSTO B", "is_company": True})
+        self._offer(drog_a, self.ibuprofeno, 1.44, 50)
+        cara = self._offer(drog_b, self.ibuprofeno, 9.05, 50)
+        self._weekly_sales(self.ibuprofeno, 10)
+        row = self._buy(self.ibuprofeno)
+        self.assertEqual((row.drogueria_id, row.costo), (drog_a, 0))
+        self.assertTrue(row.revisar_presentacion)                  # una pasa del triple de la otra
+        cara.precio_unitario_final = 4.0
+        self.assertFalse(self._buy(self.ibuprofeno).revisar_presentacion)
+
     # -- farmacias y agente ---------------------------------------------------
 
     def test_branch_rule(self):

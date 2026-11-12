@@ -53,7 +53,7 @@ GET_PROPOSAL = {
                     "description": (
                         "por_pedir: con cantidad y droguería, aún sin orden; ajustadas: cambiadas "
                         "por el comprador; revisar_presentacion: precio de más del triple del "
-                        "costo; sin_drogueria: ninguna droguería lo ofrece; en_solicitud: ya hay "
+                        "costo o de menos de un tercio; sin_drogueria: ninguna droguería lo ofrece; en_solicitud: ya hay "
                         "solicitudes sin confirmar; pedidas: ya están en una orden de compra."),
                 },
                 "limite": {"type": "integer", "description": "Máximo de líneas (por defecto 40, tope 80)."},

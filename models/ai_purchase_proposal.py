@@ -49,6 +49,7 @@ from ..services import automation
 from ..services.config import get_int_setting, get_setting
 from ..services.prompt import DEFAULT_COVERAGE_WEEKS, DEFAULT_WINDOW_WEEKS
 from .ai_barcode_mismatch import GROUP_XMLID
+from .ai_v_faltantes import needs_presentation_review
 
 _logger = logging.getLogger(__name__)
 
@@ -61,8 +62,6 @@ STATES = [
 CLOSED_STATES = ("done", "discarded")
 NO_LAB = "SIN LABORATORIO"
 LAB_IN_NAME = re.compile(r"\[([^\[\]]+)\][^\[]*$")
-# Un precio de droguería por encima de este múltiplo del costo puede ser otro empaque.
-PRESENTATION_RATIO = 3
 
 
 def _num(value):
@@ -371,8 +370,8 @@ class AiPurchaseProposalLine(models.Model):
     fecha_vencimiento = fields.Date("Vencimiento", readonly=True)
     revisar_presentacion = fields.Boolean(
         "Revisar presentación", readonly=True,
-        help="El precio de la droguería pasa del triple del costo: puede ser otro empaque con el "
-             "mismo código de barras.")
+        help="El precio de la droguería pasa del triple del costo o no llega a un tercio (sin costo: "
+             "las ofertas difieren más del triple): puede ser otro empaque con el mismo código de barras.")
     motivo = fields.Text("Motivo")
     purchase_line_id = fields.Many2one("purchase.order.line", "Línea de compra", readonly=True, copy=False,
                                        index="btree_not_null")
@@ -422,9 +421,11 @@ class AiPurchaseProposalLine(models.Model):
             reason += " " + _("Ya hay %s en solicitudes sin confirmar.", _num(row["en_solicitud"]))
         if not row["drogueria_id"]:
             reason += " " + _("Ninguna droguería lo ofrece.")
-        elif row["revisar_presentacion"]:
+        elif row["revisar_presentacion"] and row["costo"]:
             reason += " " + _("Revisar presentación: precio %(p)s frente a un costo de %(c)s.",
                               p=_num(row["precio"]), c=_num(row["costo"]))
+        elif row["revisar_presentacion"]:
+            reason += " " + _("Revisar presentación: hay droguerías con más del triple del precio de otras.")
         elif not row["stock_drogueria_suficiente"]:
             reason += " " + _("La droguería solo tiene %s.", row["stock_drogueria"])
         return {
@@ -460,9 +461,11 @@ class AiPurchaseProposalLine(models.Model):
             return {"precio": 0.0, "descuento": 0.0, "stock_drogueria": 0, "fecha_vencimiento": False,
                     "revisar_presentacion": False}
         self.env.cr.execute("""
-            SELECT precio_final, descuento_pct, stock_drogueria, fecha_vencimiento
-              FROM ai_v_oferta
-             WHERE disponible AND product_id = %s AND partner_id = %s
+            SELECT precio_final, descuento_pct, stock_drogueria, fecha_vencimiento, precio_min, precio_max
+              FROM (SELECT o.*, min(precio_final) OVER () AS precio_min, max(precio_final) OVER () AS precio_max
+                      FROM ai_v_oferta o
+                     WHERE disponible AND product_id = %s) o
+             WHERE partner_id = %s
              ORDER BY precio_final, id
              LIMIT 1
         """, (self.product_id.id, partner.id))
@@ -470,14 +473,47 @@ class AiPurchaseProposalLine(models.Model):
         if not row:
             raise UserError(_("%(drogueria)s no tiene oferta disponible de %(producto)s.",
                               drogueria=partner.display_name, producto=self.product_id.display_name))
-        price, discount, stock, expiry = row
+        price, discount, stock, expiry, min_price, max_price = row
         return {
             "precio": price,
             "descuento": discount or 0.0,
             "stock_drogueria": stock or 0,
             "fecha_vencimiento": expiry,
-            "revisar_presentacion": bool(self.costo and price > PRESENTATION_RATIO * self.costo),
+            "revisar_presentacion": needs_presentation_review(price, self.costo, min_price, max_price),
         }
+
+    def _stock_warning(self):
+        return {"warning": {
+            "title": _("Stock de la droguería"),
+            "message": _("%(drogueria)s solo tiene %(stock)s de %(producto)s: la cantidad final quedó en %(stock)s.",
+                         drogueria=self.drogueria_id.display_name, stock=self.stock_drogueria,
+                         producto=self.product_id.display_name),
+        }}
+
+    @api.onchange("drogueria_id")
+    def _onchange_drogueria_id(self):
+        """Muestra el precio y el stock de la droguería elegida sin tener que guardar."""
+        if not self.drogueria_id:
+            return
+        self.update(self._offer_values(self.drogueria_id))
+        if self.cantidad_final > self.stock_drogueria:
+            self.cantidad_final = self.stock_drogueria
+            return self._stock_warning()
+
+    @api.onchange("cantidad_final")
+    def _onchange_cantidad_final(self):
+        if self.drogueria_id and self.cantidad_final > self.stock_drogueria:
+            self.cantidad_final = self.stock_drogueria
+            return self._stock_warning()
+
+    def _check_stock_drogueria(self):
+        for line in self:
+            if line.drogueria_id and line.cantidad_final > line.stock_drogueria:
+                raise UserError(_(
+                    "%(producto)s: %(drogueria)s solo tiene %(stock)s y la cantidad final es %(cantidad)s. "
+                    "Baja la cantidad o elige otra droguería.",
+                    producto=line.product_id.display_name, drogueria=line.drogueria_id.display_name,
+                    stock=line.stock_drogueria, cantidad=line.cantidad_final))
 
     def write(self, vals):
         if any(line.state in CLOSED_STATES for line in self):
@@ -491,6 +527,9 @@ class AiPurchaseProposalLine(models.Model):
             result = True
         else:
             result = super().write(vals)
+        if {"cantidad_final", "drogueria_id"} & set(vals):
+            # Lo que cambia el comprador no puede pasar del stock de la droguería.
+            self._check_stock_drogueria()
         if {"cantidad_final", "drogueria_id", "motivo"} & set(vals):
             self.proposal_id.filtered(lambda p: p.state == "ready").write({"state": "in_review"})
         return result

@@ -234,6 +234,38 @@ class TestProposal(AnalisisCase):
         proposal.with_user(buyer).action_create_rfq()
         self.assertEqual(line.purchase_line_id.product_qty, 1)
 
+    def test_change_drogueria_updates_before_saving(self):
+        self.ibuprofeno.with_company(self.matriz).standard_price = 1.5
+        self._offer(self.drog_a, self.ibuprofeno, 1.5, 100)
+        self._offer(self.drog_b, self.ibuprofeno, 0.3, 4)               # ampolla suelta: menos de un tercio
+        self._weekly_sales(self.ibuprofeno, 10)
+        line = self._line(self._generate(), self.ibuprofeno)
+        self.assertEqual((line.drogueria_id, line.cantidad_final, line.stock_drogueria), (self.drog_a, 10, 100))
+        # En pantalla, al elegir otra droguería: su precio y su stock, y la cantidad hasta su stock.
+        draft = line.new({"drogueria_id": self.drog_b.id}, origin=line)
+        result = draft._onchange_drogueria_id()
+        self.assertEqual((draft.precio, draft.stock_drogueria, draft.cantidad_final), (0.3, 4, 4))
+        self.assertTrue(draft.revisar_presentacion)
+        self.assertIn("solo tiene 4", result["warning"]["message"])
+        self.env.invalidate_all()                                        # registros nuevos del mismo origen comparten caché
+        draft = line.new({"cantidad_final": 150}, origin=line)
+        self.assertTrue(draft._onchange_cantidad_final())
+        self.assertEqual(draft.cantidad_final, 100)
+        self.assertFalse(line.new({"cantidad_final": 80}, origin=line)._onchange_cantidad_final())
+
+    def test_quantity_cannot_exceed_drogueria_stock(self):
+        self._offer(self.drog_a, self.ibuprofeno, 1.5, 100)
+        self._offer(self.drog_b, self.ibuprofeno, 2.0, 4)
+        self._weekly_sales(self.ibuprofeno, 10)
+        line = self._line(self._generate(), self.ibuprofeno)
+        with self.assertRaisesRegex(UserError, "solo tiene 100"):
+            line.cantidad_final = 150
+        with self.assertRaisesRegex(UserError, "solo tiene 4"):
+            line.drogueria_id = self.drog_b                              # 10 no caben en 4
+        line.write({"drogueria_id": self.drog_b.id, "cantidad_final": 4})
+        self.assertEqual((line.precio, line.stock_drogueria, line.monto), (2.0, 4, 8.0))
+        line.cantidad_final = 0                                          # no pedir siempre se puede
+
     def test_create_rfq_permissions(self):
         otra = self.env["res.company"].create({"name": "ZQX FARMACIA 2"})
         self._offer(self.drog_a, self.ibuprofeno, 1.5, 100)

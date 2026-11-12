@@ -280,6 +280,74 @@ class TestUi(HttpCase):
         self._open("action=dromax_asistente_compras.action_ai_purchase_proposal_line",
                    ".o_list_view .o_group_header", login=buyer.login)
 
+    def test_proposal_change_drogueria(self):
+        """Al elegir otra droguería en la línea, su precio y su stock se ven sin guardar."""
+        from .test_oferta import _ean
+        matriz = self.env["res.company"].create({"name": "ZQX MATRIZ UI CAMBIO"})
+        self.env["ir.config_parameter"].sudo().set_param(
+            "dromax_asistente_compras.matrix_company_id", str(matriz.id))
+        buyer = new_test_user(
+            self.env, login="ai_proposal_change_ui",
+            groups="base.group_user,purchase.group_purchase_user,dromax_asistente_compras.group_ai_purchase_user",
+            company_id=matriz.id, company_ids=(matriz | self.env.company).ids)
+        buyer.password = buyer.login
+        product = self.env["product.product"].create({
+            "name": "ZQX UI CAMBIO [LAB UI]", "detailed_type": "product", "barcode": _ean("759999900097")})
+        for name, price, stock in (("ZQX DROG UI A", 1.5, 100), ("ZQX DROG UI B", 1.25, 1)):
+            self.env["supplier.product.staging"].create({
+                "partner_id": self.env["res.partner"].create({"name": name, "is_company": True}).id,
+                "codigo_barras": product.barcode, "descripcion_producto": product.name, "fecha_lote": "30/01/2031",
+                "precio_unitario": price, "porcentaje_oferta_vigente": 0.0,
+                "precio_unitario_final": price, "stock_disponible": stock})
+        session = self.env["pos.session"].create({
+            "config_id": self.env["pos.config"].create({"name": "ZQX TPV UI CAMBIO"}).id, "user_id": self.env.uid})
+        order = self.env["pos.order"].create({
+            "session_id": session.id, "amount_tax": 0, "amount_total": 2, "amount_paid": 2, "amount_return": 0,
+            "lines": [(0, 0, {"product_id": product.id, "qty": 2, "price_unit": 1,
+                              "price_subtotal": 2, "price_subtotal_incl": 2})],
+        })
+        order.write({"state": "paid", "date_order": order.date_order - timedelta(weeks=1)})
+        self.env.flush_all()
+        proposal = self.env["ai.purchase.proposal"]._generate()
+        line = proposal.line_ids.filtered(lambda l: l.product_id == product)
+        drog_a = self.env["res.partner"].search([("name", "=", "ZQX DROG UI A")])
+        line.write({"drogueria_id": drog_a.id, "cantidad_final": 3})     # B solo tiene 1
+        self.browser_js(
+            "/web#action=dromax_asistente_compras.action_ai_purchase_proposal&id=%d&view_type=form" % proposal.id, """
+            const until = (sel, test) => new Promise((resolve, reject) => {
+                let n = 0;
+                const t = setInterval(() => {
+                    const el = [...document.querySelectorAll(sel)].find((e) => !test || test(e.textContent || e.value || ""));
+                    if (el) { clearInterval(t); resolve(el); }
+                    else if (++n > 150) { clearInterval(t); reject(new Error("No apareció " + sel)); }
+                }, 100);
+            });
+            const has = (text) => (content) => content.includes(text);
+            (async () => {
+                try {
+                    const row = await until(".o_form_view .o_field_one2many .o_data_row", has("ZQX UI CAMBIO"));
+                    row.querySelector("td[name='drogueria_id']").click();
+                    const input = await until(".o_data_row.o_selected_row td[name='drogueria_id'] input");
+                    input.value = "ZQX DROG UI B";
+                    input.dispatchEvent(new Event("input", { bubbles: true }));
+                    (await until(".o-autocomplete--dropdown-item a", has("ZQX DROG UI B"))).click();
+                    // Sin guardar: el aviso de stock, el precio y el stock de B, y la cantidad hasta su stock.
+                    await until(".modal .modal-body", has("solo tiene 1"));
+                    (await until(".modal .modal-footer button")).click();
+                    await until(".o_selected_row td[name='precio']", (t) => /1[.,]25/.test(t));
+                    await until(".o_selected_row td[name='stock_drogueria']", (t) => t.trim() === "1");
+                    await until(".o_selected_row td[name='cantidad_final'] input", (v) => v.trim() === "1");
+                    (await until(".o_form_button_cancel")).click();          // descartar: nada se guarda
+                    await until(".o_form_view .o_form_saved");
+                    console.log("test successful");
+                } catch (e) {
+                    console.error(e.message);
+                }
+            })();
+        """, login=buyer.login)
+        line.invalidate_recordset()
+        self.assertEqual((line.drogueria_id, line.cantidad_final), (drog_a, 3))
+
     def test_barcode_report(self):
         buyer = new_test_user(self.env, login="ai_bm_buyer_ui",
                               groups="base.group_user,dromax_asistente_compras.group_ai_purchase_user")

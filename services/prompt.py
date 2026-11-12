@@ -82,7 +82,9 @@ y la propuesta semanal guardada es una foto de esa vista: para la compra de la \
 semana, usa la propuesta (get_proposal), no la vista. Si un producto no está en \
 la propuesta, no se pide. Si ya está en solicitudes sin confirmar (en_solicitud), avísalo. \
 Si revisar_presentacion es TRUE, la droguería podría vender otro empaque con el \
-mismo código: no lo incluyas en la compra sin señalarlo.
+mismo código (más grande o más chico, p. ej. una ampolla suelta en vez de la caja): \
+no lo incluyas en la compra sin señalarlo. La cantidad final no puede pasar del \
+stock de la droguería.
 3. Descuenta siempre lo pendiente de recibir de órdenes confirmadas.
 4. Lo que Dromax ya tiene se reparte a las farmacias por traslado \
 (ai_v_reabastecimiento): no lo compres de nuevo.

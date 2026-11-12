@@ -1,6 +1,6 @@
 # Estado del proyecto
 
-Última actualización: 2026-11-11 (asistente `17.0.0.18.1`, 153 tests; módulo
+Última actualización: 2026-11-12 (asistente `17.0.0.18.2`, 158 tests; módulo
 FTP 1.5 con 38). Qué está hecho, qué decidimos y qué falta.
 El README explica cómo funciona lo que ya existe.
 
@@ -387,6 +387,20 @@ El README explica cómo funciona lo que ya existe.
     Pendientes de validar con un compañero: menú reducido para compras (grupo
     avanzado para análisis, chat y comparador) y botón «Confirmar órdenes» en
     la propuesta con la lista por droguería para el vendedor.
+  - Asistente `17.0.0.18.2` (pedido del usuario, 2026-11-12, por el
+    ketorolaco [1225]: INTERCONTINENTAL vende la ampolla suelta a 1,44 y las
+    otras la caja de 10 a 9,05 y 10,33, con costo 8,76; se sugería la ampolla
+    sin marcarla):
+    - *Revisar presentación* también marca los precios de menos de un tercio
+      del costo (antes solo los de más del triple) y, sin costo, las ofertas
+      que difieren más del triple entre sí; la sugerida prefiere las
+      coherentes (en el ejemplo, INSUAMINCA);
+    - columna *Stock en la droguería* en la propuesta (en rojo si la cantidad
+      final la pasa);
+    - la cantidad que pone el comprador no puede pasar de ese stock (se ajusta
+      con aviso en pantalla y se rechaza al guardar);
+    - al cambiar la droguería de una línea, precio, stock y alertas se ven sin
+      guardar.
   - Respuestas de Daniel (reunión): códigos de barras y ventas de `ODOO2026`
     los resuelve él; no restringir su módulo de traslados (se permiten
     traslados manuales entre farmacias); historial de 8 semanas; la
@@ -472,9 +486,10 @@ descuentos encadenados = precio final en todas las filas.
 
 1. **Producción (`ODOO2026`)**: tiene el asistente 0.13.0 (instalado el
    2026-11-06 con respaldo completo previo y el usuario de solo lectura
-   funcionando). Las versiones 0.14.0 a 0.16.1 (reabastecimiento, toda compra
-   por Dromax, comparador) están **pendientes de instalar**: Daniel pidió
-   dejarlo para después, y nada se toca en el servidor sin consultarlo antes
+   funcionando). Las versiones 0.14.0 a 0.18.2 (reabastecimiento, toda compra
+   por Dromax, comparador, umbrales, nombre «Agente IA», automatizaciones,
+   simplificaciones de la propuesta) están **pendientes de instalar**: Daniel
+   pidió dejarlo para después, y nada se toca en el servidor sin consultarlo antes
    con él. Al instalar: volver a bajar el módulo FTP del servidor y compararlo
    con el repo local (Daniel lo edita allí) antes de entregar el nuestro,
    actualizar las bases que tienen los módulos (`INSTALACION.md`, paso 11),
@@ -501,12 +516,26 @@ descuentos encadenados = precio final en todas las filas.
    no aparecen ni en el portal: si se quieren, se cargan a mano por droguería.
 5. **Automatización en producción**: decidir con el comprador y con Daniel
    quiénes son los responsables y activar los dos ajustes; activar también la
-   descarga FTP (para que la compra del lunes use la oferta del día). Queda
-   como idea de la reunión: exportar la compra por laboratorio con la
-   cantidad de cada farmacia (la lista para el vendedor).
+   descarga FTP (para que la compra del lunes use la oferta del día). La
+   lista para el vendedor (pedida en la reunión) está en el punto 7.
 6. **Con los datos de `ODOO2026`:** validar y calibrar la necesidad de compra,
    el reabastecimiento y la propuesta con ventas reales, conectar el campo
    laboratorio y revisar el reporte de códigos de barras con el catálogo real.
+7. **Simplificar para el personal de compras** (tiene poca experiencia con
+   Odoo). Escritas para validar con un compañero antes de implementar
+   (`~/odoo-dev/propuesta_simplificacion_agente.txt`, fuera del repo):
+   - menú reducido: un grupo «Agente IA: avanzado» para análisis, chat,
+     comparador, oferta y códigos de barras; compras ve solo Propuestas,
+     Reabastecimiento y Pendiente de recibir, y «Agente IA» abre Propuestas;
+   - botón «Confirmar órdenes» en la propuesta (confirma todos sus
+     borradores) y un PDF por droguería para el vendedor (la lista de la
+     reunión; falta decidir si va con precios y si separa por farmacia).
+   Descartado: dejar los traslados de la tarea diaria ya en definitivo.
+8. **Ideas sin pedir aún**: cantidad mínima de pedido para productos de baja
+   rotación; reparto proporcional del reabastecimiento cuando la matriz no
+   alcanza (hoy va primero la farmacia más urgente: menor cobertura, a
+   igualdad la que más vende); aclarar si se factura por sucursal o todo a
+   Dromax.
 
 ## Preguntas abiertas para Daniel
 

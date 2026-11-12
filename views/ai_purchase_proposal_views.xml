@@ -87,6 +87,8 @@
                                            readonly="purchase_line_id"/>
                                     <field name="drogueria_id" options="{'no_create': True, 'no_open': True}"
                                            readonly="purchase_line_id"/>
+                                    <field name="stock_drogueria" optional="show"
+                                           decoration-danger="drogueria_id and cantidad_final &gt; stock_drogueria"/>
                                     <field name="precio"/>
                                     <field name="monto" sum="Total"/>
                                     <field name="revisar_presentacion" optional="show"/>
@@ -162,7 +164,8 @@
                        readonly="state in ('done', 'discarded') or purchase_line_id"/>
                 <field name="precio"/>
                 <field name="descuento" optional="hide"/>
-                <field name="stock_drogueria" optional="hide"/>
+                <field name="stock_drogueria" optional="show"
+                       decoration-danger="drogueria_id and cantidad_final &gt; stock_drogueria"/>
                 <field name="fecha_vencimiento" optional="hide"/>
                 <field name="monto" sum="Total"/>
                 <field name="revisar_presentacion" optional="show"/>

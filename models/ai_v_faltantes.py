@@ -5,6 +5,17 @@ from ..services.network_sql import network_ctes, target_sql
 from .ai_v_oferta import grant_readonly
 from .ai_v_rotacion import network_params_sql
 
+# Un precio de droguería a más de este múltiplo del costo (o por debajo de su
+# fracción) puede ser otro empaque con el mismo código de barras.
+PRESENTATION_RATIO = 3
+
+
+def needs_presentation_review(price, cost, min_price, max_price):
+    """Lo mismo que la columna revisar de la vista, para una oferta suelta."""
+    if cost:
+        return price > PRESENTATION_RATIO * cost or price * PRESENTATION_RATIO < cost
+    return bool(min_price) and max_price > PRESENTATION_RATIO * min_price
+
 
 class AiVFaltantes(models.Model):
     """Lo que la sucursal matriz (Dromax) tiene que comprar para toda la red.
@@ -32,11 +43,13 @@ class AiVFaltantes(models.Model):
     avisa). detalle_farmacias dice cuánto le falta a cada farmacia.
 
     Droguería sugerida: entre las ofertas disponibles del producto, primero
-    las de precio coherente con el costo de la matriz (hasta el triple:
-    algunas droguerías usan el mismo código de barras para un empaque mayor,
-    p. ej. un dispensador de 50 blísteres), luego las que tienen stock para
-    toda la cantidad y, entre ellas, la más barata. Si la elegida pasa del
-    triple del costo, revisar_presentacion lo avisa. Los parámetros se leen de
+    las de precio coherente con el costo de la matriz (entre un tercio y el
+    triple: algunas droguerías usan el mismo código de barras para otro
+    empaque, p. ej. un dispensador de 50 blísteres o una ampolla suelta en vez
+    de la caja), luego las que tienen stock para toda la cantidad y, entre
+    ellas, la más barata. Sin costo, se compara con la oferta más barata: si
+    alguna pasa del triple, todas quedan para revisar. Si la elegida no es
+    coherente, revisar_presentacion lo avisa. Los parámetros se leen de
     Ajustes en cada consulta.
     """
     _name = "ai.v.faltantes"
@@ -93,8 +106,10 @@ class AiVFaltantes(models.Model):
     costo = fields.Float("Costo actual", readonly=True, help="Costo del producto en la matriz.")
     revisar_presentacion = fields.Boolean(
         "Revisar presentación", readonly=True,
-        help="El precio de la droguería pasa del triple del costo: puede ser otro empaque "
-             "con el mismo código de barras (p. ej. un dispensador en vez de un blíster).")
+        help="El precio de la droguería pasa del triple del costo o no llega a un tercio (sin "
+             "costo: las ofertas pasan del triple de la más barata): puede ser otro empaque con el "
+             "mismo código de barras (p. ej. un dispensador en vez de un blíster, o una ampolla "
+             "suelta en vez de la caja).")
 
     def init(self):
         tools.drop_view_if_exists(self.env.cr, self._table)
@@ -163,19 +178,32 @@ class AiVFaltantes(models.Model):
                                      AND (ip.company_id = params.matriz_id OR ip.company_id IS NULL)
                  ORDER BY f.product_id, ip.company_id NULLS LAST
             ),
-            ofertas AS (
-                SELECT f.product_id, o.partner_id, o.drogueria, o.precio_final,
-                       o.descuento_pct, o.stock_drogueria, o.fecha_vencimiento, o.laboratorio,
-                       o.stock_drogueria >= f.cantidad AS suficiente,
-                       o.precio_final > 3 * k.costo AS revisar,
-                       o.mejor_precio, o.droguerias_con_stock AS droguerias,
-                       row_number() OVER (PARTITION BY f.product_id
-                                          ORDER BY o.precio_final > 3 * k.costo IS TRUE,
-                                                   o.stock_drogueria >= f.cantidad DESC,
-                                                   o.precio_final, o.partner_id, o.id) AS puesto
+            candidatas AS (
+                SELECT f.product_id, f.cantidad, k.costo, o.id AS oferta_id, o.partner_id, o.drogueria,
+                       o.precio_final, o.descuento_pct, o.stock_drogueria, o.fecha_vencimiento,
+                       o.laboratorio, o.mejor_precio, o.droguerias_con_stock AS droguerias,
+                       min(o.precio_final) OVER (PARTITION BY f.product_id) AS precio_min,
+                       max(o.precio_final) OVER (PARTITION BY f.product_id) AS precio_max
                   FROM faltantes f
                   JOIN ai_v_oferta o ON o.product_id = f.product_id AND o.disponible
                   LEFT JOIN costos k ON k.product_id = f.product_id
+            ),
+            precios AS (
+                -- Otra presentación con el mismo código: con costo, un precio de más del
+                -- triple o de menos de un tercio del costo; sin costo, ofertas de más del
+                -- triple de la más barata.
+                SELECT c.*, c.stock_drogueria >= c.cantidad AS suficiente,
+                       (CASE WHEN c.costo IS NOT NULL
+                             THEN c.precio_final > %(ratio)s * c.costo OR c.precio_final * %(ratio)s < c.costo
+                             ELSE c.precio_max > %(ratio)s * c.precio_min END) IS TRUE AS revisar
+                  FROM candidatas c
+            ),
+            ofertas AS (
+                SELECT p.*,
+                       row_number() OVER (PARTITION BY p.product_id
+                                          ORDER BY p.revisar, p.suficiente DESC,
+                                                   p.precio_final, p.partner_id, p.oferta_id) AS puesto
+                  FROM precios p
             )
             SELECT f.product_id AS id,
                    params.matriz_id AS company_id,
@@ -220,5 +248,6 @@ class AiVFaltantes(models.Model):
               LEFT JOIN costos k ON k.product_id = f.product_id
               LEFT JOIN ofertas o ON o.product_id = f.product_id AND o.puesto = 1
              WHERE pp.active AND pt.purchase_ok
-        """ % {"red": network_ctes(*network_params_sql()), "objetivo_propio": target_sql("pr.demanda")})
+        """ % {"red": network_ctes(*network_params_sql()), "objetivo_propio": target_sql("pr.demanda"),
+               "ratio": PRESENTATION_RATIO})
         grant_readonly(self.env, self._table)
