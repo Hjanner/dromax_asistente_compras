@@ -60,7 +60,7 @@
     <record id="action_ai_barcode_mismatch" model="ir.actions.act_window">
         <field name="name">Códigos de barras</field>
         <field name="res_model">ai.barcode.mismatch</field>
-        <field name="groups_id" eval="[(6, 0, [ref('group_ai_purchase_user')])]"/>
+        <field name="groups_id" eval="[(6, 0, [ref('base.group_system')])]"/>
         <field name="view_mode">tree</field>
         <field name="search_view_id" ref="view_ai_barcode_mismatch_search"/>
         <field name="context">{'search_default_group_tipo': 1}</field>

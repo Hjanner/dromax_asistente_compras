@@ -1,6 +1,6 @@
 # Estado del proyecto
 
-Última actualización: 2026-11-12 (asistente `17.0.0.18.2`, 158 tests; módulo
+Última actualización: 2026-11-13 (asistente `17.0.0.18.3`, 159 tests; módulo
 FTP 1.5 con 38). Qué está hecho, qué decidimos y qué falta.
 El README explica cómo funciona lo que ya existe.
 
@@ -401,6 +401,19 @@ El README explica cómo funciona lo que ya existe.
       con aviso en pantalla y se rechaza al guardar);
     - al cambiar la droguería de una línea, precio, stock y alertas se ven sin
       guardar.
+  - Asistente `17.0.0.18.3` (pedido del usuario, 2026-11-13): **menú corto**.
+    El personal de compras ve solo *Propuestas*, *Reabastecimiento* y *Chat*,
+    y al entrar a *Agente IA* se abre *Propuestas* (antes, el Chat). Solo para
+    administradores (`base.group_system`, menú y acción): *Proveedores*
+    (*Oferta de proveedores*, antes «Comparador de precios»; *Oferta completa
+    (todos los lotes)*, antes «Oferta por droguería»; *Códigos de barras*),
+    *Análisis* y *Configuración*. Los permisos sobre los modelos no cambian:
+    el chat y la propuesta siguen leyendo esas vistas. Los borradores del
+    comparador llevan ahora el origen «Oferta de proveedores». En la
+    interfaz, las droguerías se empiezan a llamar «proveedores» (por ahora,
+    solo en el menú y estas pantallas). Lección: al actualizar, `groups` de
+    un `menuitem` solo **agrega** grupos; para quitar el de compras a los
+    menús que ya lo tenían hace falta `-grupo` en el atributo.
   - Respuestas de Daniel (reunión): códigos de barras y ventas de `ODOO2026`
     los resuelve él; no restringir su módulo de traslados (se permiten
     traslados manuales entre farmacias); historial de 8 semanas; la
@@ -524,9 +537,8 @@ descuentos encadenados = precio final en todas las filas.
 7. **Simplificar para el personal de compras** (tiene poca experiencia con
    Odoo). Escritas para validar con un compañero antes de implementar
    (`~/odoo-dev/propuesta_simplificacion_agente.txt`, fuera del repo):
-   - menú reducido: un grupo «Agente IA: avanzado» para análisis, chat,
-     comparador, oferta y códigos de barras; compras ve solo Propuestas,
-     Reabastecimiento y Pendiente de recibir, y «Agente IA» abre Propuestas;
+   - ~~menú reducido~~: hecho en la 0.18.3, sin grupo nuevo (compras ve
+     Propuestas, Reabastecimiento y Chat; lo demás, solo administradores);
    - botón «Confirmar órdenes» en la propuesta (confirma todos sus
      borradores) y un PDF por droguería para el vendedor (la lista de la
      reunión; falta decidir si va con precios y si separa por farmacia).

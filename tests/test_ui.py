@@ -50,7 +50,7 @@ class TestUi(HttpCase):
 
     def test_offer_list(self):
         buyer = new_test_user(self.env, login="ai_purchase_buyer_ui",
-                              groups="base.group_user,dromax_asistente_compras.group_ai_purchase_user")
+                              groups="base.group_user,base.group_system")
         buyer.password = buyer.login
         drogueria = self.env["res.partner"].create({"name": "DROGUERÍA UI", "is_company": True})
         self.env["supplier.product.staging"].create({
@@ -70,7 +70,7 @@ class TestUi(HttpCase):
             "dromax_asistente_compras.matrix_company_id", str(matriz.id))
         buyer = new_test_user(self.env, login="ai_comparador_ui",
                               groups="base.group_user,purchase.group_purchase_user,"
-                                     "dromax_asistente_compras.group_ai_purchase_user",
+                                     "base.group_system",
                               company_id=matriz.id, company_ids=(matriz | self.env.company).ids)
         buyer.password = buyer.login
         Partner = self.env["res.partner"]
@@ -114,7 +114,7 @@ class TestUi(HttpCase):
                     (await until(".o_notification .o_notification_buttons button", "Ver en Compras")).click();
                     await until(".o_form_view .o_field_one2many .o_data_row td[name='product_id']",
                                 "00 ZQX UI COMPARADOR PROPIO");
-                    await until(".o_breadcrumb", "Comparador de precios");
+                    await until(".o_breadcrumb", "Oferta de proveedores");
                     console.log("test successful");
                 } catch (e) {
                     console.error(e.message);
@@ -129,7 +129,7 @@ class TestUi(HttpCase):
         self.env["ir.config_parameter"].sudo().set_param(
             "dromax_asistente_compras.matrix_company_id", str(matriz.id))
         buyer = new_test_user(self.env, login="ai_analisis_buyer_ui",
-                              groups="base.group_user,dromax_asistente_compras.group_ai_purchase_user",
+                              groups="base.group_user,base.group_system",
                               company_id=self.env.company.id, company_ids=(self.env.company | matriz).ids)
         buyer.password = buyer.login
         product = self.env["product.product"].create({"name": "ZQX UI ANALISIS", "detailed_type": "product"})
@@ -350,7 +350,7 @@ class TestUi(HttpCase):
 
     def test_barcode_report(self):
         buyer = new_test_user(self.env, login="ai_bm_buyer_ui",
-                              groups="base.group_user,dromax_asistente_compras.group_ai_purchase_user")
+                              groups="base.group_user,base.group_system")
         buyer.password = buyer.login
         self.env["ai.barcode.mismatch"].search([]).unlink()
         self.env["product.product"].create({"name": "ZQX UI SIN CODIGO", "detailed_type": "product"})

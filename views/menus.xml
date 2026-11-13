@@ -1,44 +1,52 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
 
+    <!-- El personal de compras ve solo Propuestas, Reabastecimiento y Chat; lo demás es de
+         administradores. Al entrar se abre la primera entrada visible (Propuestas).
+         Al actualizar, «groups» de un menuitem solo agrega grupos: el «-grupo» quita el de
+         compras a los menús que lo tenían en versiones anteriores. -->
     <menuitem id="menu_ai_purchase_root" name="Agente IA" sequence="26"
               web_icon="dromax_asistente_compras,static/description/icon.png"
               groups="dromax_asistente_compras.group_ai_purchase_user,base.group_system"/>
 
-    <menuitem id="menu_ai_purchase_chat" name="Chat" parent="menu_ai_purchase_root"
-              action="action_ai_purchase_chat" sequence="10"
-              groups="dromax_asistente_compras.group_ai_purchase_user"/>
-
     <menuitem id="menu_ai_purchase_proposal" name="Propuestas" parent="menu_ai_purchase_root"
-              action="action_ai_purchase_proposal" sequence="12"
+              action="action_ai_purchase_proposal" sequence="10"
               groups="dromax_asistente_compras.group_ai_purchase_user"/>
 
     <menuitem id="menu_ai_v_reabastecimiento" name="Reabastecimiento" parent="menu_ai_purchase_root"
-              action="action_ai_v_reabastecimiento" sequence="13"
+              action="action_ai_v_reabastecimiento" sequence="20"
               groups="dromax_asistente_compras.group_ai_purchase_user"/>
 
-    <menuitem id="menu_ai_analisis" name="Análisis" parent="menu_ai_purchase_root" sequence="15"
-              groups="dromax_asistente_compras.group_ai_purchase_user"/>
-    <menuitem id="menu_ai_v_faltantes" name="Necesidad de compra" parent="menu_ai_analisis"
-              action="action_ai_v_faltantes" sequence="5"/>
-    <menuitem id="menu_ai_v_rotacion" name="Rotación" parent="menu_ai_analisis"
-              action="action_ai_v_rotacion" sequence="10"/>
-    <menuitem id="menu_ai_v_stock" name="Stock por farmacia" parent="menu_ai_analisis"
-              action="action_ai_v_stock" sequence="20"/>
-    <menuitem id="menu_ai_v_pendiente" name="Pendiente de recibir" parent="menu_ai_analisis"
-              action="action_ai_v_pendiente" sequence="30"/>
-
-    <menuitem id="menu_ai_v_comparador" name="Comparador de precios" parent="menu_ai_purchase_root"
-              action="action_ai_v_comparador" sequence="18"
+    <menuitem id="menu_ai_purchase_chat" name="Chat" parent="menu_ai_purchase_root"
+              action="action_ai_purchase_chat" sequence="30"
               groups="dromax_asistente_compras.group_ai_purchase_user"/>
 
-    <menuitem id="menu_ai_v_oferta" name="Oferta por droguería" parent="menu_ai_purchase_root"
+    <menuitem id="menu_ai_proveedores" name="Proveedores" parent="menu_ai_purchase_root" sequence="40"
+              groups="base.group_system"/>
+    <menuitem id="menu_ai_v_comparador" name="Oferta de proveedores" parent="menu_ai_proveedores"
+              action="action_ai_v_comparador" sequence="10"
+              groups="-dromax_asistente_compras.group_ai_purchase_user,base.group_system"/>
+    <menuitem id="menu_ai_v_oferta" name="Oferta completa (todos los lotes)" parent="menu_ai_proveedores"
               action="action_ai_v_oferta" sequence="20"
-              groups="dromax_asistente_compras.group_ai_purchase_user"/>
-
-    <menuitem id="menu_ai_barcode_mismatch" name="Códigos de barras" parent="menu_ai_purchase_root"
+              groups="-dromax_asistente_compras.group_ai_purchase_user,base.group_system"/>
+    <menuitem id="menu_ai_barcode_mismatch" name="Códigos de barras" parent="menu_ai_proveedores"
               action="action_ai_barcode_mismatch" sequence="30"
-              groups="dromax_asistente_compras.group_ai_purchase_user"/>
+              groups="-dromax_asistente_compras.group_ai_purchase_user,base.group_system"/>
+
+    <menuitem id="menu_ai_analisis" name="Análisis" parent="menu_ai_purchase_root" sequence="50"
+              groups="-dromax_asistente_compras.group_ai_purchase_user,base.group_system"/>
+    <menuitem id="menu_ai_v_faltantes" name="Necesidad de compra" parent="menu_ai_analisis"
+              action="action_ai_v_faltantes" sequence="5"
+              groups="base.group_system"/>
+    <menuitem id="menu_ai_v_rotacion" name="Rotación" parent="menu_ai_analisis"
+              action="action_ai_v_rotacion" sequence="10"
+              groups="base.group_system"/>
+    <menuitem id="menu_ai_v_stock" name="Stock por farmacia" parent="menu_ai_analisis"
+              action="action_ai_v_stock" sequence="20"
+              groups="base.group_system"/>
+    <menuitem id="menu_ai_v_pendiente" name="Pendiente de recibir" parent="menu_ai_analisis"
+              action="action_ai_v_pendiente" sequence="30"
+              groups="base.group_system"/>
 
     <menuitem id="menu_ai_purchase_config" name="Configuración" parent="menu_ai_purchase_root"
               sequence="100" groups="base.group_system"/>

@@ -4,7 +4,7 @@
 El comprador marca uno o varios productos en el comparador (o pulsa el botón
 del visor de uno) y confirma, por producto, la droguería y la cantidad. Se
 agregan a la orden de compra en borrador de la sucursal matriz con esa
-droguería que haya creado el comparador (origen «Comparador de precios»); si
+droguería que haya creado el comparador (origen «Oferta de proveedores»); si
 no hay, se crea. Así se pueden ir sumando productos en varias búsquedas sin
 recordar sus códigos. Las órdenes hechas a mano o desde la propuesta no se
 tocan.
@@ -20,7 +20,7 @@ from odoo.exceptions import AccessError, UserError
 
 from ..services.network_sql import matrix_company
 
-ORIGIN = "Comparador de precios"
+ORIGIN = "Oferta de proveedores"
 
 
 class AiComparadorPedido(models.TransientModel):

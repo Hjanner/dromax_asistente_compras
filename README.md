@@ -31,6 +31,11 @@ Instalación en el servidor de Dromax: ver [INSTALACION.md](INSTALACION.md).
   grupo técnico *Agente IA* lo implican *Compras / Usuario* y
   *Ajustes* (no es una casilla de la ficha del usuario). La configuración y el
   consumo de IA son solo para administradores.
+- **Menú corto para compras**: el personal de compras ve solo *Propuestas*,
+  *Reabastecimiento* y *Chat*, y al entrar a *Agente IA* se abre
+  *Propuestas*. *Proveedores* (oferta, oferta completa y códigos de barras),
+  *Análisis* y *Configuración* son solo para administradores (menú y acción;
+  el agente sigue consultando esas vistas desde el chat).
 
 ## Plan
 
@@ -72,7 +77,7 @@ módulo y su `init()` vuelve a dar el permiso al rol configurado en `ro_user`.
 ## Rotación, stock y pendientes (`ai_v_rotacion`, `ai_v_stock`, `ai_v_pendiente`)
 
 Vistas SQL por producto y farmacia (`company_id`), en la unidad del producto,
-en el menú *Agente IA → Análisis* y consultables por el agente. Las
+en el menú *Agente IA → Análisis* (administradores) y consultables por el agente. Las
 pantallas muestran solo las farmacias permitidas del usuario (regla por
 empresa, como el resto de Odoo); el chat, que consulta con el rol de solo
 lectura, las ve todas (la compra es de la matriz para toda la red).
@@ -307,7 +312,8 @@ segunda corrida no crea ninguno.
 
 La oferta llega del módulo FTP (`advanced_interbranch_transfer`, dependencia
 del módulo): una fila de `supplier.product.staging` por producto y droguería.
-La vista `ai_v_oferta` (menú *Agente IA → Oferta por producto*) la une a los
+La vista `ai_v_oferta` (menú *Agente IA → Proveedores → Oferta completa (todos
+los lotes)*) la une a los
 productos propios por **código de barras normalizado** y añade la comparación
 entre droguerías: cada una entra con su mejor oferta disponible (con stock),
 aunque traiga varios lotes; `orden_precio` es su puesto (1 = la más barata) y
@@ -322,9 +328,10 @@ recalculando el dígito de control. Se guarda en `ai_barcode_norm`, tanto en
 `product.product` como en la oferta. Si dos productos propios comparten
 código normalizado, la vista toma el más antiguo.
 
-## Comparador de precios (`ai_v_comparador`)
+## Oferta de proveedores (`ai_v_comparador`)
 
-Menú *Agente IA → Comparador de precios* (pedido en la reunión del
+Menú *Agente IA → Proveedores → Oferta de proveedores* (antes «Comparador de
+precios»; pedido en la reunión del
 2026-11-09, inspirado en el portal i-compra 360). **Una fila por producto**
 (código de barras válido), aunque cada droguería lo escriba distinto: nombre
 de nuestro catálogo (o el de la droguería más barata), droguerías con stock,
@@ -353,8 +360,8 @@ descuentos en cascada, % total, precio final, stock y vencimiento). Al buscar
   tienen; el precio sale de su oferta) y la cantidad (por defecto la de la
   necesidad de compra, o 1, sin pasar del stock de la droguería). Al
   confirmar, se agregan a la orden en borrador de la sucursal matriz con esa
-  droguería que creó el comparador para el usuario (origen «Comparador de
-  precios»; si no hay, se crea) y, si el producto ya está, se suma la
+  droguería que creó el comparador para el usuario (origen «Oferta de
+  proveedores»; si no hay, se crea) y, si el producto ya está, se suma la
   cantidad: así se arma un pedido en varias búsquedas. Los borradores hechos
   a mano o desde la propuesta no se tocan. Solo se pueden pedir productos de
   nuestro catálogo; los demás se avisan.
@@ -372,11 +379,11 @@ descuentos en cascada, % total, precio final, stock y vencimiento). Al buscar
 
 En `dromax_ai_inventario`: 15 724 ofertas en 8788 productos (4690 en 2 o más
 droguerías, 140 con posible otra presentación), ~0,2 s. La lista de antes
-sigue como *Oferta por droguería*.
+sigue como *Oferta completa (todos los lotes)*.
 
 ## Reporte de códigos de barras (`ai.barcode.mismatch`)
 
-Menú *Agente IA → Códigos de barras*, botón **Actualizar reporte** (lo rehace
+Menú *Agente IA → Proveedores → Códigos de barras*, botón **Actualizar reporte** (lo rehace
 completo; ~11 s con la oferta actual). Tipos de incoherencia:
 
 | Tipo | Qué es |

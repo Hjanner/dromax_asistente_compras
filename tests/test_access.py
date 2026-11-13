@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Quién accede al módulo: solo el personal de compras y los administradores."""
+"""Quién accede al módulo: solo el personal de compras y los administradores, y qué ve cada uno."""
 from odoo.exceptions import AccessError
 from odoo.tests.common import TransactionCase, new_test_user, tagged
 
@@ -39,20 +39,41 @@ class TestAccess(TransactionCase):
                          "Compras implica el grupo, no al revés")
 
     def test_menus(self):
+        """Compras ve Propuestas, Reabastecimiento y Chat; lo demás es de administradores."""
+        staff_menus = [self.env.ref("dromax_asistente_compras." + xmlid).id for xmlid in (
+            "menu_ai_purchase_proposal", "menu_ai_v_reabastecimiento", "menu_ai_purchase_chat")]
+        admin_menus = [self.env.ref("dromax_asistente_compras." + xmlid).id for xmlid in (
+            "menu_ai_proveedores", "menu_ai_v_comparador", "menu_ai_v_oferta", "menu_ai_barcode_mismatch",
+            "menu_ai_analisis", "menu_ai_v_faltantes", "menu_ai_v_rotacion", "menu_ai_v_stock",
+            "menu_ai_v_pendiente", "menu_ai_purchase_config")]
         for user in (self.comprador, self.responsable, self.admin):
-            self.assertIn(self.chat_menu.id, self._menus(user), user.login)
-        self.assertIn(self.config_menu.id, self._menus(self.admin))
-        self.assertNotIn(self.config_menu.id, self._menus(self.comprador))
+            visible = self._menus(user)
+            for menu_id in staff_menus:
+                self.assertIn(menu_id, visible, user.login)
+        for user in (self.comprador, self.responsable):
+            visible = self._menus(user)
+            for menu_id in admin_menus:
+                self.assertNotIn(menu_id, visible, user.login)
+        visible = self._menus(self.admin)
+        for menu_id in admin_menus:
+            self.assertIn(menu_id, visible)
         self.assertNotIn(self.root_menu.id, self._menus(self.empleado))
+
+    def test_app_opens_proposals(self):
+        """Al entrar a Agente IA se abre Propuestas (antes, el Chat)."""
+        proposals = self.env.ref("dromax_asistente_compras.action_ai_purchase_proposal")
+        for user in (self.comprador, self.admin):
+            menus = self.env["ir.ui.menu"].with_user(user).load_web_menus(False)
+            self.assertEqual(menus[self.root_menu.id]["actionID"], proposals.id, user.login)
 
     def test_actions_by_url(self):
         ai_group = self.env.ref(AI_GROUP)
         admin_group = self.env.ref("base.group_system")
-        for xmlid in ("action_ai_v_oferta", "action_ai_barcode_mismatch", "action_ai_v_rotacion",
-                      "action_ai_v_stock", "action_ai_v_pendiente", "action_ai_v_faltantes",
-                      "action_ai_purchase_proposal", "action_ai_purchase_proposal_line"):
+        for xmlid in ("action_ai_purchase_proposal", "action_ai_purchase_proposal_line"):
             self.assertEqual(self.env.ref("dromax_asistente_compras." + xmlid).groups_id, ai_group, xmlid)
-        for xmlid in ("action_ai_usage_log", "action_ai_purchase_settings"):
+        for xmlid in ("action_ai_v_comparador", "action_ai_v_oferta", "action_ai_barcode_mismatch",
+                      "action_ai_v_rotacion", "action_ai_v_stock", "action_ai_v_pendiente",
+                      "action_ai_v_faltantes", "action_ai_usage_log", "action_ai_purchase_settings"):
             self.assertEqual(self.env.ref("dromax_asistente_compras." + xmlid).groups_id, admin_group, xmlid)
 
     def test_chat_for_outsiders(self):

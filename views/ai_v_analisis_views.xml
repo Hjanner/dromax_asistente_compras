@@ -69,7 +69,7 @@
     <record id="action_ai_v_faltantes" model="ir.actions.act_window">
         <field name="name">Necesidad de compra</field>
         <field name="res_model">ai.v.faltantes</field>
-        <field name="groups_id" eval="[(6, 0, [ref('group_ai_purchase_user')])]"/>
+        <field name="groups_id" eval="[(6, 0, [ref('base.group_system')])]"/>
         <field name="view_mode">tree</field>
         <field name="search_view_id" ref="view_ai_v_faltantes_search"/>
         <field name="help" type="html">
@@ -131,7 +131,7 @@
     <record id="action_ai_v_rotacion" model="ir.actions.act_window">
         <field name="name">Rotación</field>
         <field name="res_model">ai.v.rotacion</field>
-        <field name="groups_id" eval="[(6, 0, [ref('group_ai_purchase_user')])]"/>
+        <field name="groups_id" eval="[(6, 0, [ref('base.group_system')])]"/>
         <field name="view_mode">tree</field>
         <field name="search_view_id" ref="view_ai_v_rotacion_search"/>
         <field name="help" type="html">
@@ -181,7 +181,7 @@
     <record id="action_ai_v_stock" model="ir.actions.act_window">
         <field name="name">Stock por farmacia</field>
         <field name="res_model">ai.v.stock</field>
-        <field name="groups_id" eval="[(6, 0, [ref('group_ai_purchase_user')])]"/>
+        <field name="groups_id" eval="[(6, 0, [ref('base.group_system')])]"/>
         <field name="view_mode">tree</field>
         <field name="search_view_id" ref="view_ai_v_stock_search"/>
         <field name="help" type="html">
@@ -230,7 +230,7 @@
     <record id="action_ai_v_pendiente" model="ir.actions.act_window">
         <field name="name">Pendiente de recibir</field>
         <field name="res_model">ai.v.pendiente</field>
-        <field name="groups_id" eval="[(6, 0, [ref('group_ai_purchase_user')])]"/>
+        <field name="groups_id" eval="[(6, 0, [ref('base.group_system')])]"/>
         <field name="view_mode">tree</field>
         <field name="search_view_id" ref="view_ai_v_pendiente_search"/>
         <field name="context">{'search_default_pendiente': 1}</field>

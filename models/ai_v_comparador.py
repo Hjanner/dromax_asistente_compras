@@ -23,7 +23,7 @@ class AiVComparador(models.Model):
     ai_v_oferta), estable mientras no se vuelva a cargar la droguería.
     """
     _name = "ai.v.comparador"
-    _description = "Comparador de precios entre droguerías"
+    _description = "Oferta de proveedores (comparación de precios)"
     _auto = False
     _order = "nombre, codigo_barras"
     _rec_name = "nombre"
