@@ -1,8 +1,12 @@
 # -*- coding: utf-8 -*-
 """Automatizaciones: borradores de compra (lunes) y de traslado (diario)."""
-from odoo import Command
+from datetime import timedelta
+from unittest.mock import patch
+
+from odoo import Command, fields
 from odoo.exceptions import UserError
 from odoo.tests.common import new_test_user, tagged
+from odoo.tools import mute_logger
 
 from ..services.network_sql import MATRIX_PARAM
 from .test_analisis import AnalisisCase
@@ -60,8 +64,8 @@ class TestAutomation(AnalisisCase):
         self._offer(self.drog, self.vitamina, 2.0, 100)
         self._weekly_sales(self.ibuprofeno, 10)                     # le faltan 10
         self._weekly_sales(self.vitamina, 4)                        # le faltan 4, pero ya hay una solicitud
-        manual = self.env["purchase.order"].with_company(self.matriz).create({
-            "partner_id": self.drog.id, "company_id": self.matriz.id,
+        manual = self.env["purchase.order"].create({
+            "partner_id": self.drog.id,                             # de la farmacia, como su compra
             "order_line": [Command.create({"product_id": self.vitamina.id, "product_qty": 2, "price_unit": 2})]})
         # Un borrador de una propuesta anterior que nadie confirmó: se cancela.
         self.env.flush_all()
@@ -76,7 +80,7 @@ class TestAutomation(AnalisisCase):
         orders = self._ours(proposal.purchase_order_ids)
         self.assertEqual(len(orders), 1)
         self.assertEqual((orders.state, orders.company_id, orders.partner_id, orders.user_id),
-                         ("draft", self.matriz, self.drog, self.buyer))
+                         ("draft", self.company, self.drog, self.buyer))
         self.assertEqual(orders.order_line.mapped("product_id"), self.ibuprofeno)
         self.assertEqual((orders.order_line.product_qty, orders.order_line.price_unit), (10, 1.5))
         # La vitamina queda fuera (ya está en una solicitud) y se avisa en la actividad.
@@ -120,6 +124,62 @@ class TestAutomation(AnalisisCase):
         # Al día siguiente no se duplica: el borrador ya cuenta como en camino.
         again = R._cron_generate_transfers()
         self.assertFalse(again.filtered(lambda p: p.move_ids.product_id == self.ibuprofeno))
+
+    def _manual_transfer(self, product, qty):
+        """Un borrador de la matriz a la farmacia hecho a mano (sin la marca de la tarea)."""
+        src = self.wh_matriz.lot_stock_id
+        dest = self.env["stock.warehouse"].search([("company_id", "=", self.company.id)], limit=1).lot_stock_id
+        return self.env["stock.picking"].with_company(self.matriz).create({
+            "picking_type_id": self.wh_matriz.int_type_id.id,
+            "location_id": src.id, "location_dest_id": dest.id, "origin": "Reabastecimiento a mano",
+            "move_ids_without_package": [Command.create({
+                "name": product.name, "product_id": product.id, "product_uom_qty": qty,
+                "product_uom": product.uom_id.id, "location_id": src.id, "location_dest_id": dest.id})],
+        })
+
+    def test_daily_transfers_replace_stale_drafts(self):
+        """La tarea cancela sus borradores de días anteriores; los hechos a mano no se tocan."""
+        R = self.env["ai.v.reabastecimiento"]
+        self.ICP.set_param(PREFIX + "auto_transfers", "True")
+        self._weekly_sales(self.ibuprofeno, 10)
+        self._set_stock(self.ibuprofeno, 30, company=self.matriz)
+        first = R._cron_generate_transfers().filtered(lambda p: p.move_ids.product_id == self.ibuprofeno)
+        self.assertEqual(first.ai_auto_replenishment_date, fields.Date.context_today(R))
+        self.assertTrue(self._activity(first, self.dispatcher))
+        # Otra corrida el mismo día no cancela nada ni duplica.
+        self.assertFalse(R._cron_generate_transfers().filtered(lambda p: p.move_ids.product_id == self.ibuprofeno))
+        self.assertEqual(first.state, "draft")
+
+        yesterday = fields.Date.context_today(R) - timedelta(days=1)
+        first.ai_auto_replenishment_date = yesterday
+        manual = self._manual_transfer(self.vitamina, 2)              # borrador a mano: no se toca
+        started = self._manual_transfer(self.vitamina, 1)             # de la tarea, pero ya en curso
+        started.ai_auto_replenishment_date = yesterday
+        started.action_confirm()
+        self.assertNotEqual(started.state, "draft")
+
+        second = R._cron_generate_transfers().filtered(lambda p: p.move_ids.product_id == self.ibuprofeno)
+        self.assertEqual(first.state, "cancel")
+        self.assertFalse(self._activity(first, self.dispatcher))
+        self.assertTrue(first.message_ids.filtered(lambda m: "lo reemplazan" in (m.body or "")))
+        self.assertEqual(manual.state, "draft")
+        self.assertNotEqual(started.state, "cancel")
+        # Lo del borrador cancelado vuelve a salir, en uno nuevo de hoy.
+        self.assertEqual(second.move_ids.product_uom_qty, 10)
+        self.assertEqual(second.ai_auto_replenishment_date, fields.Date.context_today(R))
+
+    def test_stale_drafts_stay_if_new_ones_fail(self):
+        R = self.env["ai.v.reabastecimiento"]
+        self.ICP.set_param(PREFIX + "auto_transfers", "True")
+        self._weekly_sales(self.ibuprofeno, 10)
+        self._set_stock(self.ibuprofeno, 30, company=self.matriz)
+        first = R._cron_generate_transfers().filtered(lambda p: p.move_ids.product_id == self.ibuprofeno)
+        first.ai_auto_replenishment_date = fields.Date.context_today(R) - timedelta(days=1)
+        with patch.object(type(R), "_create_transfers", side_effect=UserError("sin almacén")), \
+                mute_logger("odoo.addons.dromax_asistente_compras.models.ai_v_reabastecimiento"):
+            self.assertFalse(R._cron_generate_transfers())
+        self.assertEqual(first.state, "draft")
+        self.assertTrue(self._activity(first, self.dispatcher))
 
     def test_run_now_buttons(self):
         settings = self.env["res.config.settings"].create({})

@@ -80,11 +80,13 @@
             <p class="o_view_nocontent_empty_folder">Ninguna farmacia necesita mercancía que tenga la matriz</p>
             <p>Productos en cero o por agotarse en cada farmacia (lo que tiene, más lo pendiente
                y lo que ya viene por traslado, bajó al punto de pedido) que la sucursal matriz
-               puede mandar sin quedarse sin su propia venta. Se repone hasta la venta de las
-               semanas de cobertura más el margen de seguridad. Elige las líneas
-               y pulsa «Generar borradores de traslado»; después, en cada borrador, «Generar
-               Traslados Definitivos». La matriz, las semanas, el punto de pedido y el margen
-               se cambian en Agente IA →
+               tiene en su almacén. Se repone hasta la venta de las semanas de cobertura más el
+               margen de seguridad. Elige las líneas y pulsa «Generar borradores de traslado»;
+               después, en cada borrador, «Generar Traslados Definitivos».</p>
+            <p>Lo que ya está en un borrador de traslado (generado aquí o por la tarea diaria de
+               reabastecimiento) cuenta como en camino y deja de salir en esta lista: búscalos en
+               Inventario → Traslados con el origen «Reabastecimiento». La matriz, las semanas,
+               el punto de pedido, el margen y la tarea automática se cambian en Agente IA →
                Configuración → Ajustes.</p>
         </field>
     </record>

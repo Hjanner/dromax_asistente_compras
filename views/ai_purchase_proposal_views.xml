@@ -34,7 +34,7 @@
                     <button name="action_create_rfq" type="object" string="Generar borradores"
                             class="btn-primary" groups="purchase.group_purchase_user"
                             invisible="state in ('done', 'discarded')"
-                            confirm="Se creará una orden de compra en borrador de la sucursal matriz por droguería con las líneas que tienen cantidad final y droguería. ¿Continuar?"/>
+                            confirm="Se creará una orden de compra en borrador por sucursal y droguería con las líneas que tienen cantidad final y droguería (las del inventario de Dromax, a nombre de la farmacia indicada). ¿Continuar?"/>
                     <button name="action_discard" type="object" string="Descartar"
                             invisible="state in ('done', 'discarded')"
                             confirm="¿Descartar esta propuesta? Ya no se podrá modificar."/>
@@ -78,10 +78,19 @@
                                     <!-- A la vista solo lo necesario para decidir; lo demás, en el menú de columnas. -->
                                     <field name="laboratorio" optional="hide"/>
                                     <field name="product_id"/>
-                                    <field name="detalle_farmacias" optional="show"/>
+                                    <field name="para_matriz" column_invisible="1"/>
+                                    <field name="company_id" options="{'no_open': True}"/>
+                                    <field name="a_nombre_de_id" optional="show"
+                                           options="{'no_create': True, 'no_open': True}"
+                                           domain="[('id', '!=', company_id)]"
+                                           readonly="not para_matriz or purchase_line_id"
+                                           decoration-danger="para_matriz and not a_nombre_de_id"/>
+                                    <field name="traslado" optional="show"/>
                                     <field name="demanda" optional="hide"/>
+                                    <field name="objetivo" optional="hide"/>
                                     <field name="stock" optional="hide"/>
                                     <field name="pendiente" optional="hide"/>
+                                    <field name="en_camino" optional="hide"/>
                                     <field name="cantidad_sugerida" optional="hide"/>
                                     <field name="cantidad_final" decoration-bf="ajustada"
                                            readonly="purchase_line_id"/>
@@ -146,14 +155,19 @@
                 <field name="purchase_line_id" column_invisible="1"/>
                 <field name="proposal_id" optional="hide"/>
                 <field name="laboratorio" optional="hide"/>
-                <field name="company_id" optional="hide"/>
                 <field name="product_id"/>
-                <field name="detalle_farmacias" optional="show"/>
-                <field name="faltas_farmacias" optional="hide"/>
+                <field name="para_matriz" column_invisible="1"/>
+                <field name="company_id" options="{'no_open': True}"/>
+                <field name="a_nombre_de_id" optional="show" options="{'no_create': True, 'no_open': True}"
+                       domain="[('id', '!=', company_id)]"
+                       readonly="not para_matriz or state in ('done', 'discarded') or purchase_line_id"
+                       decoration-danger="para_matriz and not a_nombre_de_id"/>
+                <field name="traslado" optional="show"/>
                 <field name="demanda" optional="hide"/>
-                <field name="demanda_propia" optional="hide"/>
+                <field name="objetivo" optional="hide"/>
                 <field name="stock" optional="hide"/>
                 <field name="pendiente" optional="hide"/>
+                <field name="en_camino" optional="hide"/>
                 <field name="en_solicitud" optional="hide"/>
                 <field name="cobertura_actual" optional="hide"/>
                 <field name="cantidad_sugerida" sum="Total" optional="hide"/>
@@ -183,7 +197,8 @@
             <search>
                 <field name="product_id"/>
                 <field name="laboratorio"/>
-                <field name="detalle_farmacias" string="Farmacia con falta"/>
+                <field name="company_id"/>
+                <field name="a_nombre_de_id"/>
                 <field name="drogueria_id"/>
                 <field name="proposal_id"/>
                 <filter name="a_pedir" string="A pedir" domain="[('cantidad_final', '>', 0)]"/>
@@ -191,12 +206,18 @@
                 <filter name="revisar_presentacion" string="Revisar presentación"
                         domain="[('revisar_presentacion', '=', True)]"/>
                 <filter name="sin_drogueria" string="Sin droguería" domain="[('drogueria_id', '=', False)]"/>
+                <separator/>
+                <filter name="para_farmacias" string="Compras de las farmacias" domain="[('para_matriz', '=', False)]"/>
+                <filter name="para_matriz" string="Inventario de Dromax" domain="[('para_matriz', '=', True)]"/>
+                <filter name="sin_a_nombre" string="Sin «a nombre de»"
+                        domain="[('para_matriz', '=', True), ('a_nombre_de_id', '=', False)]"/>
                 <filter name="por_pedir" string="Por pedir"
                         domain="[('cantidad_final', '>', 0), ('drogueria_id', '!=', False), ('purchase_line_id', '=', False)]"/>
                 <filter name="pedidas" string="En órdenes de compra" domain="[('purchase_line_id', '!=', False)]"/>
                 <group expand="0" string="Agrupar por">
                     <filter name="group_laboratorio" string="Laboratorio" context="{'group_by': 'laboratorio'}"/>
                     <filter name="group_drogueria" string="Droguería" context="{'group_by': 'drogueria_id'}"/>
+                    <filter name="group_company" string="Recibe" context="{'group_by': 'company_id'}"/>
                 </group>
             </search>
         </field>

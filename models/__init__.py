@@ -16,3 +16,6 @@ from . import ai_v_reabastecimiento
 from . import ai_purchase_proposal
 from . import ai_barcode_mismatch
 from . import ai_picking_cancel
+from . import ai_purchase_cancel
+from . import purchase_order
+from . import stock_picking

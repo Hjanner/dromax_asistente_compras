@@ -1,17 +1,22 @@
 # -*- coding: utf-8 -*-
-"""SQL común de la red: la matriz compra y distribuye a las farmacias.
+"""SQL común de la red: la matriz reabastece a las farmacias y cada una compra lo demás.
 
-Toda compra entra por la sucursal matriz (Dromax), que reparte a las demás
-sucursales (las farmacias) con traslados. Entre farmacias no se traslada.
-Las dos vistas que dependen de esto usan las mismas piezas, para que lo que
-se compra y lo que se reparte salgan de la misma cuenta:
+La sucursal matriz (Dromax) es una droguería: no vende. Guarda inventario para
+reabastecer a las farmacias con traslados cuando llegan a su punto de pedido;
+lo que no alcanza a mandar lo compra cada farmacia a su nombre. Su propio
+inventario se repone con compras de la matriz que salen a nombre de una
+farmacia (ajuste matrix_purchase_company_id), porque la droguería no compra a
+su nombre. Entre farmacias no se traslada. Las dos vistas que dependen de esto
+usan las mismas piezas, para que lo que se compra y lo que se reparte salgan de
+la misma cuenta:
 
-- ai_v_faltantes: lo que la matriz tiene que comprar para toda la red;
+- ai_v_faltantes: lo que compra cada farmacia y lo que compra la matriz;
 - ai_v_reabastecimiento: lo que la matriz manda a cada farmacia.
 """
 from .config import PARAM_PREFIX
 
 MATRIX_PARAM = PARAM_PREFIX + "matrix_company_id"
+PURCHASE_NAME_PARAM = PARAM_PREFIX + "matrix_purchase_company_id"
 
 # Sucursal matriz: la del ajuste si existe; si no, la primera empresa con
 # «DROMAX» en el nombre.
@@ -19,6 +24,11 @@ MATRIX_SQL = """COALESCE(
     (SELECT c.id FROM res_company c
       WHERE c.id::text = (SELECT trim(value) FROM ir_config_parameter WHERE key = '%s')),
     (SELECT c.id FROM res_company c WHERE c.name ILIKE '%%DROMAX%%' ORDER BY c.id LIMIT 1))""" % MATRIX_PARAM
+
+
+# Farmacia a cuyo nombre salen las compras del inventario de la matriz (vacío si no hay).
+PURCHASE_NAME_SQL = """(SELECT c.id FROM res_company c
+      WHERE c.id::text = (SELECT trim(value) FROM ir_config_parameter WHERE key = '%s'))""" % PURCHASE_NAME_PARAM
 
 
 def matrix_company(env):
@@ -63,8 +73,13 @@ def network_ctes(coverage_sql, reorder_sql, margin_sql):
       reabastecen y las que disparan la compra. Así no se mueve una o dos
       unidades debajo de la venta, y lo que se manda deja un margen para
       semanas altas.
-    - matriz: stock de la matriz, lo libre (stock − lo que ya sale) y su
-      propia demanda semanal.
+    - matriz: por producto, stock de la matriz, lo libre (stock − lo que ya
+      sale), sus compras pendientes, lo que le llega en camino y su demanda
+      semanal: lo que traslada a las farmacias (ai_v_rotacion; con la misma
+      regla de venta esporádica que las farmacias).
+    - envios: lo que la matriz manda a cada farmacia de faltas, repartiendo
+      todo lo libre (no vende: su inventario es para las farmacias), primero a
+      la más urgente (menor cobertura; a igualdad, la que más vende).
     """
     return """
             params AS MATERIALIZED (
@@ -127,13 +142,33 @@ def network_ctes(coverage_sql, reorder_sql, margin_sql):
                 SELECT * FROM reponer WHERE en_punto
             ),
             matriz AS (
-                SELECT s.product_id, s.stock,
-                       greatest(s.stock, 0) - COALESCE(x.cantidad, 0) AS libre,
-                       COALESCE(r.demanda_depurada, 0) AS demanda
-                  FROM stk s
+                SELECT p.product_id, COALESCE(s.stock, 0) AS stock,
+                       greatest(COALESCE(s.stock, 0), 0) - COALESCE(x.cantidad, 0) AS libre,
+                       COALESCE(pd.pendiente, 0) AS pendiente,
+                       COALESCE(c.cantidad, 0) AS en_camino,
+                       CASE WHEN r.demanda_depurada > 0 THEN r.demanda_depurada
+                            WHEN COALESCE(s.stock, 0) <= 0 THEN COALESCE(r.demanda_media, 0)
+                            ELSE 0 END AS demanda
+                  FROM (SELECT product_id FROM stk, params WHERE company_id = params.matriz_id
+                        UNION
+                        SELECT product_id FROM rot, params WHERE company_id = params.matriz_id) p
                  CROSS JOIN params
-                  LEFT JOIN rot r ON r.company_id = s.company_id AND r.product_id = s.product_id
-                  LEFT JOIN sale x ON x.company_id = s.company_id AND x.product_id = s.product_id
-                 WHERE s.company_id = params.matriz_id
+                  LEFT JOIN stk s ON s.company_id = params.matriz_id AND s.product_id = p.product_id
+                  LEFT JOIN rot r ON r.company_id = params.matriz_id AND r.product_id = p.product_id
+                  LEFT JOIN sale x ON x.company_id = params.matriz_id AND x.product_id = p.product_id
+                  LEFT JOIN pend pd ON pd.company_id = params.matriz_id AND pd.product_id = p.product_id
+                  LEFT JOIN en_camino c ON c.company_id = params.matriz_id AND c.product_id = p.product_id
+            ),
+            reparto AS (
+                SELECT f.*, m.stock AS stock_matriz, floor(m.libre) AS disponible,
+                       sum(f.falta) OVER (PARTITION BY f.product_id
+                                          ORDER BY f.cobertura, f.demanda DESC, f.company_id
+                                          ROWS UNBOUNDED PRECEDING) AS acumulado
+                  FROM faltas f
+                  JOIN matriz m ON m.product_id = f.product_id AND m.libre >= 1
+            ),
+            envios AS (
+                SELECT r.*, least(r.falta, greatest(r.disponible - (r.acumulado - r.falta), 0))::int AS cantidad
+                  FROM reparto r
             ),""" % {"cobertura": coverage_sql, "punto": reorder_sql, "margen": margin_sql,
                      "matriz": MATRIX_SQL, "objetivo": target_sql("f.demanda")}

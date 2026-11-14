@@ -52,7 +52,7 @@ class TestReabastecimiento(AnalisisCase):
         self.assertNotIn(self.matriz, self._rows(self.ibuprofeno))
         self.assertFalse(self._rows(self.vitamina))
 
-    def test_allocation_by_urgency_and_matrix_reserve(self):
+    def test_allocation_by_urgency(self):
         self._weekly_sales(self.ibuprofeno, 10)                     # falta 7 (cobertura 0,3)
         self._set_stock(self.ibuprofeno, 3)
         self._so(self.otra, self.ibuprofeno, 2)                     # en cero: falta 2 (cobertura 0)
@@ -61,12 +61,11 @@ class TestReabastecimiento(AnalisisCase):
         self.assertEqual(rows[self.otra].estado, "cero")
         self.assertEqual((rows[self.otra].cantidad, rows[self.otra].parcial), (2, False))   # la más urgente primero
         self.assertEqual((rows[self.company].cantidad, rows[self.company].parcial), (3, True))
-        # La matriz se guarda su propia venta de la semana: 5 − 4 = 1, solo para la más urgente.
+        # La matriz no vende: sus ventas no le reservan nada, reparte todo lo libre.
         self._so(self.matriz, self.ibuprofeno, 4)
         rows = self._rows(self.ibuprofeno)
-        self.assertEqual(rows[self.otra].disponible_matriz, 1)
-        self.assertEqual((rows[self.otra].cantidad, rows[self.otra].parcial), (1, True))
-        self.assertNotIn(self.company, rows)
+        self.assertEqual(rows[self.otra].disponible_matriz, 5)
+        self.assertEqual((rows[self.otra].cantidad, rows[self.company].cantidad), (2, 3))
 
     def test_sporadic_sale_at_zero(self):
         """Una venta suelta deja la demanda depurada en 0, pero con stock en cero se repone su media."""

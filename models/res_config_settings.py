@@ -42,9 +42,9 @@ class ResConfigSettings(models.TransientModel):
     ai_purchase_reorder_point_pct = fields.Integer(
         "Punto de pedido (%)", config_parameter=PARAM_PREFIX + "reorder_point_pct",
         default=prompt.DEFAULT_REORDER_POINT_PCT,
-        help="Una farmacia (o la matriz, para su propia venta) entra en el reabastecimiento y en la "
+        help="Una farmacia (o la matriz, para lo que traslada) entra en el reabastecimiento y en la "
              "necesidad de compra cuando su stock, más lo pendiente y lo que viene en camino, baja a "
-             "este % de la venta de las semanas de cobertura. 100 = apenas le falte algo. De 1 a 100.")
+             "este % de la demanda de las semanas de cobertura. 100 = apenas le falte algo. De 1 a 100.")
     ai_purchase_safety_margin_pct = fields.Integer(
         "Margen de seguridad (%)", config_parameter=PARAM_PREFIX + "safety_margin_pct",
         default=prompt.DEFAULT_SAFETY_MARGIN_PCT,
@@ -57,13 +57,20 @@ class ResConfigSettings(models.TransientModel):
              "nombre o, si no hay, del que informa la droguería.")
     ai_purchase_matrix_company_id = fields.Many2one(
         "res.company", "Sucursal matriz", config_parameter=PARAM_PREFIX + "matrix_company_id",
-        help="Sucursal que recibe todas las compras y reabastece a las farmacias con traslados "
-             "(Agente IA → Reabastecimiento). Vacío: la que tenga DROMAX en el nombre.")
+        help="La droguería de la red (Dromax): no vende; guarda inventario y reabastece a las farmacias "
+             "con traslados (Agente IA → Reabastecimiento). Su demanda es lo que traslada. Vacío: la "
+             "que tenga DROMAX en el nombre.")
+    ai_purchase_matrix_purchase_company_id = fields.Many2one(
+        "res.company", "Compras de Dromax a nombre de",
+        config_parameter=PARAM_PREFIX + "matrix_purchase_company_id",
+        help="La matriz no compra a su nombre: las compras para su inventario las recibe ella, pero "
+             "la orden sale a nombre de esta farmacia (el comprador la puede cambiar en cada línea de "
+             "la propuesta). Vacío: hay que elegirla en cada línea antes de generar los borradores.")
 
     ai_purchase_auto_rfq = fields.Boolean(
         "Borradores de compra automáticos", config_parameter=PARAM_PREFIX + "auto_rfq",
         help="El lunes, al calcular la propuesta semanal, crea también las órdenes de compra en "
-             "borrador (una por droguería) y cancela las de semanas anteriores que nadie confirmó.")
+             "borrador (una por sucursal y droguería) y cancela las de semanas anteriores que nadie confirmó.")
     ai_purchase_responsible_id = fields.Many2one(
         "res.users", "Responsable de compras", config_parameter=PARAM_PREFIX + "purchase_responsible_id",
         help="Recibe la actividad para revisar la compra de la semana y queda como comprador de las "

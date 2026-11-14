@@ -227,15 +227,15 @@ En **Ajustes → Técnico → Acciones planificadas**:
 - El asistente lo ven automáticamente los usuarios con **Compras / Usuario**
   y los administradores; no hay que marcar nada más.
 - Generar borradores de órdenes de compra requiere **Compras / Usuario**.
-- Toda compra la hace la sucursal matriz (Dromax): los compradores necesitan
-  **acceso a la matriz** (empresas permitidas en su ficha) para ver la
-  propuesta y generar las órdenes. Para el reabastecimiento, además, acceso a
-  las farmacias que reciben y el permiso **Inventario / Usuario**.
-  Como en el resto de Odoo, las pantallas muestran solo las empresas marcadas
-  en el selector de empresas (arriba a la derecha): la *Necesidad de compra*
-  y las líneas de la propuesta son de la matriz, así que hay que tenerla
-  marcada (lo natural es que los compradores tengan a Dromax como empresa
-  principal). El chat las ve igual, sin depender del selector.
+- La compra se pide a nombre de cada farmacia (y el inventario de Dromax, a
+  nombre de la farmacia del ajuste *Compras de Dromax a nombre de*, que hay
+  que elegir): los compradores necesitan **acceso a la matriz y a todas las
+  farmacias** (empresas permitidas en su ficha) para ver todas las líneas de
+  la propuesta y generar las órdenes. Para el reabastecimiento, además, el
+  permiso **Inventario / Usuario**. Las líneas de la propuesta se ven aunque
+  esas sucursales no estén marcadas en el selector de empresas; la
+  *Necesidad de compra* (administradores) sí depende del selector. El chat
+  las ve igual, sin depender del selector.
 - Zona horaria de los usuarios y de las farmacias: `America/Caracas` (las
   semanas de venta se cuentan en hora local).
 - La configuración y el consumo de IA (*Agente IA → Configuración → Consumo

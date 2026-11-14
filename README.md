@@ -5,10 +5,15 @@ laboratorio y, con el visto bueno del comprador, la convierte en solicitudes de
 presupuesto (`purchase.order`) en borrador; después reparte lo comprado a las
 farmacias con traslados.
 
-**Flujo de Dromax:** toda compra la hace la sucursal matriz (Dromax, la
-droguería del grupo), que recibe la mercancía y la distribuye a las farmacias
-con traslados cuando lo necesitan. Las farmacias no compran a las droguerías
-ni se trasladan mercancía entre ellas.
+**Flujo de Dromax:** Dromax (la sucursal matriz) es la droguería del grupo:
+no vende a personas ni a las farmacias. Arma la compra de la red y la pide a
+nombre de cada farmacia, que la recibe; antes, manda por traslado lo que
+tiene en su almacén. Para tener con qué reabastecer, Dromax guarda un
+inventario propio, calculado con lo que traslada a las farmacias (no con
+ventas), y lo compra **a nombre de otra sucursal** (ajuste *Compras de Dromax
+a nombre de*): la orden queda en Dromax y entra a su almacén, pero el
+documento sale a nombre de esa farmacia. Las farmacias no se trasladan
+mercancía entre ellas.
 
 El avance, las decisiones y lo pendiente están en [ESTADO.md](ESTADO.md).
 
@@ -80,13 +85,17 @@ Vistas SQL por producto y farmacia (`company_id`), en la unidad del producto,
 en el menú *Agente IA → Análisis* (administradores) y consultables por el agente. Las
 pantallas muestran solo las farmacias permitidas del usuario (regla por
 empresa, como el resto de Odoo); el chat, que consulta con el rol de solo
-lectura, las ve todas (la compra es de la matriz para toda la red).
+lectura, las ve todas (la compra se arma para toda la red).
 
 - **Rotación** (`ai_v_rotacion`): demanda de las últimas N semanas
   **completas** (lunes a domingo en la hora de la sucursal, `res_partner.tz`
-  de la empresa o `America/Caracas`; la semana en curso no entra). Demanda =
-  TPV (pedidos pagados; sin los tickets que liquidan un pedido de venta) +
-  pedidos de venta confirmados. Las semanas sin venta cuentan como 0. Trae
+  de la empresa o `America/Caracas`; la semana en curso no entra). Demanda de
+  una farmacia = TPV (pedidos pagados; sin los tickets que liquidan un pedido
+  de venta) + pedidos de venta confirmados. **Demanda de Dromax** = lo que
+  traslada a las farmacias (`venta_traslados`: movimientos hechos desde sus
+  ubicaciones internas hacia tránsito o hacia el almacén de otra sucursal);
+  sus ventas no cuentan, porque no vende. Filtro *Traslados de Dromax*. Las
+  semanas sin venta cuentan como 0. Trae
   media, mediana, desviación, MAD y la **demanda depurada**: la media sin las
   semanas que se alejan de la mediana más de *factor × MAD*. Si el MAD es
   menor que 1 se usa 1; si no, con ventas esporádicas (MAD = 0) toda semana
@@ -108,63 +117,65 @@ En `dromax_ai_multi` (3 años simulados): 5186 filas de rotación (~3,5 s),
 
 ## Necesidad de compra (`ai_v_faltantes`)
 
-Lo que tiene que comprar la sucursal matriz para toda la red: una fila por
-producto con faltante > 0, en *Agente IA → Análisis → Necesidad de compra*.
-Es la base de la propuesta. Comparte el cálculo con el reabastecimiento
+Lo que hay que comprar esta semana: **una fila por producto y sucursal que
+recibe**, en *Agente IA → Análisis → Necesidad de compra*. Es la base de la
+propuesta. Comparte el cálculo con el reabastecimiento
 (`services/network_sql.py`), para que lo que se compra y lo que se reparte
-salgan de la misma cuenta.
+salgan de la misma cuenta. Hay dos clases de filas (filtros *Compras de las
+farmacias* e *Inventario de Dromax*):
 
-- **Punto de pedido y objetivo** (Ajustes, en `services/network_sql.py`):
-  una farmacia solo tiene falta cuando lo que tiene (stock + pendiente + en
-  camino) baja al *punto de pedido*, un % de la venta de las semanas de
-  cobertura (`reorder_point_pct`, 50). Entonces se repone hasta el
-  *objetivo*: esa venta más el *margen de seguridad* (`safety_margin_pct`,
-  20), en unidades enteras (al menos la venta redondeada hacia arriba; el
-  margen se redondea al más cercano, para que en poca venta no duplique el
-  pedido). Así no se mueve ni se compra por una o dos unidades debajo de la
-  venta, y queda margen para una semana alta. Ejemplo con 1 semana: venta
+- **Punto de pedido y objetivo** (Ajustes, en `services/network_sql.py`),
+  iguales para las farmacias y para Dromax: una sucursal solo compra cuando
+  lo que tiene (stock + pendiente + en camino) baja al *punto de pedido*, un
+  % de la demanda de las semanas de cobertura (`reorder_point_pct`, 50).
+  Entonces se repone hasta el *objetivo*: esa demanda más el *margen de
+  seguridad* (`safety_margin_pct`, 20), en unidades enteras (al menos la
+  demanda redondeada hacia arriba; el margen se redondea al más cercano, para
+  que en poca venta no duplique el pedido). Ejemplo con 1 semana: demanda
   10/sem → entra con 5 o menos y se repone hasta 12. Con 100 y 0 se vuelve al
   cálculo sin umbrales.
-- **Falta de cada farmacia** = ⌈objetivo − stock − pendiente − lo que ya
-  viene en camino por traslado⌉. El stock negativo cuenta como 0 (no se
-  compra para tapar ventas sin existencia). Con stock en cero también entra la
-  venta esporádica (demanda depurada 0): se repone su venta media. Lo que le
-  sobra a una farmacia no cubre a otra.
-- **Cuándo compra la matriz**: si, después de mandar lo que les falta a las
-  farmacias que llegaron a su punto de pedido, le queda su propio punto de
-  pedido o menos (el de su venta propia; 0 si no vende). Así no compra una
-  unidad cuando todavía tiene para mandar, y sin falta en las farmacias solo
-  compra para su venta al llegar a su punto.
-- **Cantidad sugerida** = ⌈Σ faltas de todas las farmacias debajo del
-  objetivo (también las que aún no llegaron a su punto: si se compra, se
-  repone a todas) + objetivo de la venta de la matriz − stock libre de la
-  matriz (su stock menos lo que ya sale hacia las farmacias) − compras
-  pendientes de la matriz⌉. Las solicitudes sin confirmar no se restan
-  (`en_solicitud` avisa).
-  `detalle_farmacias` dice cuánto le falta a cada farmacia («FARMAX (10), LA
-  45 (5)»). `cobertura_actual` = (stock libre + pendiente) / venta semanal de
-  la red: menor = más urgente, y es el orden de la lista.
+- **Compra de una farmacia** (recibe y a nombre de: la farmacia) = ⌈objetivo
+  − stock − pendiente − en camino por traslado − lo que Dromax le manda esta
+  semana⌉. Lo que Dromax manda (`traslado`) sale del mismo reparto que el
+  *Reabastecimiento*: primero se usa el almacén de Dromax y se compra solo
+  el resto. El stock negativo cuenta como 0 (no se compra para tapar ventas
+  sin existencia). Con stock en cero también entra la venta esporádica
+  (demanda depurada 0): se repone su venta media. Lo que le sobra a una
+  farmacia no cubre a otra.
+- **Inventario de Dromax** (`para_matriz`; recibe: Dromax): su demanda es lo
+  que traslada a las farmacias por semana (`ai_v_rotacion`), no ventas.
+  Después de mandar lo de esta semana, si lo que le queda (stock libre −
+  traslado de esta semana + pendiente + en camino) baja a su punto de
+  pedido, se repone hasta su objetivo. La orden sale **a nombre de** la
+  farmacia del ajuste *Compras de Dromax a nombre de* (`a_nombre_de_id`;
+  vacío si no está configurado, y entonces se elige en la propuesta).
+- `cobertura_actual` = (lo que tiene + lo que le llega) / demanda semanal:
+  menor = más urgente, y es el orden de la lista. Las solicitudes sin
+  confirmar no se restan (`en_solicitud` avisa).
 - **Droguería sugerida**, entre las ofertas disponibles (`ai_v_oferta`):
-  primero las de precio coherente con el costo de la matriz (entre un tercio
-  y el triple), luego las que tienen stock para toda la cantidad, y entre
-  ellas la más barata. `revisar_presentacion` avisa si la elegida pasa del
-  triple del costo o no llega a un tercio: algunas droguerías usan el mismo
-  código de barras para otro empaque (p. ej. un dispensador de 50 blísteres
-  frente al blíster que vende la farmacia, o una ampolla suelta frente a la
-  caja de 10). Sin costo en la matriz, se comparan las ofertas entre sí: si
-  la más cara pasa del triple de la más barata, se marca para revisar. También trae precio, mejor precio, monto, stock de la droguería,
+  primero las de precio coherente con el costo (el de la sucursal que recibe
+  o, si no tiene, el de Dromax; entre un tercio y el triple), luego las que
+  tienen stock para toda la cantidad, y entre ellas la más barata. Se elige
+  por fila: dos farmacias pueden comprar el mismo producto a droguerías
+  distintas si a la más barata no le alcanza. `revisar_presentacion` avisa
+  si la elegida pasa del triple del costo o no llega a un tercio: algunas
+  droguerías usan el mismo código de barras para otro empaque (p. ej. un
+  dispensador de 50 blísteres frente al blíster que vende la farmacia, o una
+  ampolla suelta frente a la caja de 10). Sin costo, se comparan las ofertas
+  entre sí: si la más cara pasa del triple de la más barata, se marca para
+  revisar. También trae precio, mejor precio, monto, stock de la droguería,
   vencimiento y laboratorio según la droguería.
 - Ajustes: semanas de cobertura (`coverage_weeks`, 1), punto de pedido
   (`reorder_point_pct`, 50 %), margen de seguridad (`safety_margin_pct`, 20 %;
-  el 0 se guarda explícito, porque Odoo guarda un entero 0 como vacío) y
+  el 0 se guarda explícito, porque Odoo guarda un entero 0 como vacío),
   *Sucursal matriz* (`matrix_company_id`; vacío = la que tenga DROMAX en el
-  nombre), leídos en cada consulta.
+  nombre) y *Compras de Dromax a nombre de* (`matrix_purchase_company_id`),
+  leídos en cada consulta.
 
-En `dromax_ai_inventario` (inventario real + 26 semanas simuladas), con 1
-semana, 50 % y 20 %: 371 productos a comprar por DROMAX (7082 unidades), ~3 s.
-Sin umbrales eran 709 (8160 unidades) y 381 de ellos de 1 o 2 unidades; ahora
-son 183, y son productos de poca venta en la sucursal que los necesita (61 con
-venta de la red de 2/sem o menos).
+En `dromax_ai_inventario` (inventario real, 26 semanas de ventas simuladas y
+26 de traslados simulados con `scripts/simulate_transfers.py`), con 1 semana,
+50 % y 20 %: 446 filas en 418 productos (5525 unidades), 220 de ellas para el
+inventario de Dromax (1841 unidades), ~2 s.
 
 ## Reabastecimiento desde la matriz (`ai_v_reabastecimiento`)
 
@@ -181,10 +192,11 @@ a cada farmacia. Una fila por producto y farmacia:
   cero también entra la venta esporádica (demanda depurada 0 pero con venta en
   el período): se repone su venta media.
 - **Disponible en la matriz** = su stock − lo que ya sale hacia las
-  farmacias − su propia venta de las mismas semanas. Lo que no alcanza lo
-  compra la matriz (está en la necesidad de compra). Si no alcanza para
-  todas, se reparte primero a la farmacia más urgente (menor cobertura) y la
-  línea queda **Parcial**. Solo productos almacenables, en su unidad.
+  farmacias (Dromax no vende: no se reserva nada para venta propia). Lo que
+  no alcanza lo compra la farmacia a su nombre (está en la necesidad de
+  compra). Si no alcanza para todas, se reparte primero a la farmacia más
+  urgente (menor cobertura) y la línea queda **Parcial**. Solo productos
+  almacenables, en su unidad.
 - **Valor** = a trasladar × costo de la matriz (el costo que pasa el traslado).
   Vista de tabla dinámica con el valor por farmacia y estado.
 - **Generar borradores de traslado** (botón de la lista al elegir líneas;
@@ -201,73 +213,111 @@ a cada farmacia. Una fila por producto y farmacia:
   elegidas que aún se pueden cancelar (las hechas o canceladas no se tocan) y
   las cancela juntas. Requiere Inventario / Usuario. Odoo solo trae
   cancelarlas de una en una.
+- **Cancelar varias solicitudes de presupuesto** (`ai.purchase.cancel`): en
+  *Compras → Solicitudes de presupuesto*, al marcar filas aparece el botón
+  **Cancelar solicitudes** (también en *Acciones → Cancelar solicitudes* de
+  cualquier lista de compras). Un diálogo muestra las que se cancelan, con
+  proveedor, sucursal y monto; solo se cancelan las que siguen siendo
+  solicitudes (borrador, enviadas o por aprobar). Las órdenes confirmadas o
+  ya canceladas no se tocan (una confirmada se cancela desde su ficha, por
+  sus recepciones y facturas). Requiere Compras / Usuario.
 - Ajustes: *Sucursal matriz* (`matrix_company_id`; vacío = la que tenga
   DROMAX en el nombre), las semanas de historial y de cobertura, el punto de
   pedido y el margen de seguridad.
 - Chat: *¿A quién abastezco desde Dromax?* (nivel medio) resume la vista por
   farmacia y estado.
 
-En `dromax_ai_inventario`, con 1 semana, 50 % y 20 %: 111 líneas (1210
-unidades, 3173 de valor), ~2,5 s. Sin umbrales eran 272 (1648 unidades) y 145
-de 1 o 2 unidades; ahora son 46, casi todas (40) de productos que la farmacia
-vende 2/sem o menos.
+En `dromax_ai_inventario`, con 1 semana, 50 % y 20 % y los traslados
+simulados: 20 líneas (183 unidades, 593 de valor), ~1,5 s (el stock de
+Dromax del Excel es poco y los traslados simulados ya se lo llevan).
 
 ## Propuesta de compra (`ai.purchase.proposal`)
 
-Menú *Agente IA → Propuestas*. **Una propuesta por semana de la sucursal
-matriz para toda la red, con una línea por producto**, organizada por
+Menú *Agente IA → Propuestas*. **Una propuesta por semana para toda la red,
+con una línea por producto y sucursal que recibe**, organizada por
 laboratorio en las líneas (no una propuesta por laboratorio: con datos reales
 saldrían ~190 por semana con una mediana de 3 líneas).
 
 - **Cálculo:** la tarea programada *Agente IA: propuesta de compra
   semanal* (lunes 03:00 de Caracas, 07:00 UTC; `noupdate`, se ajusta en
   producción) o el botón *Calcular propuesta* de la lista. Copia
-  `ai_v_faltantes` como foto: una línea por producto, con la falta de cada
-  farmacia, la venta de la red y de la matriz, el stock libre y lo pendiente
-  de la matriz, droguería, precio, descuento, vencimiento y un **motivo**
-  legible («Falta: farmacias 15 (FARMAX (10), LA 45 (5)) + venta propia 2/sem
-  × 1 sem − stock 4 − pendiente 0 = 13. …»). No llama a la IA ni crea órdenes. Las
-  propuestas del mismo modo que seguían abiertas pasan a *Descartada*.
+  `ai_v_faltantes` como foto: por cada fila, la sucursal que **recibe**, a
+  **nombre de** quién sale la compra, la demanda semanal, el objetivo, el
+  stock, lo pendiente, lo que viene en camino, el **traslado de Dromax** de
+  esta semana, droguería, precio, descuento, vencimiento y un **motivo**
+  legible («Compra de la farmacia: objetivo 3 (2,88/sem × 1 sem + margen) −
+  stock 1 − traslado de Dromax 1 = 1.» o «Inventario de Dromax (traslada
+  0,88/sem a las farmacias): objetivo 1 (…) − stock 0 = 1. Se compra a
+  nombre de FARMACIA FARMAX y lo recibe Dromax.»). No llama a la IA ni crea
+  órdenes. Las propuestas del mismo modo que seguían abiertas pasan a
+  *Descartada*.
 - **Laboratorio** de cada línea: el campo del producto indicado en Ajustes
   (*Campo de laboratorio*, para el módulo de laboratorios de Dromax); si no
   hay, el texto entre corchetes al final del nombre («… [LETI]»); si no, el
   que informa la droguería; si no, «SIN LABORATORIO».
-- **Columnas:** a la vista solo producto, falta por farmacia, cantidad final,
+- **Columnas:** a la vista producto, recibe, a nombre de, cantidad final,
   droguería, stock en la droguería, precio final, monto y *Revisar
   presentación* (pensado para personal con poca experiencia); laboratorio,
-  stock y pendiente de la matriz, cantidad sugerida, orden de compra y motivo
-  quedan en el menú de columnas.
+  demanda, objetivo, stock, pendiente, en camino, traslado de Dromax,
+  cantidad sugerida, orden de compra y motivo quedan en el menú de columnas.
+  Filtros *Compras de las farmacias*, *Inventario de Dromax* y *Falta a
+  nombre de*; agrupar por sucursal.
 - **Revisión:** el comprador cambia la cantidad final (0 = no pedir), la
   droguería (entre las que tienen oferta del producto; el precio, descuento,
   stock, vencimiento y *Revisar presentación* se ven al elegirla, sin
-  guardar) y el motivo. La columna *Stock en la droguería* se pone en rojo
-  si la cantidad final lo pasa. Lo que cambia el comprador **no puede pasar
-  del stock de la droguería**: al elegir una droguería con menos, o al
-  escribir más, la cantidad baja a su stock con un aviso, y al guardar se
-  rechaza (también desde el chat). Las líneas que el cálculo dejó por encima
-  del stock (ninguna droguería tenía toda la cantidad) se ven en rojo hasta
-  que se cambien. La cantidad y la
-  droguería sugeridas no cambian: *Líneas ajustadas* y *Ajuste del
-  comprador (%)* (Σ |final − sugerida| / Σ sugerida) miden cuánto corrige al
-  agente. Al primer cambio la propuesta pasa a *En revisión*.
+  guardar), el motivo y, **solo en las líneas del inventario de Dromax**, a
+  nombre de qué farmacia se compra (la de una farmacia sale siempre a su
+  nombre). Si falta elegirlo, la columna *A nombre de* se ve en rojo. La
+  columna *Stock en la droguería* se pone en rojo si la cantidad final lo
+  pasa. Lo que cambia el comprador **no puede pasar del stock de la
+  droguería**: al elegir una droguería con menos, o al escribir más, la
+  cantidad baja a su stock con un aviso, y al guardar se rechaza (también
+  desde el chat). Las líneas que el cálculo dejó por encima del stock
+  (ninguna droguería tenía toda la cantidad) se ven en rojo hasta que se
+  cambien. La cantidad y la droguería sugeridas no cambian: *Líneas
+  ajustadas* y *Ajuste del comprador (%)* (Σ |final − sugerida| / Σ
+  sugerida) miden cuánto corrige al agente. Al primer cambio la propuesta
+  pasa a *En revisión*.
 - **Generar borradores** (botón de la propuesta, o *Acción → Generar
   borradores* sobre las líneas seleccionadas de la lista, p. ej. un
-  laboratorio): una orden de compra en borrador de la matriz por droguería
-  (`origin` = nombre de la propuesta), con la cantidad final y el precio final
-  de la oferta (ya con descuentos), en la unidad del producto; impuestos,
-  descripción y fecha prevista como los pondría Odoo al elegir el producto. Se
-  puede hacer por partes: lo nuevo se suma al borrador que la misma propuesta
-  ya creó para esa droguería; los borradores hechos a mano no se
-  tocan. No entran las líneas sin droguería, con cantidad 0, ya pedidas o
-  marcadas *Revisar presentación* que el comprador no cambió. Cada línea
-  guarda su línea de compra y ya no se puede modificar. Hace falta el permiso
-  de Compras y acceso a la sucursal matriz. Lo creado aparece en `ai_v_pendiente.en_solicitud`. La
-  propuesta pasa a *Convertida en borradores* cuando no queda nada por pedir.
+  laboratorio): una orden de compra en borrador **por sucursal que recibe y
+  droguería** (`origin` = nombre de la propuesta), con la cantidad final y el
+  precio final de la oferta (ya con descuentos), en la unidad del producto;
+  impuestos, descripción y fecha prevista como los pondría Odoo al elegir el
+  producto. Las de una farmacia quedan en esa farmacia y entran a su
+  almacén. Las del inventario de Dromax quedan en Dromax, entran a su
+  almacén y llevan **A nombre de** (ver abajo). Se puede hacer por partes:
+  lo nuevo se suma al borrador que la misma propuesta ya creó para esa
+  sucursal, droguería y nombre; los borradores hechos a mano no se tocan. No
+  entran las líneas sin droguería, con cantidad 0, ya pedidas, del inventario
+  de Dromax sin *A nombre de* o marcadas *Revisar presentación* que el
+  comprador no cambió. Cada línea guarda su línea de compra y ya no se puede
+  modificar. Hace falta el permiso de Compras y acceso a las sucursales que
+  reciben; al terminar se abren las órdenes con esas sucursales activas. Lo
+  creado aparece en `ai_v_pendiente.en_solicitud`. La propuesta pasa a
+  *Convertida en borradores* cuando no queda nada por pedir.
 - Estados: *Lista* → *En revisión* → *Convertida en borradores* o
   *Descartada*; cerrada no se modifica.
 - Permisos: compradores leen, calculan y ajustan; borrar, solo
-  administradores. Las líneas son de la matriz: las ve quien tiene acceso a
-  ella.
+  administradores. Cada usuario ve las líneas de las sucursales a las que
+  tiene acceso (aunque no estén marcadas en el selector de empresas).
+
+## Compras de Dromax a nombre de otra sucursal (`purchase.order.ai_a_nombre_de_id`)
+
+Dromax a veces pide a nombre de una farmacia lo que guarda en su almacén. La
+orden de compra tiene el campo **A nombre de** (sucursal; con historial):
+
+- La orden sigue siendo de Dromax (empresa, tipo de operación y almacén de
+  Dromax): la recepción entra a su inventario y el costo es el suyo.
+- En la ficha, un aviso: «Compra para el inventario de DROMAX: la recibe su
+  almacén, pero sale a nombre de FARMACIA …». En las listas de Compras, la
+  columna *A nombre de* y el filtro *A nombre de otra sucursal*.
+- El PDF de la solicitud de presupuesto y de la orden de compra sale con el
+  encabezado (logo, nombre, RIF y dirección) de la farmacia indicada; la
+  dirección de entrega sigue siendo la del almacén de Dromax.
+- Lo llenan la propuesta (líneas del inventario de Dromax) y *Añadir a
+  borrador de compra* de la oferta de proveedores; también se puede poner a
+  mano en cualquier orden.
 
 ## Automatización: borradores de compra y de traslado
 
@@ -284,11 +334,12 @@ que hace lo mismo que la tarea programada).
    solicitudes ya enviadas no se tocan).
 2. Calcula la propuesta de la semana (siempre, aunque el ajuste esté
    apagado).
-3. Crea las órdenes de compra en borrador de la matriz, una por droguería,
-   con todas las líneas por pedir. Quedan fuera, para decidir en la
-   propuesta: las líneas sin droguería, las marcadas para revisar la
-   presentación y los productos que ya están en otras solicitudes sin
-   confirmar (se pedirían dos veces).
+3. Crea las órdenes de compra en borrador, una por sucursal que recibe y
+   droguería, con todas las líneas por pedir. Quedan fuera, para decidir en
+   la propuesta: las líneas sin droguería, las marcadas para revisar la
+   presentación, las del inventario de Dromax sin *A nombre de* y los
+   productos que ya están en otras solicitudes sin confirmar (se pedirían
+   dos veces).
 4. Deja al *Responsable de compras* una actividad «Revisar la compra de la
    semana» en la propuesta: los borradores creados con su monto, lo que quedó
    fuera, lo cancelado y un aviso si la oferta tiene más de un día. Él queda
@@ -297,11 +348,19 @@ que hace lo mismo que la tarea programada).
 
 **Reabastecimiento diario** (tarea *Agente IA: borradores de reabastecimiento
 diario*, 06:00 en Caracas; ajuste *Borradores de traslado automáticos*):
+primero cancela **sus** borradores de días anteriores que siguen en borrador
+(nadie los despachó: los reemplazan los de hoy, con el stock y la venta del
+día; se les borra la actividad y queda un mensaje en su historial). Después
 crea los borradores de traslado de todas las líneas de *Reabastecimiento*
 (uno por farmacia) y deja al *Responsable de despacho* una actividad en cada
-uno («Despachar reabastecimiento a …»). Lo que ya va en borrador cuenta como
-en camino, así que al día siguiente no se duplica; lo que la matriz no tiene
-para mandar entra en la compra del lunes.
+uno («Despachar reabastecimiento a …»). Los borradores de la tarea llevan la
+fecha en el campo *Reabastecimiento automático del* (filtro *Reabastecimiento
+automático* en Inventario → Traslados); los creados con el botón o a mano no
+la llevan y no se tocan, igual que los que ya pasaron a *Generar Traslados
+Definitivos*. Si no se pueden crear los nuevos (falta un almacén), los de
+ayer no se cancelan. Lo que ya va en borrador cuenta como en camino, así que
+el mismo día no se duplica; lo que la matriz no tiene
+para mandar lo compra la farmacia el lunes.
 
 Probado sobre `dromax_ai_inventario` (y deshecho): la compra crea 3
 borradores (75, 134 y 37 líneas; 123 líneas sin droguería y 2 para revisar
@@ -358,9 +417,11 @@ descuentos en cascada, % total, precio final, stock y vencimiento). Al buscar
   marcar productos o de la ventana de uno): un asistente con cada producto,
   la droguería (por defecto la más barata, se puede cambiar entre las que lo
   tienen; el precio sale de su oferta) y la cantidad (por defecto la de la
-  necesidad de compra, o 1, sin pasar del stock de la droguería). Al
-  confirmar, se agregan a la orden en borrador de la sucursal matriz con esa
-  droguería que creó el comparador para el usuario (origen «Oferta de
+  necesidad de compra del inventario de Dromax, o 1, sin pasar del stock de
+  la droguería) y **a nombre de** qué farmacia sale (por defecto la del
+  ajuste *Compras de Dromax a nombre de*; obligatorio). Al confirmar, se
+  agregan a la orden en borrador de la sucursal matriz con esa droguería y
+  ese nombre que creó el comparador para el usuario (origen «Oferta de
   proveedores»; si no hay, se crea) y, si el producto ya está, se suma la
   cantidad: así se arma un pedido en varias búsquedas. Los borradores hechos
   a mano o desde la propuesta no se tocan. Solo se pueden pedir productos de
@@ -461,6 +522,28 @@ SIM_DB=<base> python3 odoo/odoo-bin shell -c odoo/debian/odoo.conf -d <base> --n
 - Se escribe con SQL (sin movimientos de inventario ni contabilidad) y no se
   puede repetir sobre la misma base: hay que restaurarla.
 
+## Traslados simulados de Dromax (`scripts/simulate_transfers.py`)
+
+Dromax no vende: su demanda es lo que traslada a las farmacias. Para probar
+la compra de su inventario, este script inventa ese historial sobre una base
+que ya tiene el inventario real y las ventas simuladas (después de
+`simulate_history.py`):
+
+```bash
+SIM_DB=<base> python3 odoo/odoo-bin shell -c odoo/debian/odoo.conf -d <base> --no-http \
+    < custom_addons/dromax_asistente_compras/scripts/simulate_transfers.py
+```
+
+- Mismas variables que `simulate_history.py` (`SIM_DB`, `SIM_SEED` 17,
+  `SIM_WEEKS` 26).
+- Por producto que las farmacias venden, una demanda de traslados según el
+  stock de Dromax: la mayoría con 1 a 6 semanas de cobertura, y además
+  cortos (Dromax tiene que reponer), sobrados, sin traslados y agotados.
+- Cada envío son dos movimientos hechos, como los traslados entre
+  sucursales: stock de Dromax → tránsito entre empresas → stock de la
+  farmacia (origen «Simulación de traslados»). No toca las existencias ni la
+  contabilidad, y no se puede repetir sobre la misma base.
+
 ## Chat del agente
 
 Menú **Agente IA → Chat** (grupo *Agente IA / Usuario*).
@@ -481,12 +564,14 @@ Menú **Agente IA → Chat** (grupo *Agente IA / Usuario*).
     guardada (la vigente o la que se indique). Sin filtros devuelve el
     resumen: totales, laboratorios de mayor monto, cuántas líneas necesitan
     atención y las de mayor monto a revisar por presentación. Con filtros
-    (laboratorio, producto, farmacia —las líneas en que a esa farmacia le
-    falta el producto— o por pedir / ajustadas / revisar presentación / sin
-    droguería / en solicitud / pedidas) devuelve 40
+    (laboratorio, producto, farmacia —las líneas que recibe o que salen a
+    su nombre— o por pedir / ajustadas / revisar presentación / sin
+    droguería / en solicitud / pedidas / inventario de Dromax / compras de
+    las farmacias) devuelve 40
     líneas (el modelo puede pedir hasta 80) con su `linea_id`, el motivo y las ofertas de las demás
     droguerías, más el total de líneas y el monto de todas las que coinciden.
-    Cada línea trae cuánto le falta a cada farmacia. Un laboratorio sin líneas
+    Cada línea dice quién la recibe, a nombre de quién sale y el traslado
+    de Dromax; el resumen trae el monto por sucursal. Un laboratorio sin líneas
     devuelve los nombres parecidos (trigramas).
   - `update_proposal_lines`: hasta 50 cambios de cantidad final, droguería
     (por nombre, entre las que ofertan el producto; el precio sale de su
@@ -495,14 +580,14 @@ Menú **Agente IA → Chat** (grupo *Agente IA / Usuario*).
     válidos, devuelve el antes y el después y los errores, y deja en el
     historial de la propuesta quién cambió qué desde el chat.
   - Las dos ven todas las sucursales del usuario, no solo las marcadas en el
-    selector de empresas (las líneas son de la matriz).
+    selector de empresas.
 - *Arma la compra de esta semana* parte de la propuesta guardada: si no hay
   una calculada esta semana (lunes 00:00 hora local), la calcula antes de
   preguntar. Con la propuesta real de `dromax_ai_inventario` (1412 líneas):
   una llamada a `get_proposal`, ~0,17 USD y ~30 s con Claude Opus.
 - Bajo la última respuesta que leyó o ajustó una propuesta aparecen los
   botones de borradores (con permiso de Compras; pide confirmación y usa las
-  líneas de la matriz, las mismas que leyó el agente) y
+  mismas líneas que leyó el agente) y
   **Abrir propuesta**. Si la respuesta solo trató líneas de un laboratorio
   (p. ej. *Revisa un laboratorio*), el botón es **Generar borradores de
   LETI** y pide solo ese laboratorio; si no, **Generar todos los

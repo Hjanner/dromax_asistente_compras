@@ -68,6 +68,8 @@ class TestUi(HttpCase):
         matriz = self.env["res.company"].create({"name": "ZQX MATRIZ UI COMPARADOR"})
         self.env["ir.config_parameter"].sudo().set_param(
             "dromax_asistente_compras.matrix_company_id", str(matriz.id))
+        self.env["ir.config_parameter"].sudo().set_param(          # la matriz compra a nombre de la farmacia
+            "dromax_asistente_compras.matrix_purchase_company_id", str(self.env.company.id))
         buyer = new_test_user(self.env, login="ai_comparador_ui",
                               groups="base.group_user,purchase.group_purchase_user,"
                                      "base.group_system",
@@ -151,7 +153,7 @@ class TestUi(HttpCase):
                               "price_subtotal": 2, "price_subtotal_incl": 2}) for p in (product, agotado)],
         })
         order.write({"state": "paid", "date_order": order.date_order - timedelta(weeks=1)})
-        # La necesidad de compra es de la matriz: se ve con ella marcada en el selector de empresas.
+        # La necesidad de compra es de cada sucursal: se ve con las dos marcadas en el selector.
         cids = "&cids=%d-%d" % (self.env.company.id, matriz.id)
         for action, column in (("action_ai_v_faltantes", "cantidad_sugerida"),
                                ("action_ai_v_rotacion", "demanda_depurada"),
@@ -252,8 +254,89 @@ class TestUi(HttpCase):
         pickings.invalidate_recordset(["state"])
         self.assertEqual(pickings.mapped("state"), ["cancel", "cancel"])
 
+    def test_auto_replenishment_filter(self):
+        """Filtro «Reabastecimiento automático» en Traslados y la fecha en la ficha."""
+        user = new_test_user(self.env, login="ai_auto_reab_ui", groups="base.group_user,stock.group_stock_user")
+        user.password = user.login
+        wh = self.env["stock.warehouse"].search([("company_id", "=", self.env.company.id)], limit=1)
+        manual, auto = self.env["stock.picking"].create([{
+            "picking_type_id": wh.int_type_id.id, "origin": "ZQX REAB UI",
+            "location_id": wh.lot_stock_id.id, "location_dest_id": wh.lot_stock_id.id,
+        } for _i in range(2)])
+        auto.ai_auto_replenishment_date = "2026-01-05"
+        action = self.env["ir.actions.act_window"].create({
+            "name": "ZQX traslados", "res_model": "stock.picking", "view_mode": "tree,form",
+            "search_view_id": self.env.ref("stock.view_picking_internal_search").id,
+            "domain": [("origin", "=", "ZQX REAB UI")],
+            "context": "{'search_default_ai_auto_replenishment': 1}"})
+        self.browser_js("/web#action=%s" % action.id, """
+            const until = (sel, text) => new Promise((resolve, reject) => {
+                let n = 0;
+                const t = setInterval(() => {
+                    const el = [...document.querySelectorAll(sel)].find((e) => !text || e.textContent.includes(text));
+                    if (el) { clearInterval(t); resolve(el); }
+                    else if (++n > 150) { clearInterval(t); reject(new Error("No apareció " + sel + " " + (text || ""))); }
+                }, 100);
+            });
+            (async () => {
+                try {
+                    await until(".o_searchview_facet", "Reabastecimiento automático");
+                    await until(".o_list_view .o_data_row");
+                    if (document.querySelectorAll(".o_list_view .o_data_row").length !== 1) {
+                        throw new Error("El filtro debe dejar solo el de la tarea");
+                    }
+                    (await until(".o_list_view .o_data_row td.o_data_cell")).click();
+                    await until(".o_form_view div[name='ai_auto_replenishment_date']", "2026");
+                    console.log("test successful");
+                } catch (e) {
+                    console.error(e.message);
+                }
+            })();
+        """, login=user.login)
+
+    def test_cancel_several_rfqs(self):
+        """Botón «Cancelar solicitudes» en la lista de Solicitudes de presupuesto."""
+        user = new_test_user(self.env, login="ai_cancel_rfq_ui", groups="base.group_user,purchase.group_purchase_user")
+        user.password = user.login
+        vendor = self.env["res.partner"].create({"name": "ZQX DROGUERIA UI CANCELAR"})
+        product = self.env["product.product"].create({"name": "ZQX UI CANCELAR COMPRA", "type": "consu"})
+        orders = self.env["purchase.order"].create([{
+            "partner_id": vendor.id,
+            "order_line": [(0, 0, {"product_id": product.id, "product_qty": 1, "price_unit": 3})],
+        } for _i in range(2)])
+        action = self.env["ir.actions.act_window"].create({
+            "name": "ZQX solicitudes", "res_model": "purchase.order", "view_mode": "tree,form",
+            "view_id": self.env.ref("purchase.purchase_order_kpis_tree").id,
+            "domain": [("id", "in", orders.ids)]})
+        self.browser_js("/web#action=%s" % action.id, """
+            const until = (sel, text) => new Promise((resolve, reject) => {
+                let n = 0;
+                const t = setInterval(() => {
+                    const el = [...document.querySelectorAll(sel)].find((e) => !text || e.textContent.includes(text));
+                    if (el) { clearInterval(t); resolve(el); }
+                    else if (++n > 150) { clearInterval(t); reject(new Error("No apareció " + sel + " " + (text || ""))); }
+                }, 100);
+            });
+            (async () => {
+                try {
+                    await until(".o_list_view .o_data_row");
+                    (await until(".o_list_view thead .o_list_record_selector input")).click();
+                    (await until("button[name='action_ai_cancel_rfqs']")).click();
+                    await until(".modal p", "Se cancelarán");
+                    (await until(".modal button[name='action_confirm']")).click();
+                    await until(".o_list_view .o_data_row td[name='state']", "Cancelad");
+                    console.log("test successful");
+                } catch (e) {
+                    console.error(e.message);
+                }
+            })();
+        """, login=user.login)
+        orders.invalidate_recordset(["state"])
+        self.assertEqual(orders.mapped("state"), ["cancel", "cancel"])
+
     def test_proposal_screens(self):
-        # La propuesta es de la matriz: el comprador de Dromax la tiene como empresa activa.
+        # El comprador de Dromax la tiene como empresa activa: ve también las compras de las
+        # farmacias (la regla de las líneas usa todas sus sucursales, no solo las marcadas).
         matriz = self.env["res.company"].create({"name": "ZQX MATRIZ UI PROPUESTA"})
         self.env["ir.config_parameter"].sudo().set_param(
             "dromax_asistente_compras.matrix_company_id", str(matriz.id))

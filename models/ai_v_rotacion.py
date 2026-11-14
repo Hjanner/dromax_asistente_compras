@@ -2,6 +2,7 @@
 from odoo import fields, models, tools
 
 from ..services.config import PARAM_PREFIX
+from ..services.network_sql import MATRIX_SQL
 from ..services.prompt import (DEFAULT_COVERAGE_WEEKS, DEFAULT_OUTLIER_MAD, DEFAULT_REORDER_POINT_PCT,
                                DEFAULT_SAFETY_MARGIN_PCT, DEFAULT_WINDOW_WEEKS)
 from .ai_v_oferta import grant_readonly
@@ -28,12 +29,16 @@ def network_params_sql():
 
 
 class AiVRotacion(models.Model):
-    """Demanda semanal por producto y farmacia en las últimas N semanas completas.
+    """Demanda semanal por producto y sucursal en las últimas N semanas completas.
 
-    Demanda = ventas del TPV (pedidos pagados, sin los que liquidan un pedido de
-    venta, que ya cuenta el propio pedido) + pedidos de venta confirmados, en la
-    unidad del producto. Las semanas van de lunes a domingo en la hora de la
-    sucursal y la semana en curso no entra. Las semanas sin ventas cuentan como 0.
+    Farmacias: demanda = ventas del TPV (pedidos pagados, sin los que liquidan
+    un pedido de venta, que ya cuenta el propio pedido) + pedidos de venta
+    confirmados. Sucursal matriz (Dromax, una droguería que no vende): demanda
+    = lo que traslada a las farmacias (movimientos hechos de sus ubicaciones
+    internas hacia tránsito o hacia otra sucursal); sus ventas no cuentan.
+    Todo en la unidad del producto. Las semanas van de lunes a domingo en la
+    hora de la sucursal y la semana en curso no entra. Las semanas sin
+    movimiento cuentan como 0.
 
     Una fila por producto y farmacia con alguna venta en la ventana. La demanda
     depurada es la media sin las semanas atípicas: las que se alejan de la
@@ -48,8 +53,8 @@ class AiVRotacion(models.Model):
     _order = "company_id, demanda_depurada desc, product_id"
     _rec_name = "product_id"
 
-    company_id = fields.Many2one("res.company", "Farmacia", readonly=True)
-    farmacia = fields.Char("Nombre de la farmacia", readonly=True)
+    company_id = fields.Many2one("res.company", "Sucursal", readonly=True)
+    farmacia = fields.Char("Nombre de la sucursal", readonly=True)
     product_id = fields.Many2one("product.product", "Producto", readonly=True)
     product_tmpl_id = fields.Many2one("product.template", "Plantilla", readonly=True)
     producto = fields.Char("Nombre del producto", readonly=True)
@@ -58,10 +63,13 @@ class AiVRotacion(models.Model):
     desde = fields.Date("Desde", readonly=True, help="Lunes de la primera semana de la ventana.")
     hasta = fields.Date("Hasta", readonly=True, help="Domingo de la última semana completa.")
     semanas_con_venta = fields.Integer("Semanas con venta", readonly=True)
-    venta_total = fields.Float("Venta total", readonly=True, help="Unidades vendidas en la ventana.")
+    venta_total = fields.Float("Venta total", readonly=True,
+                               help="Unidades vendidas en la ventana; en la matriz, las trasladadas a las farmacias.")
     venta_tpv = fields.Float("Venta TPV", readonly=True)
     venta_pedidos = fields.Float("Venta por pedidos", readonly=True,
                                  help="Pedidos de venta: clientes especiales (alcaldía, personal...).")
+    venta_traslados = fields.Float("Traslados a farmacias", readonly=True,
+                                   help="Solo la matriz: unidades que mandó a las farmacias (su demanda).")
     demanda_media = fields.Float("Demanda media", readonly=True,
                                  help="Media semanal con todas las semanas, atípicas incluidas.")
     demanda_mediana = fields.Float("Mediana semanal", readonly=True)
@@ -76,7 +84,7 @@ class AiVRotacion(models.Model):
         self.env.cr.execute("""
             CREATE VIEW ai_v_rotacion AS
             WITH params AS (
-                SELECT %(semanas)s AS semanas, %(factor)s AS factor_mad
+                SELECT %(semanas)s AS semanas, %(factor)s AS factor_mad, %(matriz)s AS matriz_id
             ),
             farmacias AS (
                 SELECT c.id AS company_id, c.name AS farmacia, tz.tz,
@@ -95,19 +103,20 @@ class AiVRotacion(models.Model):
                 -- Por semana local; el filtro por fecha solo recorta, la ventana exacta la pone el JOIN.
                 SELECT po.company_id, pol.product_id,
                        date_trunc('week', po.date_order AT TIME ZONE 'UTC' AT TIME ZONE f.tz)::date AS semana,
-                       sum(pol.qty) AS tpv, 0 AS pedidos
+                       sum(pol.qty) AS tpv, 0 AS pedidos, 0 AS traslados
                   FROM pos_order po
                   JOIN farmacias f ON f.company_id = po.company_id
                   JOIN pos_order_line pol ON pol.order_id = po.id
                  CROSS JOIN params
                  WHERE po.state IN ('paid', 'done', 'invoiced')
+                   AND po.company_id IS DISTINCT FROM params.matriz_id
                    AND po.date_order >= (now() AT TIME ZONE 'UTC') - (params.semanas + 2) * interval '1 week'
                    AND pol.sale_order_origin_id IS NULL
                  GROUP BY 1, 2, 3
                 UNION ALL
                 SELECT so.company_id, sol.product_id,
                        date_trunc('week', so.date_order AT TIME ZONE 'UTC' AT TIME ZONE f.tz)::date,
-                       0, sum(sol.product_uom_qty / lu.factor * pu.factor)
+                       0, sum(sol.product_uom_qty / lu.factor * pu.factor), 0
                   FROM sale_order so
                   JOIN farmacias f ON f.company_id = so.company_id
                   JOIN sale_order_line sol ON sol.order_id = so.id
@@ -117,8 +126,25 @@ class AiVRotacion(models.Model):
                   JOIN uom_uom pu ON pu.id = pt.uom_id
                  CROSS JOIN params
                  WHERE so.state IN ('sale', 'done')
+                   AND so.company_id IS DISTINCT FROM params.matriz_id
                    AND sol.display_type IS NULL
                    AND so.date_order >= (now() AT TIME ZONE 'UTC') - (params.semanas + 2) * interval '1 week'
+                 GROUP BY 1, 2, 3
+                UNION ALL
+                -- La matriz no vende: su demanda es lo que traslada a las farmacias (hacia
+                -- tránsito o hacia otra sucursal; los pasos dentro de su almacén no cuentan).
+                SELECT ls.company_id, m.product_id,
+                       date_trunc('week', m.date AT TIME ZONE 'UTC' AT TIME ZONE f.tz)::date,
+                       0, 0, sum(m.product_qty)
+                  FROM stock_move m
+                 CROSS JOIN params
+                  JOIN stock_location ls ON ls.id = m.location_id AND ls.usage = 'internal'
+                                        AND ls.company_id = params.matriz_id
+                  JOIN stock_location ld ON ld.id = m.location_dest_id
+                  JOIN farmacias f ON f.company_id = ls.company_id
+                 WHERE m.state = 'done'
+                   AND (ld.usage = 'transit' OR (ld.usage = 'internal' AND ld.company_id <> ls.company_id))
+                   AND m.date >= (now() AT TIME ZONE 'UTC') - (params.semanas + 2) * interval '1 week'
                  GROUP BY 1, 2, 3
             ),
             semanal AS (
@@ -126,7 +152,8 @@ class AiVRotacion(models.Model):
                 SELECT p.company_id, p.product_id, w.semana,
                        COALESCE(sum(v.tpv), 0) AS tpv,
                        COALESCE(sum(v.pedidos), 0) AS pedidos,
-                       COALESCE(sum(v.tpv + v.pedidos), 0) AS cantidad
+                       COALESCE(sum(v.traslados), 0) AS traslados,
+                       COALESCE(sum(v.tpv + v.pedidos + v.traslados), 0) AS cantidad
                   FROM (SELECT DISTINCT v.company_id, v.product_id
                           FROM ventas v
                           JOIN ventana w ON w.company_id = v.company_id AND w.semana = v.semana) p
@@ -142,7 +169,8 @@ class AiVRotacion(models.Model):
                        stddev_pop(cantidad) AS desviacion,
                        count(*) FILTER (WHERE cantidad <> 0) AS semanas_con_venta,
                        sum(tpv) AS venta_tpv,
-                       sum(pedidos) AS venta_pedidos
+                       sum(pedidos) AS venta_pedidos,
+                       sum(traslados) AS venta_traslados
                   FROM semanal
                  GROUP BY 1, 2
             ),
@@ -176,9 +204,10 @@ class AiVRotacion(models.Model):
                    (f.semana_actual - 7 * params.semanas)::date AS desde,
                    (f.semana_actual - 1)::date AS hasta,
                    e.semanas_con_venta,
-                   round((e.venta_tpv + e.venta_pedidos)::numeric, 2) AS venta_total,
+                   round((e.venta_tpv + e.venta_pedidos + e.venta_traslados)::numeric, 2) AS venta_total,
                    round(e.venta_tpv::numeric, 2) AS venta_tpv,
                    round(e.venta_pedidos::numeric, 2) AS venta_pedidos,
+                   round(e.venta_traslados::numeric, 2) AS venta_traslados,
                    round(e.media::numeric, 2) AS demanda_media,
                    round(e.mediana::numeric, 2) AS demanda_mediana,
                    round(e.desviacion::numeric, 2) AS desviacion,
@@ -195,6 +224,7 @@ class AiVRotacion(models.Model):
         """ % {
             "semanas": _int_param("rotation_window_weeks", DEFAULT_WINDOW_WEEKS, 104),
             "factor": _int_param("outlier_mad_factor", DEFAULT_OUTLIER_MAD, 20),
+            "matriz": MATRIX_SQL,
             "tz": DEFAULT_TZ,
         })
         grant_readonly(self.env, self._table)

@@ -42,10 +42,12 @@
             <field name="model_id" ref="model_ai_v_reabastecimiento"/>
             <field name="domain_force">[('company_id', 'in', company_ids)]</field>
         </record>
+        <!-- Las líneas de la propuesta, de todas las sucursales permitidas del usuario aunque no
+             estén marcadas en el selector: la propuesta trae compras de cada farmacia y de la matriz. -->
         <record id="rule_ai_purchase_proposal_line_company" model="ir.rule">
             <field name="name">Líneas de propuesta: farmacias permitidas</field>
             <field name="model_id" ref="model_ai_purchase_proposal_line"/>
-            <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+            <field name="domain_force">[('company_id', 'in', user.company_ids.ids)]</field>
         </record>
     </data>
 </odoo>

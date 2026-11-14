@@ -11,11 +11,13 @@ final, la droguería o la nota de líneas concretas, con las mismas reglas que
 la pantalla (write de la línea). Las órdenes de compra no: las genera el
 comprador con el botón.
 
-Toda compra la hace la sucursal matriz (Dromax) para toda la red: una línea
-por producto, con lo que le falta a cada farmacia en detalle_farmacias. Las
-farmacias se abastecen después desde la matriz con traslados (Agente IA →
-Reabastecimiento); entre farmacias no se traslada. Las herramientas ven todas
-las sucursales del usuario, no solo las marcadas en el selector de empresas.
+La matriz (Dromax) es una droguería: no vende, reabastece a las farmacias
+con traslados (Agente IA → Reabastecimiento). Una línea por producto y
+sucursal que recibe: lo que una farmacia compra a su nombre (lo que la matriz
+no le alcanza a mandar) o lo que compra la matriz para su inventario, a
+nombre de una farmacia (a_nombre_de). Entre farmacias no se traslada. Las
+herramientas ven todas las sucursales del usuario, no solo las marcadas en el
+selector de empresas.
 """
 
 from markupsafe import Markup, escape
@@ -30,8 +32,9 @@ GET_PROPOSAL = {
         "description": (
             "Lee la propuesta de compra semanal guardada (por defecto, la vigente). Sin filtros "
             "devuelve el resumen: totales, laboratorios de mayor monto, cuántas líneas necesitan "
-            "atención y las de mayor monto a revisar por presentación. La compra es de la matriz "
-            "para toda la red: una línea por producto. Con algún filtro (laboratorio, buscar, "
+            "atención y las de mayor monto a revisar por presentación. Una línea por producto y "
+            "sucursal que recibe: la compra de una farmacia (a su nombre) o la del inventario de "
+            "Dromax (la recibe Dromax, a nombre de una farmacia). Con algún filtro (laboratorio, buscar, "
             "farmacia o filtro) "
             "devuelve las líneas que coinciden, cada una con su linea_id, cantidades, "
             "droguería, precio, motivo y las ofertas de las demás droguerías."
@@ -45,16 +48,18 @@ GET_PROPOSAL = {
                 "buscar": {"type": "string",
                            "description": "Producto: parte del nombre, referencia o código de barras."},
                 "farmacia": {"type": "string",
-                             "description": "Farmacia (nombre o parte): las líneas en que a esa farmacia le falta el producto."},
+                             "description": "Sucursal (nombre o parte): las líneas que recibe o que salen a su nombre."},
                 "filtro": {
                     "type": "string",
                     "enum": ["por_pedir", "ajustadas", "revisar_presentacion", "sin_drogueria",
-                             "en_solicitud", "pedidas"],
+                             "en_solicitud", "pedidas", "inventario_dromax", "compras_farmacias"],
                     "description": (
                         "por_pedir: con cantidad y droguería, aún sin orden; ajustadas: cambiadas "
                         "por el comprador; revisar_presentacion: precio de más del triple del "
                         "costo o de menos de un tercio; sin_drogueria: ninguna droguería lo ofrece; en_solicitud: ya hay "
-                        "solicitudes sin confirmar; pedidas: ya están en una orden de compra."),
+                        "solicitudes sin confirmar; pedidas: ya están en una orden de compra; "
+                        "inventario_dromax: compras para el inventario de Dromax; compras_farmacias: "
+                        "las de las farmacias."),
                 },
                 "limite": {"type": "integer", "description": "Máximo de líneas (por defecto 40, tope 80)."},
             },
@@ -113,6 +118,8 @@ FILTERS = {
     "sin_drogueria": [("drogueria_id", "=", False)],
     "en_solicitud": [("en_solicitud", ">", 0)],
     "pedidas": [("purchase_line_id", "!=", False)],
+    "inventario_dromax": [("para_matriz", "=", True)],
+    "compras_farmacias": [("para_matriz", "=", False)],
 }
 
 
@@ -186,7 +193,8 @@ def _summary(Line, base):
         "en_cero": count([("cantidad_final", "=", 0)]),
         "atencion": {key: count(FILTERS[key]) for key in (
             "por_pedir", "pedidas", "revisar_presentacion", "sin_drogueria", "en_solicitud")},
-        "compra": Line.search(base, limit=1).company_id.name or None,
+        "por_sucursal": [{"recibe": company.name, "lineas": n, "monto": _money(total)} for company, n, total
+                         in Line._read_group(base, ["company_id"], ["__count", "monto:sum"])],
         "laboratorios_total": len(labs),
         "laboratorios_mayor_monto": [{
             "laboratorio": lab, "lineas": n, "monto": _money(total),
@@ -220,12 +228,15 @@ def _line_dict(line, offers):
         "linea_id": line.id,
         "producto": line.product_id.display_name,
         "laboratorio": line.laboratorio,
-        "venta_semanal_red": line.demanda,
-        "falta_farmacias": line.faltas_farmacias,
-        "falta_por_farmacia": line.detalle_farmacias or None,
-        "venta_semanal_matriz": line.demanda_propia,
-        "stock_matriz": line.stock,
+        "recibe": line.company_id.name,
+        "a_nombre_de": line.a_nombre_de_id.sudo().name or None,
+        "inventario_dromax": line.para_matriz,
+        "demanda_semanal": line.demanda,
+        "objetivo": line.objetivo,
+        "stock": line.stock,
         "pendiente": line.pendiente,
+        "en_camino": line.en_camino,
+        "traslado_dromax": line.traslado,
         "cantidad_sugerida": line.cantidad_sugerida,
         "cantidad_final": line.cantidad_final,
         "drogueria": line.drogueria_id.name or None,
@@ -265,7 +276,9 @@ def get_proposal(env, args):
     if (args.get("buscar") or "").strip():
         domain.append(("product_id", "ilike", args["buscar"].strip()))
     if (args.get("farmacia") or "").strip():
-        domain.append(("detalle_farmacias", "ilike", args["farmacia"].strip()))
+        # sudo: «a nombre de» puede ser una farmacia a la que el usuario no tiene acceso.
+        ids = env["res.company"].sudo().search([("name", "ilike", args["farmacia"].strip())]).ids
+        domain += ["|", ("company_id", "in", ids), ("a_nombre_de_id", "in", ids)]
     filtro = args.get("filtro")
     if filtro:
         if filtro not in FILTERS:

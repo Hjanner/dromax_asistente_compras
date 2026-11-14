@@ -6,12 +6,16 @@
     'description': """
 Agente IA de Dromax: compras y reabastecimiento.
 
+- Dromax (la sucursal matriz) es una droguería: no vende; guarda inventario
+  y reabastece a las farmacias con traslados (su demanda es lo que traslada).
 - Flujo cotidiano: un cron precalcula los faltantes el lunes en la madrugada
-  y deja la propuesta semanal de la sucursal matriz (Dromax), que compra para
-  toda la red, organizada por laboratorio (ai.purchase.proposal).
+  y deja la propuesta semanal, organizada por laboratorio
+  (ai.purchase.proposal): lo que cada farmacia compra a su nombre (lo que
+  Dromax no le alcanza a mandar) y lo que Dromax compra para su inventario,
+  a nombre de una farmacia.
 - El comprador la revisa y ajusta en lenguaje natural desde el chat.
 - Un botón (nunca el modelo) la convierte en purchase.order en borrador,
-  una por droguería, a nombre de la matriz.
+  una por sucursal que recibe, nombre y droguería.
 - Reabastecimiento: la matriz reparte a las farmacias con traslados.
 - Previsto (fase 3, sin hacer): flujo dinámico con contexto externo
   (clima, brotes, epidemias).
@@ -22,7 +26,7 @@ cuando el comprador se lo pide; las órdenes en borrador las crea el botón.
     """,
     'author': "Hjanner",
     'category': 'Inventory/Purchase',
-    'version': '17.0.0.18.3',
+    'version': '17.0.0.19.1',
     'license': 'LGPL-3',
     'application': True,
     'installable': True,
@@ -50,6 +54,9 @@ cuando el comprador se lo pide; las órdenes en borrador las crea el botón.
         'views/ai_purchase_proposal_views.xml',
         'views/ai_v_reabastecimiento_views.xml',
         'views/ai_picking_cancel_views.xml',
+        'views/ai_purchase_cancel_views.xml',
+        'views/stock_picking_views.xml',
+        'views/purchase_order_views.xml',
         'views/menus.xml',
     ],
     'assets': {

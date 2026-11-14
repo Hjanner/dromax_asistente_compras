@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Borradores de la tarea diaria de reabastecimiento: los que la tarea cancela al día
+         siguiente si siguen en borrador (los creados a mano no llevan la marca). -->
+    <record id="view_picking_form_ai_auto_replenishment" model="ir.ui.view">
+        <field name="name">stock.picking.form.ai_auto_replenishment</field>
+        <field name="model">stock.picking</field>
+        <field name="inherit_id" ref="stock.view_picking_form"/>
+        <field name="arch" type="xml">
+            <field name="origin" position="after">
+                <field name="ai_auto_replenishment_date" invisible="not ai_auto_replenishment_date"/>
+            </field>
+        </field>
+    </record>
+
+    <record id="view_picking_search_ai_auto_replenishment" model="ir.ui.view">
+        <field name="name">stock.picking.search.ai_auto_replenishment</field>
+        <field name="model">stock.picking</field>
+        <field name="inherit_id" ref="stock.view_picking_internal_search"/>
+        <field name="arch" type="xml">
+            <filter name="available" position="after">
+                <separator/>
+                <filter name="ai_auto_replenishment" string="Reabastecimiento automático"
+                        domain="[('ai_auto_replenishment_date', '!=', False)]"/>
+            </filter>
+        </field>
+    </record>
+</odoo>

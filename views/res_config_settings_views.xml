@@ -73,6 +73,12 @@
                                            options="{'no_create': True}"/>
                                 </div>
                                 <div class="row">
+                                    <label for="ai_purchase_matrix_purchase_company_id" class="col-lg-6 o_light_label"/>
+                                    <field name="ai_purchase_matrix_purchase_company_id" class="col-lg-6"
+                                           placeholder="Sin elegir: se pide en cada línea"
+                                           options="{'no_create': True}"/>
+                                </div>
+                                <div class="row">
                                     <label for="ai_purchase_laboratory_field" class="col-lg-6 o_light_label"/>
                                     <field name="ai_purchase_laboratory_field" class="col-lg-6"
                                            placeholder="Del nombre del producto"/>
@@ -82,7 +88,7 @@
                     </block>
                     <block title="Automatización" name="ai_purchase_automation">
                         <setting id="ai_purchase_auto_rfq_setting" string="Compra semanal"
-                                 help="El lunes a las 03:00 se calcula la propuesta de la semana. Activado, también se crean las órdenes de compra en borrador (una por droguería) y se cancelan las de semanas anteriores que nadie confirmó. El responsable recibe una actividad para revisarlas.">
+                                 help="El lunes a las 03:00 se calcula la propuesta de la semana. Activado, también se crean las órdenes de compra en borrador (una por sucursal y droguería) y se cancelan las de semanas anteriores que nadie confirmó. El responsable recibe una actividad para revisarlas.">
                             <field name="ai_purchase_auto_rfq"/>
                             <div class="content-group">
                                 <div class="row mt8">

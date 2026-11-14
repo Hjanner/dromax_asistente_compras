@@ -49,6 +49,7 @@ class TestProposalChat(AnalisisCase):
                                   company_id=cls.company.id, company_ids=[cls.company.id, cls.matriz.id])
         cls.Proposal = cls.env["ai.purchase.proposal"]
         cls.Line = cls.env["ai.purchase.proposal.line"]
+        cls.otra = cls.env["res.company"].create({"name": "ZQX FARMACIA 2"})
 
     def setUp(self):
         super().setUp()
@@ -57,8 +58,9 @@ class TestProposalChat(AnalisisCase):
         self.uenv = self.env(user=self.buyer, context=dict(self.env.context, allowed_company_ids=[self.company.id]))
 
     def _proposal(self):
-        """Compra de la matriz: ibuprofeno (2 droguerías; a la farmacia le faltan 7), vitamina (a
-        revisar por presentación) y paracetamol (del mismo laboratorio, falta en otra farmacia)."""
+        """Compras de la farmacia: ibuprofeno (2 droguerías; le faltan 7) y vitamina (a revisar por
+        presentación); paracetamol (del mismo laboratorio) para el inventario de la matriz, a
+        nombre de otra farmacia."""
         self._offer(self.drog_a, self.ibuprofeno, 1.5, 100)
         self._offer(self.drog_b, self.ibuprofeno, 2.0, 100)
         self._offer(self.drog_a, self.vitamina, 50.0, 100)
@@ -75,14 +77,14 @@ class TestProposalChat(AnalisisCase):
         self.ibu = self._line(proposal, self.ibuprofeno)
         self.para = self.Line.create({
             "proposal_id": proposal.id, "company_id": self.matriz.id, "product_id": self.paracetamol.id,
+            "para_matriz": True, "a_nombre_de_id": self.otra.id,
             "laboratorio": "LAB ZQX", "cantidad_sugerida": 5, "cantidad_final": 5,
-            "faltas_farmacias": 5, "detalle_farmacias": "ZQX FARMACIA 2 (5)",
             "drogueria_sugerida_id": self.drog_a.id, "drogueria_id": self.drog_a.id,
             "precio_sugerido": 1.5, "precio": 1.5})
         return proposal
 
     def _line(self, proposal, product):
-        line = proposal.line_ids.filtered(lambda l: l.product_id == product and l.company_id == self.matriz)
+        line = proposal.line_ids.filtered(lambda l: l.product_id == product and l.company_id == self.company)
         self.assertEqual(len(line), 1)
         return line
 
@@ -106,9 +108,10 @@ class TestProposalChat(AnalisisCase):
         res = self._tool("get_proposal")
         self.assertEqual(res["propuesta"]["id"], proposal.id)
         self.assertEqual(res["propuesta"]["estado"], "Lista")
-        # Las líneas son de la matriz, aunque en el selector solo esté marcada la farmacia.
+        # Todas las líneas del usuario, aunque en el selector solo esté marcada la farmacia.
         self.assertEqual(res["lineas"], 3)
-        self.assertEqual(res["compra"], "ZQX MATRIZ")
+        self.assertEqual({s["recibe"]: s["lineas"] for s in res["por_sucursal"]},
+                         {self.company.name: 2, "ZQX MATRIZ": 1})
         self.assertEqual(res["monto_final"], round(7 * 1.5 + 4 * 50.0 + 5 * 1.5, 2))
         self.assertEqual(res["atencion"]["revisar_presentacion"], 1)
         self.assertNotIn("con_excedente", res["atencion"])
@@ -127,16 +130,22 @@ class TestProposalChat(AnalisisCase):
         self.assertEqual({l["linea_id"] for l in res["lineas"]}, {self.ibu.id, self.para.id})
         line = next(l for l in res["lineas"] if l["linea_id"] == self.ibu.id)
         self.assertEqual((line["cantidad_sugerida"], line["cantidad_final"], line["drogueria"]), (7, 7, "ZQX DROG ALFA"))
-        self.assertIn("farmacias 7", line["motivo"])
-        self.assertEqual((line["falta_farmacias"], line["falta_por_farmacia"]), (7, "%s (7)" % self.company.name))
+        self.assertIn("Compra de la farmacia", line["motivo"])
+        self.assertEqual((line["recibe"], line["a_nombre_de"], line["inventario_dromax"]),
+                         (self.company.name, self.company.name, False))
+        self.assertEqual((line["demanda_semanal"], line["objetivo"], line["stock"], line["traslado_dromax"]),
+                         (10, 10, 3, 0))
         # Las ofertas de las demás droguerías, de la más barata a la más cara.
         self.assertEqual([o["drogueria"] for o in line["ofertas"]], ["ZQX DROG ALFA", "ZQX DROG BETA"])
         res = self._tool("get_proposal", buscar="vitamina")
         self.assertEqual([l["linea_id"] for l in res["lineas"]], [self.vit.id])
         self.assertTrue(res["lineas"][0]["revisar_presentacion"])
         self.assertEqual(res["lineas"][0]["costo"], 1.0)
-        # Por farmacia: las líneas en que a esa farmacia le falta el producto.
+        # Por farmacia: las que recibe o salen a su nombre.
         res = self._tool("get_proposal", farmacia="farmacia 2")
+        self.assertEqual([l["linea_id"] for l in res["lineas"]], [self.para.id])
+        self.assertEqual((res["lineas"][0]["recibe"], res["lineas"][0]["a_nombre_de"]), ("ZQX MATRIZ", "ZQX FARMACIA 2"))
+        res = self._tool("get_proposal", filtro="inventario_dromax")
         self.assertEqual([l["linea_id"] for l in res["lineas"]], [self.para.id])
         res = self._tool("get_proposal", filtro="revisar_presentacion")
         self.assertEqual([l["linea_id"] for l in res["lineas"]], [self.vit.id])
@@ -165,8 +174,8 @@ class TestProposalChat(AnalisisCase):
 
     def test_without_matrix_access(self):
         self._proposal()
-        self.buyer.company_ids = self.company                           # sin la matriz: no ve la compra
-        self.assertEqual(self._tool("get_proposal")["lineas"], 0)
+        self.buyer.company_ids = self.company                           # sin la matriz: no ve su compra
+        self.assertEqual(self._tool("get_proposal")["lineas"], 2)
         res = self._tool("update_proposal_lines", cambios=[{"linea_id": self.para.id, "cantidad_final": 1}])
         self.assertIn("no tienes acceso", res["resultados"][0]["error"])
         self.assertEqual(self.para.cantidad_final, 5)
@@ -185,7 +194,7 @@ class TestProposalChat(AnalisisCase):
         self.assertEqual((first["antes"]["cantidad_final"], first["ahora"]["cantidad_final"]), (7, 12))
         self.assertEqual(self.ibu.cantidad_final, 12)
         self.assertIn("Ajuste en el chat: viene la temporada de gripe", self.ibu.motivo)
-        self.assertIn("farmacias 7", self.ibu.motivo)
+        self.assertIn("Compra de la farmacia", self.ibu.motivo)
         # Otra droguería: el precio sale de su oferta.
         self.assertEqual((self.para.drogueria_id, self.para.precio), (self.drog_b, 2.0))
         self.assertEqual(res["resultados"][1]["ahora"]["precio"], 2.0)
@@ -248,10 +257,11 @@ class TestProposalChat(AnalisisCase):
         self.assertIn("update_proposal_lines(", answer["tool_trace"][0]["query"])
         self.assertEqual(self.ibu.cantidad_final, 20)
         self.assertTrue(session.with_env(self.uenv).chat_bootstrap()["can_create_rfq"])
-        # El botón pide las líneas de la matriz aunque en el selector solo esté la farmacia.
+        # El botón pide también las líneas de la matriz aunque en el selector solo esté la farmacia.
         self.vit.cantidad_final = 2                                     # ajustada: entra
         action = session.chat_create_rfq(proposal.id)
-        self.assertEqual(proposal.purchase_order_ids.company_id, self.matriz)
+        self.assertEqual(proposal.purchase_order_ids.company_id, self.company | self.matriz)
+        self.assertEqual(self.para.purchase_order_id.ai_a_nombre_de_id, self.otra)
         self.assertEqual(set(action["domain"][0][2]), set(proposal.purchase_order_ids.ids))
         self.assertEqual(proposal.state, "done")
 

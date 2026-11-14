@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- Compras del inventario de Dromax a nombre de una farmacia: el comprador ve a dónde
+         va la mercancía (la empresa de la orden) y a nombre de quién sale. -->
+    <record id="purchase_order_form_a_nombre_de" model="ir.ui.view">
+        <field name="name">purchase.order.form.a_nombre_de</field>
+        <field name="model">purchase.order</field>
+        <field name="inherit_id" ref="purchase.purchase_order_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//sheet/div[hasclass('oe_title')]" position="before">
+                <div class="alert alert-info mb-3" role="status" invisible="not ai_a_nombre_de_id">
+                    Compra para el inventario de <b><field name="company_id" readonly="1" class="d-inline"/></b>:
+                    la recibe su almacén, pero sale a nombre de
+                    <b><field name="ai_a_nombre_de_id" readonly="1" class="d-inline"/></b>
+                    (con sus datos en el PDF para la droguería).
+                </div>
+            </xpath>
+            <field name="partner_ref" position="after">
+                <field name="ai_a_nombre_de_id" options="{'no_create': True, 'no_open': True}"
+                       groups="base.group_multi_company"
+                       readonly="state in ['cancel', 'done', 'purchase']"/>
+            </field>
+        </field>
+    </record>
+
+    <record id="purchase_order_kpis_tree_a_nombre_de" model="ir.ui.view">
+        <field name="name">purchase.order.kpis.tree.a_nombre_de</field>
+        <field name="model">purchase.order</field>
+        <field name="inherit_id" ref="purchase.purchase_order_kpis_tree"/>
+        <field name="arch" type="xml">
+            <field name="partner_id" position="after">
+                <field name="ai_a_nombre_de_id" optional="show" groups="base.group_multi_company"/>
+            </field>
+        </field>
+    </record>
+
+    <record id="purchase_order_view_tree_a_nombre_de" model="ir.ui.view">
+        <field name="name">purchase.order.tree.a_nombre_de</field>
+        <field name="model">purchase.order</field>
+        <field name="inherit_id" ref="purchase.purchase_order_view_tree"/>
+        <field name="arch" type="xml">
+            <field name="partner_id" position="after">
+                <field name="ai_a_nombre_de_id" optional="show" groups="base.group_multi_company"/>
+            </field>
+        </field>
+    </record>
+
+    <record id="purchase_order_search_a_nombre_de" model="ir.ui.view">
+        <field name="name">purchase.order.search.a_nombre_de</field>
+        <field name="model">purchase.order</field>
+        <field name="inherit_id" ref="purchase.purchase_order_view_search"/>
+        <field name="arch" type="xml">
+            <field name="partner_id" position="after">
+                <field name="ai_a_nombre_de_id"/>
+                <filter name="a_otro_nombre" string="A nombre de otra sucursal"
+                        domain="[('ai_a_nombre_de_id', '!=', False)]"/>
+            </field>
+        </field>
+    </record>
+
+    <!-- PDF de la solicitud y de la orden: encabezado y pie con los datos de la farmacia a cuyo
+         nombre sale (web.external_layout usa «company» si ya está definida). -->
+    <template id="report_purchaseorder_document_a_nombre_de" inherit_id="purchase.report_purchaseorder_document">
+        <xpath expr="//t[@t-call='web.external_layout']" position="inside">
+            <t t-if="o.ai_a_nombre_de_id" t-set="company" t-value="o.ai_a_nombre_de_id.sudo()"/>
+        </xpath>
+    </template>
+    <template id="report_purchasequotation_document_a_nombre_de" inherit_id="purchase.report_purchasequotation_document">
+        <xpath expr="//t[@t-call='web.external_layout']" position="inside">
+            <t t-if="o.ai_a_nombre_de_id" t-set="company" t-value="o.ai_a_nombre_de_id.sudo()"/>
+        </xpath>
+    </template>
+
+</odoo>

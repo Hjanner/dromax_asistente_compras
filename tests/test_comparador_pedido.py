@@ -24,6 +24,8 @@ class TestComparadorPedido(AnalisisCase):
             cls.env, login="ai_comparador_buyer",
             groups="base.group_user,purchase.group_purchase_user,dromax_asistente_compras.group_ai_purchase_user",
             company_id=cls.matriz.id, company_ids=[cls.matriz.id, cls.company.id])
+        cls.env["ir.config_parameter"].sudo().set_param(
+            "dromax_asistente_compras.matrix_purchase_company_id", str(cls.company.id))
 
     def setUp(self):
         super().setUp()
@@ -53,10 +55,10 @@ class TestComparadorPedido(AnalisisCase):
         self.assertEqual(len(row.oferta_ids), 4)
 
     def test_wizard_defaults(self):
-        self._weekly_sales(self.ibuprofeno, 10)                                  # necesidad de compra: 10
+        self._transfers(self.ibuprofeno, 10)                                     # necesidad de la matriz: 10
         rows = self._comparador([self.ibuprofeno.barcode, self.vitamina.barcode, self.ajeno.ai_barcode_norm])
         wizard = self.env["ai.comparador.pedido"].browse(rows.action_add_to_rfq()["res_id"])
-        self.assertEqual(wizard.company_id, self.matriz)
+        self.assertEqual((wizard.company_id, wizard.a_nombre_de_id), (self.matriz, self.company))
         self.assertEqual(wizard.sin_catalogo, "ZQX PRODUCTO AJENO")
         ibu = wizard.line_ids.filtered(lambda l: l.product_id == self.ibuprofeno)
         vit = wizard.line_ids.filtered(lambda l: l.product_id == self.vitamina)
@@ -87,6 +89,7 @@ class TestComparadorPedido(AnalisisCase):
         self.assertEqual(self.env["purchase.order"].search(go["domain"]), orders)
         self.assertEqual(orders.partner_id, self.drog_b | self.drog_c)          # una por droguería
         self.assertEqual(set(orders.mapped("company_id")), {self.matriz})
+        self.assertEqual(set(orders.mapped("ai_a_nombre_de_id")), {self.company})   # la matriz no compra a su nombre
         self.assertEqual(set(orders.mapped("state")), {"draft"})
         line_c = orders.filtered(lambda o: o.partner_id == self.drog_c).order_line
         self.assertEqual((line_c.product_id, line_c.product_qty, line_c.price_unit), (self.ibuprofeno, 4, 1.7))
@@ -102,7 +105,7 @@ class TestComparadorPedido(AnalisisCase):
         self.assertEqual((go["res_id"], go["view_mode"]), (line_c.order_id.id, "form"))    # una sola: su ficha
 
     def test_quantity_limited_to_drugstore_stock(self):
-        self._weekly_sales(self.vitamina, 60)                                    # necesidad 60, B tiene 50
+        self._transfers(self.vitamina, 60)                                       # necesidad 60, B tiene 50
         rows = self._comparador([self.ibuprofeno.barcode, self.vitamina.barcode])
         wizard = self.env["ai.comparador.pedido"].browse(rows.action_add_to_rfq()["res_id"]).with_user(self.buyer)
         ibu = wizard.line_ids.filtered(lambda l: l.product_id == self.ibuprofeno)
@@ -155,6 +158,10 @@ class TestComparadorPedido(AnalisisCase):
                                    company_id=self.company.id, company_ids=[self.company.id])
         with self.assertRaisesRegex(UserError, "ZQX MATRIZ"):
             wizard.with_user(sin_matriz).action_confirm()
+        wizard.a_nombre_de_id = False
+        with self.assertRaisesRegex(UserError, "a nombre de qué farmacia"):
+            wizard.with_user(self.buyer).action_confirm()
+        wizard.a_nombre_de_id = self.company
         wizard.line_ids.cantidad = 0
         with self.assertRaisesRegex(UserError, "nada que pedir"):
             wizard.with_user(self.buyer).action_confirm()

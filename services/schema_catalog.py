@@ -14,7 +14,8 @@ CATALOG = {
         "Demanda semanal por producto y farmacia en las últimas semanas completas (lunes a "
         "domingo, sin la semana en curso): TPV + pedidos de venta, semanas sin venta = 0. Una "
         "fila por producto y farmacia con alguna venta en la ventana; si no hay fila, no se "
-        "vendió. Úsala en vez de calcular la demanda a mano.",
+        "vendió. Para Dromax (la matriz, que no vende) la demanda es lo que traslada a las "
+        "farmacias (venta_traslados). Úsala en vez de calcular la demanda a mano.",
         [
             ("company_id", "sucursal (farmacia)"),
             ("farmacia", "nombre de la farmacia"),
@@ -29,6 +30,8 @@ CATALOG = {
             ("venta_total", "unidades vendidas en la ventana (TPV + pedidos)"),
             ("venta_tpv", "unidades vendidas por TPV"),
             ("venta_pedidos", "unidades de pedidos de venta (clientes especiales)"),
+            ("venta_traslados", "solo Dromax: unidades trasladadas a las farmacias (su demanda; "
+                                "Dromax no vende, sus ventas no se cuentan)"),
             ("demanda_media", "media semanal con todas las semanas, atípicas incluidas"),
             ("demanda_mediana", "mediana semanal"),
             ("desviacion", "desviación estándar semanal"),
@@ -72,35 +75,40 @@ CATALOG = {
         ],
     ),
     "ai_v_faltantes": (
-        "Lo que tiene que comprar Dromax (la sucursal matriz, que recibe todas las compras y "
-        "reparte a las farmacias) para toda la red: una fila por producto con faltante > 0. "
-        "Se compra cuando, después de mandar lo que les falta a las farmacias que llegaron a su "
-        "punto de pedido, a Dromax le queda su propio punto de pedido o menos. Faltante = suma de "
-        "lo que les falta a las farmacias para llegar a la cobertura más el margen de seguridad + "
-        "objetivo de la venta de Dromax − stock libre de Dromax − sus compras pendientes. Si no hay fila, no hace "
-        "falta comprarlo. Trae la droguería sugerida: la más barata que tiene toda la cantidad "
-        "(o la más barata si ninguna alcanza), prefiriendo precios coherentes con el costo. Es "
-        "la base de la propuesta de compra.",
+        "Lo que hay que comprar: una fila por producto y sucursal que recibe con faltante > 0. "
+        "Dromax (la matriz) es una droguería: no vende; manda a las farmacias que llegaron a su "
+        "punto de pedido lo que tiene libre. Filas de farmacias (para_matriz FALSE): faltante = "
+        "objetivo − stock − pendiente − en camino − traslado de Dromax; la compra sale a nombre "
+        "de la farmacia y la recibe ella. Fila de Dromax (para_matriz TRUE): su demanda es lo que "
+        "traslada a las farmacias; si después de los traslados de esta semana le queda su punto "
+        "de pedido o menos, faltante = objetivo − lo que le queda − pendiente − en camino; la "
+        "recibe Dromax, pero sale a nombre de la farmacia de a_nombre_de_id. Si no hay fila, no "
+        "hace falta comprarlo. Trae la droguería sugerida: la más barata que tiene toda la "
+        "cantidad (o la más barata si ninguna alcanza), prefiriendo precios coherentes con el "
+        "costo. Es la base de la propuesta de compra.",
         [
-            ("company_id", "sucursal que compra (Dromax)"),
+            ("company_id", "sucursal que recibe la mercancía (farmacia o Dromax)"),
+            ("farmacia", "nombre de la sucursal que recibe"),
+            ("a_nombre_de_id", "res_company.id a cuyo nombre sale la orden (la farmacia; en las de "
+                               "Dromax, la del ajuste; NULL si no está configurada)"),
+            ("para_matriz", "TRUE: compra para el inventario de Dromax"),
             ("product_id", "product_product.id"),
             ("product_tmpl_id", "product_template.id"),
             ("producto", "nombre del producto"),
             ("codigo", "código interno"),
-            ("demanda_semanal", "venta semanal de toda la red (farmacias + Dromax, demanda depurada)"),
-            ("demanda_propia", "venta semanal de Dromax"),
+            ("demanda_semanal", "farmacia: venta semanal depurada; Dromax: lo que traslada por semana"),
             ("semanas_cobertura", "semanas de cobertura configuradas"),
-            ("faltas_farmacias", "suma de lo que les falta a las farmacias para llegar a la cobertura "
-                                 "más el margen de seguridad"),
-            ("farmacias_con_falta", "cuántas farmacias tienen falta"),
-            ("detalle_farmacias", "cuánto le falta a cada farmacia, p. ej. 'FARMAX (10), LA 45 (5)'"),
-            ("necesidad", "faltas_farmacias + demanda_propia × semanas_cobertura más el margen de seguridad"),
-            ("stock", "stock libre de Dromax (sin lo que ya sale a las farmacias)"),
-            ("pendiente", "compras confirmadas de Dromax por recibir (ya restadas)"),
+            ("objetivo", "demanda × semanas de cobertura más el margen de seguridad"),
+            ("stock", "farmacia: su stock (negativo = 0); Dromax: lo libre que le queda después de "
+                      "los traslados de esta semana"),
+            ("pendiente", "compras confirmadas de la sucursal por recibir (ya restadas)"),
             ("atrasado", "parte de lo pendiente con la fecha prevista vencida"),
             ("en_solicitud", "unidades en solicitudes sin confirmar (no restadas): avisar"),
-            ("cobertura_actual", "semanas de venta de la red que cubren el stock libre y lo pendiente de Dromax"),
-            ("faltante", "necesidad − stock − pendiente, con decimales"),
+            ("en_camino", "traslados sin terminar que llegan a la sucursal (ya restados)"),
+            ("traslado", "farmacia: lo que Dromax le manda esta semana (ya restado); Dromax: lo "
+                         "que manda esta semana a las farmacias"),
+            ("cobertura_actual", "semanas de demanda que cubre lo que tiene y lo que viene"),
+            ("faltante", "lo que falta para el objetivo, con decimales"),
             ("cantidad_sugerida", "faltante redondeado hacia arriba: la cantidad a comprar"),
             ("drogueria_id", "droguería sugerida (id del contacto); NULL si ninguna lo ofrece"),
             ("drogueria", "nombre de la droguería sugerida"),
@@ -113,7 +121,7 @@ CATALOG = {
             ("droguerias_con_oferta", "cuántas droguerías tienen el producto disponible"),
             ("fecha_vencimiento", "vencimiento del lote ofrecido"),
             ("laboratorio", "laboratorio según la droguería sugerida (texto)"),
-            ("costo", "costo actual del producto en Dromax"),
+            ("costo", "costo actual del producto en la sucursal que recibe (o en Dromax)"),
             ("revisar_presentacion", "TRUE si el precio de la droguería pasa del triple del costo o no "
                                      "llega a un tercio (sin costo: las ofertas difieren más del triple): "
                                      "posible empaque distinto con el mismo código; no comprar sin revisar"),
@@ -122,8 +130,8 @@ CATALOG = {
     "ai_v_reabastecimiento": (
         "Lo que la sucursal matriz (Dromax, la droguería del grupo) puede mandar por traslado a "
         "cada farmacia: una fila por producto y farmacia en cero o por agotarse (llegó al punto de "
-        "pedido de Ajustes) que la matriz tiene disponible. Ya descuenta lo que viene en camino y reserva la venta de la matriz; "
-        "si no alcanza para todas, reparte primero a la más urgente. Usa sus cantidades tal cual.",
+        "pedido de Ajustes) que la matriz tiene disponible. Ya descuenta lo que viene en camino; la "
+        "matriz no vende, así que reparte todo lo libre; si no alcanza para todas, reparte primero a la más urgente. Usa sus cantidades tal cual.",
         [
             ("company_id", "farmacia que recibe"),
             ("farmacia", "nombre de la farmacia"),

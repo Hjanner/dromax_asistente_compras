@@ -1,28 +1,36 @@
 # -*- coding: utf-8 -*-
 """Propuesta de compra semanal.
 
-Una propuesta por semana: toda compra la hace la sucursal matriz (Dromax)
-para toda la red y después reparte a las farmacias con traslados (Agente IA
-→ Reabastecimiento). Una línea por producto de ai_v_faltantes, guardada como
-foto del momento (falta en cada farmacia, venta propia de la matriz, stock y
-compras pendientes de la matriz, droguería y precio). Se organiza por laboratorio en las líneas, no
-en propuestas separadas: con datos reales salen cerca de 200 laboratorios con
-una mediana de 3 líneas cada uno.
+Una propuesta por semana. La sucursal matriz (Dromax) es una droguería: no
+vende, reabastece a las farmacias con traslados (Agente IA →
+Reabastecimiento). Lo que no alcanza a mandar lo compra cada farmacia a su
+nombre y lo recibe ella; el inventario de la matriz se repone con compras que
+recibe la matriz pero salen a nombre de una farmacia (a_nombre_de_id, del
+ajuste «Compras de Dromax a nombre de»; el comprador puede cambiarla en la
+línea). Una línea por producto y sucursal que recibe, de ai_v_faltantes,
+guardada como foto del momento (demanda, objetivo, stock, compras
+pendientes, en camino, traslado de la matriz, droguería y precio). Se
+organiza por laboratorio en las líneas, no en propuestas separadas: con datos
+reales salen cerca de 200 laboratorios con una mediana de 3 líneas cada uno.
 
-El comprador solo cambia la cantidad final, la droguería y el motivo. La
+El comprador solo cambia la cantidad final, la droguería, el motivo y, en
+las compras para la matriz, a nombre de qué farmacia salen. La
 cantidad y la droguería sugeridas quedan fijas, para medir cuánto corrige el
 comprador al agente.
 
 Borradores (action_create_rfq, botón del comprador, nunca del modelo de IA):
-una orden de compra en borrador por droguería, a nombre de la matriz, con las
-líneas que tienen cantidad final y droguería. Con el ajuste «Borradores de
+una orden de compra en borrador por sucursal que recibe, farmacia a cuyo
+nombre sale y droguería, con las líneas que tienen cantidad final y
+droguería. La orden queda en la empresa que recibe; si sale a nombre de otra
+(compras para la matriz), purchase.order.ai_a_nombre_de_id lo indica en la
+orden y en su PDF. Con el ajuste «Borradores de
 compra automáticos», la tarea programada del lunes los crea sola al calcular
 la propuesta (_cron_generate): antes cancela los borradores de propuestas
 anteriores que nadie confirmó, deja fuera lo que ya está en otras solicitudes
 sin confirmar, y le deja al responsable de compras una actividad para
 revisarlos. Se puede hacer por partes (p. ej.
 un laboratorio el lunes y otro el martes): lo nuevo se suma al borrador que
-esta misma propuesta ya creó para esa droguería; los borradores hechos a
+esta misma propuesta ya creó para esa droguería y sucursal; los borradores hechos a
 mano no se tocan. Las líneas marcadas para revisar la presentación no entran
 hasta que el comprador cambie su cantidad o su droguería. Cuando no queda
 nada por pedir, la propuesta pasa a "Convertida en borradores".
@@ -168,13 +176,15 @@ class AiPurchaseProposal(models.Model):
         """Borradores de todas las líneas por pedir, sin revisar permisos (tarea programada).
 
         Quedan fuera, y se informan: las líneas sin droguería, las marcadas
-        para revisar la presentación y las de productos que ya están en otras
-        solicitudes sin confirmar (se pedirían dos veces).
+        para revisar la presentación, las de productos que ya están en otras
+        solicitudes sin confirmar (se pedirían dos veces) y las compras para la
+        matriz sin farmacia a cuyo nombre hacerlas.
         """
         self.ensure_one()
         lines = self.env["ai.purchase.proposal.line"].sudo().search([
             ("proposal_id", "=", self.id), ("cantidad_final", ">", 0), ("purchase_line_id", "=", False)])
         skipped = {
+            "sin_a_nombre": lines.filtered(lambda l: l.drogueria_id and l.para_matriz and not l.a_nombre_de_id),
             "sin_drogueria": lines.filtered(lambda l: not l.drogueria_id),
             "revisar": lines.filtered(lambda l: l.drogueria_id and l.revisar_presentacion),
             "en_solicitud": lines.filtered(
@@ -182,6 +192,8 @@ class AiPurchaseProposal(models.Model):
         }
         for group in skipped.values():
             lines -= group
+        skipped["revisar"] -= skipped["sin_a_nombre"]
+        skipped["en_solicitud"] -= skipped["sin_a_nombre"] | skipped["revisar"]
         buyer = automation.responsible(self.env, automation.PURCHASE_RESPONSIBLE)
         orders = lines._create_orders(buyer, _("el Agente IA (tarea programada)")) if lines \
             else self.env["purchase.order"]
@@ -202,6 +214,8 @@ class AiPurchaseProposal(models.Model):
                    order=o.name, partner=o.partner_id.name, lines=len(o.order_line),
                    amount=o.currency_id.format(o.amount_untaxed)) for o in orders])
             labels = {
+                "sin_a_nombre": _("Compras para el inventario de Dromax sin farmacia a cuyo nombre hacerlas "
+                                  "(Ajustes → Compras de Dromax a nombre de): %s"),
                 "sin_drogueria": _("Sin droguería con oferta (comprar por otra vía): %s"),
                 "revisar": _("Para revisar la presentación (el precio pasa del triple del costo): %s"),
                 "en_solicitud": _("Ya están en solicitudes sin confirmar: %s"),
@@ -335,24 +349,37 @@ class AiPurchaseProposal(models.Model):
 class AiPurchaseProposalLine(models.Model):
     _name = "ai.purchase.proposal.line"
     _description = "Línea de propuesta de compra"
-    _order = "proposal_id, laboratorio, company_id, product_id"
+    _order = "proposal_id, laboratorio, product_id, para_matriz, company_id"
     _rec_name = "product_id"
 
     proposal_id = fields.Many2one("ai.purchase.proposal", "Propuesta", required=True, ondelete="cascade",
                                   index=True, readonly=True)
     state = fields.Selection(related="proposal_id.state")
-    company_id = fields.Many2one("res.company", "Compra", required=True, readonly=True, index=True,
-                                 help="Sucursal matriz, que compra para toda la red.")
+    company_id = fields.Many2one("res.company", "Recibe", required=True, readonly=True, index=True,
+                                 help="Sucursal que recibe la mercancía: la farmacia o, para su inventario, "
+                                      "la matriz. La orden de compra queda en esta empresa.")
+    para_matriz = fields.Boolean("Inventario de Dromax", readonly=True,
+                                 help="Compra para el inventario de la matriz: la recibe la matriz, pero la "
+                                      "orden sale a nombre de una farmacia.")
+    a_nombre_de_id = fields.Many2one(
+        "res.company", "A nombre de",
+        help="Farmacia a cuyo nombre sale la orden. En las compras para el inventario de Dromax se "
+             "puede cambiar (por defecto, la de Ajustes → Compras de Dromax a nombre de).")
     product_id = fields.Many2one("product.product", "Producto", required=True, readonly=True, index=True)
     laboratorio = fields.Char("Laboratorio", readonly=True)
-    demanda = fields.Float("Venta semanal de la red", readonly=True,
-                           help="Demanda depurada de las farmacias más la de la matriz.")
-    demanda_propia = fields.Float("Venta semanal de la matriz", readonly=True)
-    faltas_farmacias = fields.Integer("Falta en las farmacias", readonly=True)
-    detalle_farmacias = fields.Char("Falta por farmacia", readonly=True,
-                                    help="Cuánto le falta a cada farmacia, de mayor a menor.")
-    stock = fields.Float("Stock libre en la matriz", readonly=True)
+    demanda = fields.Float("Demanda semanal", readonly=True,
+                           help="Farmacia: su venta semanal depurada. Dromax: lo que traslada a las farmacias "
+                                "por semana.")
+    objetivo = fields.Integer("Objetivo", readonly=True,
+                              help="Demanda × semanas de cobertura más el margen de seguridad.")
+    stock = fields.Float("Stock", readonly=True,
+                         help="Farmacia: su stock. Dromax: lo que le queda libre después de los traslados "
+                              "de esta semana.")
     pendiente = fields.Float("Compras pendientes", readonly=True)
+    en_camino = fields.Float("En camino por traslado", readonly=True)
+    traslado = fields.Integer("Traslado de Dromax", readonly=True,
+                              help="Farmacia: lo que Dromax le manda esta semana (se descuenta de la compra). "
+                                   "Dromax: lo que manda esta semana a las farmacias.")
     en_solicitud = fields.Float("En solicitudes sin confirmar", readonly=True)
     cobertura_actual = fields.Float("Cobertura actual (semanas)", readonly=True)
     costo = fields.Float("Costo actual", readonly=True)
@@ -408,15 +435,26 @@ class AiPurchaseProposalLine(models.Model):
     @api.model
     def _values_from_shortage(self, row, lab):
         """Valores de una línea a partir de una fila de ai_v_faltantes."""
-        parts = []
-        if row["faltas_farmacias"]:
-            parts.append(_("farmacias %(f)s (%(d)s)", f=row["faltas_farmacias"], d=row["detalle_farmacias"]))
-        if row["demanda_propia"]:
-            parts.append(_("venta propia %(d)s/sem × %(c)s sem",
-                           d=_num(row["demanda_propia"]), c=row["semanas_cobertura"]))
-        reason = _("Falta: %(partes)s − stock %(s)s − pendiente %(p)s = %(f)s.",
-                   partes=" + ".join(parts), s=_num(row["stock"]), p=_num(row["pendiente"]),
-                   f=_num(row["faltante"]))
+        parts = [_("objetivo %(o)s (%(d)s/sem × %(c)s sem + margen)",
+                   o=row["objetivo"], d=_num(row["demanda_semanal"]), c=row["semanas_cobertura"])]
+        parts.append(_("stock %s", _num(row["stock"])))
+        if row["pendiente"]:
+            parts.append(_("pendiente %s", _num(row["pendiente"])))
+        if row["en_camino"]:
+            parts.append(_("en camino %s", _num(row["en_camino"])))
+        if row["para_matriz"]:
+            reason = _("Inventario de Dromax (traslada %(d)s/sem a las farmacias%(t)s): ",
+                       d=_num(row["demanda_semanal"]),
+                       t=_("; esta semana manda %s", row["traslado"]) if row["traslado"] else "")
+        else:
+            if row["traslado"]:
+                parts.append(_("traslado de Dromax %s", row["traslado"]))
+            reason = _("Compra de la farmacia: ")
+        reason += _("%(cuenta)s = %(f)s.", cuenta=" − ".join(parts), f=_num(row["faltante"]))
+        if row["para_matriz"]:
+            names = self.env["res.company"].browse(row["a_nombre_de_id"]).name if row["a_nombre_de_id"] else None
+            reason += " " + (_("Se compra a nombre de %s y lo recibe Dromax.", names) if names else _(
+                "Falta elegir a nombre de qué farmacia se compra (Ajustes → Compras de Dromax a nombre de)."))
         if row["en_solicitud"]:
             reason += " " + _("Ya hay %s en solicitudes sin confirmar.", _num(row["en_solicitud"]))
         if not row["drogueria_id"]:
@@ -430,14 +468,16 @@ class AiPurchaseProposalLine(models.Model):
             reason += " " + _("La droguería solo tiene %s.", row["stock_drogueria"])
         return {
             "company_id": row["company_id"],
+            "para_matriz": row["para_matriz"],
+            "a_nombre_de_id": row["a_nombre_de_id"],
             "product_id": row["product_id"],
             "laboratorio": lab or (row["laboratorio"] or "").strip().upper() or NO_LAB,
             "demanda": row["demanda_semanal"],
-            "demanda_propia": row["demanda_propia"],
-            "faltas_farmacias": row["faltas_farmacias"],
-            "detalle_farmacias": row["detalle_farmacias"],
+            "objetivo": row["objetivo"],
             "stock": row["stock"],
             "pendiente": row["pendiente"],
+            "en_camino": row["en_camino"],
+            "traslado": row["traslado"],
             "en_solicitud": row["en_solicitud"],
             "cobertura_actual": row["cobertura_actual"],
             "costo": row["costo"] or 0.0,
@@ -518,8 +558,11 @@ class AiPurchaseProposalLine(models.Model):
     def write(self, vals):
         if any(line.state in CLOSED_STATES for line in self):
             raise UserError(_("La propuesta ya está cerrada: no se puede modificar."))
-        if {"cantidad_final", "drogueria_id"} & set(vals) and self.filtered("purchase_line_id"):
+        if {"cantidad_final", "drogueria_id", "a_nombre_de_id"} & set(vals) and self.filtered("purchase_line_id"):
             raise UserError(_("La línea ya está en una orden de compra: cámbiala en la orden."))
+        if "a_nombre_de_id" in vals and self.filtered(lambda l: not l.para_matriz):
+            raise UserError(_("La compra de una farmacia sale siempre a su nombre: solo se elige en las "
+                              "compras para el inventario de Dromax."))
         if "drogueria_id" in vals:
             partner = self.env["res.partner"].browse(vals["drogueria_id"])
             for line in self:
@@ -530,7 +573,7 @@ class AiPurchaseProposalLine(models.Model):
         if {"cantidad_final", "drogueria_id"} & set(vals):
             # Lo que cambia el comprador no puede pasar del stock de la droguería.
             self._check_stock_drogueria()
-        if {"cantidad_final", "drogueria_id", "motivo"} & set(vals):
+        if {"cantidad_final", "drogueria_id", "motivo", "a_nombre_de_id"} & set(vals):
             self.proposal_id.filtered(lambda p: p.state == "ready").write({"state": "in_review"})
         return result
 
@@ -563,6 +606,13 @@ class AiPurchaseProposalLine(models.Model):
                 "No hay nada que pedir: hacen falta líneas con cantidad final y droguería que no estén "
                 "ya en una orden. Las marcadas para revisar la presentación (%s) entran cuando se cambia "
                 "su cantidad o su droguería.", len(review)))
+        no_name = lines.filtered(lambda l: l.para_matriz and not l.a_nombre_de_id)
+        if no_name:
+            raise UserError(_(
+                "Falta elegir a nombre de qué farmacia se compra para el inventario de Dromax: %s. "
+                "Elígela en la columna «A nombre de» o en Ajustes → Compras de Dromax a nombre de.",
+                ", ".join(no_name[:5].mapped("product_id.display_name"))
+                + (_(" y %s más", len(no_name) - 5) if len(no_name) > 5 else "")))
         missing = lines.company_id - self.env.user.company_ids
         if missing:
             raise UserError(_("No tienes acceso a: %s. Pide acceso a esa sucursal para generar las órdenes.",
@@ -570,7 +620,8 @@ class AiPurchaseProposalLine(models.Model):
         orders = lines._create_orders(self.env.user, self.env.user.name)
         action = self.env["ir.actions.act_window"]._for_xml_id("purchase.purchase_rfq")
         action["domain"] = [("id", "in", orders.ids)]
-        action["context"] = {}
+        # Las órdenes son de varias sucursales: que se vean aunque no estén marcadas en el selector.
+        action["context"] = {"allowed_company_ids": (self.env.companies | orders.company_id).ids}
         if len(orders) == 1:
             action.update({"view_mode": "form", "views": [(False, "form")], "res_id": orders.id})
         return action
@@ -578,23 +629,30 @@ class AiPurchaseProposalLine(models.Model):
     def _create_orders(self, buyer, author):
         """Crea o completa las órdenes en borrador de estas líneas (sin revisar permisos).
 
-        Una por propuesta, matriz y droguería; lo nuevo se suma al borrador
-        que la propuesta ya creó para esa droguería. `buyer` queda como
-        comprador de las órdenes nuevas; `author` firma el mensaje.
+        Una por propuesta, sucursal que recibe, farmacia a cuyo nombre sale y
+        droguería; lo nuevo se suma al borrador que la propuesta ya creó para
+        esa combinación. La orden queda en la empresa que recibe; si sale a
+        nombre de otra (compras para la matriz), ai_a_nombre_de_id lo indica.
+        `buyer` queda como comprador de las órdenes nuevas; `author` firma el
+        mensaje.
         """
         lines = self
         groups = {}
         for line in lines:
-            groups.setdefault((line.proposal_id, line.company_id, line.drogueria_id), self.browse())
-            groups[(line.proposal_id, line.company_id, line.drogueria_id)] |= line
+            # Solo las compras para la matriz salen a nombre de otra sucursal.
+            name = line.a_nombre_de_id if line.para_matriz else line.company_id.browse()
+            key = (line.proposal_id, line.company_id, name, line.drogueria_id)
+            groups[key] = groups.get(key, self.browse()) | line
         orders = self.env["purchase.order"]
-        for (proposal, company, partner), group in groups.items():
+        for (proposal, company, name, partner), group in groups.items():
             order = proposal.purchase_order_ids.filtered(
-                lambda o: o.state == "draft" and o.company_id == company and o.partner_id == partner)[:1]
+                lambda o: o.state == "draft" and o.company_id == company and o.partner_id == partner
+                and o.ai_a_nombre_de_id == name)[:1]
             if not order:
                 order = self.env["purchase.order"].with_company(company).create({
                     "partner_id": partner.id,
                     "company_id": company.id,
+                    "ai_a_nombre_de_id": name.id,
                     "origin": proposal.name,
                     "user_id": buyer.id or self.env.uid,
                 })

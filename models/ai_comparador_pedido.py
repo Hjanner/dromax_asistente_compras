@@ -4,8 +4,10 @@
 El comprador marca uno o varios productos en el comparador (o pulsa el botón
 del visor de uno) y confirma, por producto, la droguería y la cantidad. Se
 agregan a la orden de compra en borrador de la sucursal matriz con esa
-droguería que haya creado el comparador (origen «Oferta de proveedores»); si
-no hay, se crea. Así se pueden ir sumando productos en varias búsquedas sin
+droguería y a nombre de esa farmacia que haya creado el comparador (origen
+«Oferta de proveedores»); si no hay, se crea. La matriz no compra a su
+nombre: la orden sale a nombre de la farmacia elegida (por defecto, la de
+Ajustes → Compras de Dromax a nombre de) y la recibe la matriz. Así se pueden ir sumando productos en varias búsquedas sin
 recordar sus códigos. Las órdenes hechas a mano o desde la propuesta no se
 tocan.
 
@@ -18,7 +20,7 @@ necesita el producto); los demás se avisan y se dejan fuera.
 from odoo import Command, _, api, fields, models
 from odoo.exceptions import AccessError, UserError
 
-from ..services.network_sql import matrix_company
+from ..services.network_sql import PURCHASE_NAME_PARAM, matrix_company
 
 ORIGIN = "Oferta de proveedores"
 
@@ -27,8 +29,10 @@ class AiComparadorPedido(models.TransientModel):
     _name = "ai.comparador.pedido"
     _description = "Pedido desde el comparador de precios"
 
-    company_id = fields.Many2one("res.company", "Compra", readonly=True,
-                                 help="Sucursal matriz: toda compra entra por ella.")
+    company_id = fields.Many2one("res.company", "Recibe", readonly=True,
+                                 help="Sucursal matriz: la mercancía entra a su almacén.")
+    a_nombre_de_id = fields.Many2one("res.company", "A nombre de",
+                                     help="Farmacia a cuyo nombre sale la orden (la matriz no compra a su nombre).")
     line_ids = fields.One2many("ai.comparador.pedido.line", "wizard_id", "Productos")
     sin_catalogo = fields.Text("No están en el catálogo", readonly=True)
     amount_total = fields.Float("Total", compute="_compute_amount_total")
@@ -45,12 +49,17 @@ class AiComparadorPedido(models.TransientModel):
         if not company:
             raise UserError(_("No hay sucursal matriz: elígela en Agente IA → Configuración → Ajustes."))
         in_catalog = rows.filtered("product_id")
-        self.env.cr.execute("SELECT product_id, cantidad_sugerida FROM ai_v_faltantes WHERE product_id = ANY(%s)",
-                            (in_catalog.product_id.ids,))
+        # Lo sugerido para el inventario de la matriz, que es quien recibe.
+        self.env.cr.execute("""SELECT product_id, cantidad_sugerida FROM ai_v_faltantes
+                                WHERE para_matriz AND product_id = ANY(%s)""", (in_catalog.product_id.ids,))
         suggested = dict(self.env.cr.fetchall())
         Line = self.env["ai.comparador.pedido.line"]
+        name_id = self.env["ir.config_parameter"].sudo().get_param(PURCHASE_NAME_PARAM)
+        name = self.env["res.company"].sudo().browse(int(name_id)).exists() if (name_id or "").strip().isdigit() \
+            else self.env["res.company"]
         wizard = self.create({
             "company_id": company.id,
+            "a_nombre_de_id": name.id,
             "sin_catalogo": "\n".join((rows - in_catalog).mapped("nombre")) or False,
         })
         for row in in_catalog:
@@ -72,6 +81,9 @@ class AiComparadorPedido(models.TransientModel):
         if company not in user.sudo().company_ids:
             raise UserError(_("No tienes acceso a %s, la sucursal que compra.", company.name))
         company = self.company_id
+        name = self.a_nombre_de_id
+        if not name:
+            raise UserError(_("Elige a nombre de qué farmacia sale la compra."))
         lines = self.line_ids.filtered(lambda l: l.cantidad > 0)
         if not lines:
             raise UserError(_("No hay nada que pedir: pon una cantidad mayor que 0."))
@@ -84,6 +96,7 @@ class AiComparadorPedido(models.TransientModel):
         describe = self.env["ai.purchase.proposal.line"]._purchase_description
         drafts = {partner: Order.search([("state", "=", "draft"), ("company_id", "=", company.id),
                                          ("partner_id", "=", partner.id), ("origin", "=", ORIGIN),
+                                         ("ai_a_nombre_de_id", "=", name.id),
                                          ("user_id", "=", user.id)], order="id desc", limit=1)
                   for partner in lines.drogueria_id}
         # El precio y el stock se vuelven a leer de la oferta: puede haber cambiado desde que se abrió.
@@ -94,7 +107,7 @@ class AiComparadorPedido(models.TransientModel):
             order = drafts[partner]
             if not order:
                 order = Order.create({"partner_id": partner.id, "company_id": company.id,
-                                      "origin": ORIGIN, "user_id": user.id})
+                                      "ai_a_nombre_de_id": name.id, "origin": ORIGIN, "user_id": user.id})
             fpos = order.fiscal_position_id or order.fiscal_position_id._get_fiscal_position(partner)
             date_planned = POLine._get_date_planned(False, po=order)
             for line in lines.filtered(lambda l: l.drogueria_id == partner):

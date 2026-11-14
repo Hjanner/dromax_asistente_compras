@@ -160,6 +160,10 @@
                     o la cantidad si hace falta; con cantidad 0 el producto no se pide. No se puede pedir
                     más que el stock de la droguería, contando lo que ya esté en su borrador.
                 </div>
+                <group>
+                    <field name="a_nombre_de_id" options="{'no_create': True, 'no_open': True}"
+                           domain="[('id', '!=', company_id)]" required="1"/>
+                </group>
                 <div class="alert alert-info py-2" role="status" invisible="not sin_catalogo">
                     Estos productos no están en nuestro catálogo y no se pueden pedir:
                     <field name="sin_catalogo" class="d-block"/>

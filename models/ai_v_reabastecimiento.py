@@ -29,9 +29,11 @@ class AiVReabastecimiento(models.Model):
     venta media.
 
     Disponible en la matriz = su stock − lo que ya sale hacia otras sucursales
-    (borradores y traslados sin terminar) − su propia demanda de las mismas
-    semanas (no se queda sin mercancía para su venta). Si no alcanza para
-    todas, se reparte primero a la farmacia más urgente (menor cobertura).
+    (borradores y traslados sin terminar). La matriz no vende: todo su
+    inventario es para las farmacias (lo repone con su propia compra, ver
+    ai_v_faltantes). Si no alcanza para todas, se reparte primero a la
+    farmacia más urgente (menor cobertura). El reparto es el de network_sql,
+    el mismo que descuenta la necesidad de compra.
     Solo productos almacenables, en la unidad del producto. El valor es al
     costo de la matriz, que es el que pasa el traslado.
 
@@ -73,8 +75,8 @@ class AiVReabastecimiento(models.Model):
     stock_matriz = fields.Float("Stock en la matriz", readonly=True)
     disponible_matriz = fields.Float(
         "Disponible en la matriz", readonly=True,
-        help="Stock de la matriz − lo que ya sale a otras sucursales − su propia venta de las "
-             "semanas de cobertura. Se reparte entre las farmacias, primero la más urgente.")
+        help="Stock de la matriz − lo que ya sale a otras sucursales. Se reparte entre las "
+             "farmacias, primero la más urgente.")
     costo = fields.Float("Costo", readonly=True, help="Costo del producto en la matriz.")
     valor = fields.Float("Valor", readonly=True, help="A trasladar × costo.")
 
@@ -83,24 +85,8 @@ class AiVReabastecimiento(models.Model):
         self.env.cr.execute("""
             CREATE VIEW ai_v_reabastecimiento AS
             WITH %(red)s
-            disponible AS (
-                -- Lo que la matriz puede repartir: lo libre menos su propia venta de las semanas.
-                SELECT m.product_id, m.stock,
-                       floor(m.libre - ceil(m.demanda * params.semanas)) AS disponible
-                  FROM matriz m
-                 CROSS JOIN params
-            ),
-            reparto AS (
-                SELECT f.*, m.stock AS stock_matriz, m.disponible,
-                       sum(f.falta) OVER (PARTITION BY f.product_id
-                                          ORDER BY f.cobertura, f.demanda DESC, f.company_id
-                                          ROWS UNBOUNDED PRECEDING) AS acumulado
-                  FROM faltas f
-                  JOIN disponible m ON m.product_id = f.product_id AND m.disponible >= 1
-            ),
             lineas AS (
-                SELECT r.*, least(r.falta, greatest(r.disponible - (r.acumulado - r.falta), 0))::int AS cantidad
-                  FROM reparto r
+                SELECT * FROM envios
             ),
             costos AS (
                 -- standard_price depende de la empresa: está en ir_property (el de
@@ -227,22 +213,29 @@ class AiVReabastecimiento(models.Model):
 
     @api.model
     def _cron_generate_transfers(self):
-        """Tarea programada diaria: con el ajuste activo, crea los borradores de
-        traslado de todas las líneas y le deja una actividad al responsable en
-        cada uno. Lo que ya va en borrador cuenta como en camino: no se duplica."""
+        """Tarea programada diaria: con el ajuste activo, cancela sus borradores de
+        días anteriores que nadie despachó, crea los borradores de traslado de
+        todas las líneas y le deja una actividad al responsable en cada uno. Lo
+        que ya va en borrador (los de hoy o los hechos a mano) cuenta como en
+        camino: no se duplica."""
         if not automation.is_enabled(self.env, automation.AUTO_TRANSFERS):
             return self.env["stock.picking"]
-        self.env.flush_all()
-        lines = self.sudo().search([("cantidad", ">", 0)])
-        if not lines:
-            _logger.info("Reabastecimiento automático: nada que trasladar.")
-            return self.env["stock.picking"]
         try:
-            pickings = lines._create_transfers(lines.matriz_id | lines.company_id)
+            # Juntos: si no se pueden crear los nuevos, los de ayer siguen como estaban.
+            with self.env.cr.savepoint():
+                self._cancel_stale_auto_transfers()
+                self.env.flush_all()
+                self.invalidate_model()
+                lines = self.sudo().search([("cantidad", ">", 0)])
+                pickings = lines._create_transfers(lines.matriz_id | lines.company_id)
+                pickings.ai_auto_replenishment_date = fields.Date.context_today(self)
         except UserError as exc:
             # Falta un almacén o el tipo de traslado: se registra y la tarea no se reintenta en bucle.
             _logger.error("Reabastecimiento automático: %s", exc)
             return self.env["stock.picking"]
+        if not pickings:
+            _logger.info("Reabastecimiento automático: nada que trasladar.")
+            return pickings
         user = automation.responsible(self.env, automation.TRANSFER_RESPONSIBLE)
         for picking in pickings:
             picking.message_post(body=_("Borrador creado por el Agente IA (reabastecimiento diario)."))
@@ -254,3 +247,34 @@ class AiVReabastecimiento(models.Model):
         _logger.info("Reabastecimiento automático: %s borradores (%s).", len(pickings),
                      ", ".join(pickings.mapped("name")))
         return pickings
+
+    @api.model
+    def _cancel_stale_auto_transfers(self):
+        """Cancela los borradores de la tarea diaria de días anteriores que siguen en borrador.
+
+        Los reemplazan los de hoy, con el stock y la venta del día: si se
+        quedaran, esas cantidades contarían como en camino para siempre. Solo
+        los que creó la tarea (ai_auto_replenishment_date) y solo en borrador:
+        los creados con el botón o a mano, y los que ya pasaron a «Generar
+        Traslados Definitivos», no se tocan. Se borran también las actividades
+        «Despachar reabastecimiento» que la tarea les dejó.
+        """
+        Picking = self.env["stock.picking"].sudo()
+        stale = Picking.search([
+            ("ai_auto_replenishment_date", "<", fields.Date.context_today(self)),
+            ("state", "=", "draft"),
+        ])
+        if not stale:
+            return stale
+        stale.with_context(allowed_company_ids=stale.company_id.ids).action_cancel()
+        todo = self.env.ref("mail.mail_activity_data_todo", raise_if_not_found=False)
+        for picking in stale:
+            prefix = _("Despachar reabastecimiento a %s", picking.location_dest_id.company_id.name)
+            picking.activity_ids.filtered(
+                lambda a: a.activity_type_id == todo and (a.summary or "") == prefix).unlink()
+            picking.message_post(body=_(
+                "Cancelado por el Agente IA: nadie lo despachó y lo reemplazan los borradores "
+                "de reabastecimiento de hoy."))
+        _logger.info("Reabastecimiento automático: %s borradores anteriores cancelados (%s).",
+                     len(stale), ", ".join(stale.mapped("name")))
+        return stale

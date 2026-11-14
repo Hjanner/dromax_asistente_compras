@@ -1,6 +1,6 @@
 # Estado del proyecto
 
-Última actualización: 2026-11-13 (asistente `17.0.0.18.3`, 159 tests; módulo
+Última actualización: 2026-11-14 (asistente `17.0.0.19.1`, 171 tests; módulo
 FTP 1.5 con 38). Qué está hecho, qué decidimos y qué falta.
 El README explica cómo funciona lo que ya existe.
 
@@ -414,6 +414,58 @@ El README explica cómo funciona lo que ya existe.
     solo en el menú y estas pantallas). Lección: al actualizar, `groups` de
     un `menuitem` solo **agrega** grupos; para quitar el de compras a los
     menús que ya lo tenían hace falta `-grupo` en el atributo.
+  - Asistente `17.0.0.19.0` (2026-11-14): **Dromax es droguería, no
+    vende**. Información nueva del negocio: Dromax no vende a personas ni a
+    las farmacias; pide la compra a nombre de cada farmacia y, para tener con
+    qué reabastecer, a veces pide a nombre de una farmacia lo que guarda en
+    su almacén. Cambios:
+    - la demanda de Dromax en `ai_v_rotacion` es lo que traslada a las
+      farmacias (`venta_traslados`), no ventas; mismos umbrales (punto de
+      pedido, margen, semanas) que las farmacias;
+    - `ai_v_faltantes` pasa a una fila por producto y sucursal que recibe:
+      cada farmacia compra a su nombre lo que Dromax no le puede mandar esta
+      semana (el mismo reparto del reabastecimiento, sin reserva para venta
+      propia) y Dromax repone su inventario al llegar a su punto de pedido;
+    - la propuesta tiene una línea por producto y sucursal (recibe, a nombre
+      de, traslado de Dromax, objetivo, en camino) y genera un borrador por
+      sucursal y droguería; las líneas del inventario de Dromax van a nombre
+      de la farmacia del ajuste nuevo *Compras de Dromax a nombre de*
+      (`matrix_purchase_company_id`), que el comprador puede cambiar por
+      línea;
+    - `purchase.order` tiene el campo **A nombre de**
+      (`ai_a_nombre_de_id`): la orden sigue en Dromax y entra a su almacén,
+      pero la ficha lo avisa, las listas lo muestran (filtro *A nombre de
+      otra sucursal*) y el PDF sale con el encabezado de esa farmacia; el
+      comparador también lo pide;
+    - la regla de las líneas de la propuesta pasa a las empresas permitidas
+      del usuario (migración `17.0.0.19.0`); chat y prompt al día;
+    - `scripts/simulate_transfers.py`: 26 semanas de traslados simulados de
+      Dromax a las farmacias. Ya corrido en `dromax_ai_inventario` (copia
+      previa sin traslados ni la 0.19.0: `dromax_ai_inventario_pre_0190`):
+      446 filas de necesidad (220 del inventario de Dromax); los borradores
+      salen uno por sucursal y droguería, y los de Dromax con su PDF a nombre
+      de la farmacia.
+    - Tests de navegador desde Claude Code: el entorno tiene un proxy en
+      `HTTP_PROXY`/`ALL_PROXY` y Chrome no conecta («Connection Timeout while
+      trying to connect to Chrome debugger»); correrlos con
+      `NO_PROXY=127.0.0.1,localhost no_proxy=127.0.0.1,localhost`.
+    - Pedido del usuario: botón **Cancelar solicitudes** en la lista de
+      Solicitudes de presupuesto (y en Acciones de las listas de compras):
+      cancela juntas las elegidas que siguen siendo solicitudes; las órdenes
+      confirmadas no se tocan (`ai.purchase.cancel`, como el de traslados).
+    - `17.0.0.19.1` (pedido del usuario): la tarea diaria de reabastecimiento
+      cancela **sus** borradores de días anteriores que siguen en borrador
+      antes de crear los del día (un borrador olvidado contaba como en camino
+      para siempre y vaciaba la pantalla de Reabastecimiento). Los reconoce
+      por el campo nuevo `stock.picking.ai_auto_replenishment_date` (filtro
+      *Reabastecimiento automático*); la migración marca los que ya había
+      creado por el mensaje de su historial. Los del botón o hechos a mano no
+      se tocan. Cancelar y crear van en un savepoint: si falla la creación,
+      los de ayer quedan.
+    - Falta confirmar con Daniel: a nombre de qué farmacia compra Dromax su
+      inventario (¿siempre la misma?), si la dirección de entrega del PDF
+      debe ser la de esa farmacia o el almacén de Dromax (hoy, Dromax) y
+      cómo factura la droguería esas órdenes.
   - Respuestas de Daniel (reunión): códigos de barras y ventas de `ODOO2026`
     los resuelve él; no restringir su módulo de traslados (se permiten
     traslados manuales entre farmacias); historial de 8 semanas; la
@@ -439,7 +491,13 @@ El README explica cómo funciona lo que ya existe.
   2026-11-10): no se mueve ni se compra por una o dos unidades debajo de la
   venta, y se repone con margen para semanas altas. Valores iniciales 50 % y
   20 %, a calibrar con el comprador.
-- **Toda compra pasa por Dromax** (2026-11-09, reemplaza la decisión del
+- **Cada farmacia compra a su nombre; Dromax guarda inventario** (2026-11-14,
+  reemplaza la de abajo): Dromax es droguería y no vende. Lo que no puede
+  mandar del almacén lo compra cada farmacia a su nombre y lo recibe ella.
+  Dromax repone su inventario según lo que traslada (mismos umbrales que las
+  farmacias) y lo compra a nombre de una farmacia fija de Ajustes,
+  cambiable por línea; la orden queda en Dromax con el campo *A nombre de*.
+- ~~**Toda compra pasa por Dromax**~~ (2026-11-09, reemplaza la decisión del
   2026-10-27 de que cualquier farmacia podía comprar para otra): la sucursal
   matriz recibe cada compra y la distribuye a las farmacias con traslados
   cuando lo necesitan. Las farmacias no compran a las droguerías (tampoco los
@@ -499,15 +557,15 @@ descuentos encadenados = precio final en todas las filas.
 
 1. **Producción (`ODOO2026`)**: tiene el asistente 0.13.0 (instalado el
    2026-11-06 con respaldo completo previo y el usuario de solo lectura
-   funcionando). Las versiones 0.14.0 a 0.18.2 (reabastecimiento, toda compra
+   funcionando). Las versiones 0.14.0 a 0.19.0 (reabastecimiento, toda compra
    por Dromax, comparador, umbrales, nombre «Agente IA», automatizaciones,
    simplificaciones de la propuesta) están **pendientes de instalar**: Daniel
    pidió dejarlo para después, y nada se toca en el servidor sin consultarlo antes
    con él. Al instalar: volver a bajar el módulo FTP del servidor y compararlo
    con el repo local (Daniel lo edita allí) antes de entregar el nuestro,
    actualizar las bases que tienen los módulos (`INSTALACION.md`, paso 11),
-   elegir la *Sucursal matriz* en los ajustes y dar a los compradores acceso a
-   la matriz. Siguen pendientes en el servidor: que las droguerías carguen (el
+   elegir la *Sucursal matriz* y *Compras de Dromax a nombre de* en los
+   ajustes y dar a los compradores acceso a la matriz y a las farmacias. Siguen pendientes en el servidor: que las droguerías carguen (el
    FTP conecta, pero el listado en modo pasivo se agota; detalle en el
    `CLAUDE.md` local), los códigos de barras de los productos y las ventas de
    TPV en la base (los resuelve Daniel), IVA y usuarios.
