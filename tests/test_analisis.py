@@ -31,6 +31,11 @@ class AnalisisCase(TransactionCase):
         # (los umbrales tienen sus propios tests en test_reabastecimiento).
         ICP.set_param("dromax_asistente_compras.reorder_point_pct", "100")
         ICP.set_param("dromax_asistente_compras.safety_margin_pct", "0")
+        # Lo que la base tenga guardado en Ajustes no cuenta: sin «a nombre de», sin
+        # automatización ni responsables (cada test activa lo que prueba).
+        for key in ("matrix_purchase_company_id", "auto_rfq", "auto_transfers",
+                    "purchase_responsible_id", "transfer_responsible_id"):
+            ICP.set_param("dromax_asistente_compras." + key, False)
         Product = cls.env["product.product"]
         cls.ibuprofeno = Product.create({"name": "ZQX IBUPROFENO 400MG", "detailed_type": "product",
                                          "default_code": "ZQX1"})

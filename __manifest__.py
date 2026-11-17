@@ -26,7 +26,7 @@ cuando el comprador se lo pide; las órdenes en borrador las crea el botón.
     """,
     'author': "Hjanner",
     'category': 'Inventory/Purchase',
-    'version': '17.0.0.19.1',
+    'version': '17.0.0.19.2',
     'license': 'LGPL-3',
     'application': True,
     'installable': True,
@@ -65,6 +65,9 @@ cuando el comprador se lo pide; las órdenes en borrador las crea el botón.
             'dromax_asistente_compras/static/src/chat/*.xml',
             'dromax_asistente_compras/static/src/chat/*.scss',
             'dromax_asistente_compras/static/src/comparador/*.js',
+            'dromax_asistente_compras/static/src/loading/*.js',
+            'dromax_asistente_compras/static/src/loading/*.xml',
+            'dromax_asistente_compras/static/src/loading/*.scss',
         ],
     },
 }

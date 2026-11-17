@@ -544,6 +544,18 @@ SIM_DB=<base> python3 odoo/odoo-bin shell -c odoo/debian/odoo.conf -d <base> --n
   farmacia (origen «Simulación de traslados»). No toca las existencias ni la
   contabilidad, y no se puede repetir sobre la misma base.
 
+## Aviso «Cargando…» (`static/src/loading/`)
+
+El indicador de Odoo es un recuadro pequeño que no bloquea la pantalla, y
+algunos cálculos del Agente IA (reabastecimiento, propuesta, borradores)
+tardan varios segundos. Un componente del cliente web (`AiLoadingOverlay`)
+escucha las llamadas al servidor y, si una del Agente IA tarda más de 0,3 s,
+cubre la pantalla con un aviso centrado «Cargando…» (que además evita pulsar
+dos veces); a partir de 5 s avisa que sigue calculando y que no se cierre la
+página. Cuentan las llamadas a los modelos `ai.*` y los botones *Ejecutar
+ahora* de Ajustes (`action_ai_*`). La pregunta del chat (`chat_send`) queda
+fuera: tiene su propio indicador y puede tardar un minuto.
+
 ## Chat del agente
 
 Menú **Agente IA → Chat** (grupo *Agente IA / Usuario*).

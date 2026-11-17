@@ -98,16 +98,24 @@ class TestUi(HttpCase):
             });
             (async () => {
                 try {
-                    (await until(".o_list_view .o_data_row td[name='nombre']", "00 ZQX UI COMPARADOR PROPIO")).click();
+                    const nameCell = await until(".o_list_view .o_data_row td[name='nombre']", "00 ZQX UI COMPARADOR PROPIO");
+                    const oldRow = nameCell.closest(".o_data_row");
+                    nameCell.click();
                     await until(".modal .o_field_one2many .o_data_row td[name='partner_id']", "DROG UI A");
                     await until(".modal .o_field_one2many .o_data_row td[name='partner_id']", "DROG UI B");
                     (await until(".modal button[special='cancel']")).click();
-                    // Al cerrar, la lista se vuelve a dibujar: esperar y buscar la fila de nuevo.
-                    await new Promise((resolve) => {
-                        const t = setInterval(() => { if (!document.querySelector(".modal")) { clearInterval(t); resolve(); } }, 100);
+                    // Al cerrar, la lista se vuelve a cargar: marcar la fila vieja perdería la selección.
+                    // Esperar la fila nueva y que no quede el aviso «Cargando…» (que tapa la lista).
+                    const row = await new Promise((resolve, reject) => {
+                        let n = 0;
+                        const t = setInterval(() => {
+                            const r = [...document.querySelectorAll(".o_list_view .o_data_row")]
+                                .find(e => e.textContent.includes("00 ZQX UI COMPARADOR PROPIO"));
+                            if (r && r !== oldRow && !document.querySelector(".modal, .o_ai_loading_overlay")) {
+                                clearInterval(t); resolve(r);
+                            } else if (++n > 150) { clearInterval(t); reject(new Error("La lista no se recargó")); }
+                        }, 100);
                     });
-                    await new Promise((resolve) => setTimeout(resolve, 500));
-                    const row = await until(".o_list_view .o_data_row", "00 ZQX UI COMPARADOR PROPIO");
                     row.querySelector(".o_list_record_selector input").click();
                     (await until("button[name='action_add_to_rfq']")).click();
                     await until(".modal .o_field_one2many .o_data_row td[name='cantidad']");
@@ -468,6 +476,51 @@ class TestUi(HttpCase):
     def test_usage_log_graph(self):
         self._open("action=dromax_asistente_compras.action_ai_usage_log&view_type=graph",
                    ".o_graph_renderer canvas")
+
+    def test_loading_overlay(self):
+        """Aviso «Cargando…» grande: aparece con una llamada lenta del Agente IA, avisa si tarda,
+        desaparece al responder y no sale con la pregunta del chat ni con otros modelos."""
+        self.browser_js("/web#action=dromax_asistente_compras.action_ai_v_reabastecimiento", """
+            const until = (check, what) => new Promise((resolve, reject) => {
+                let n = 0;
+                const t = setInterval(() => {
+                    const el = check();
+                    if (el) { clearInterval(t); resolve(el); }
+                    else if (++n > 150) { clearInterval(t); reject(new Error("No pasó: " + what)); }
+                }, 100);
+            });
+            const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+            const overlay = () => document.querySelector(".o_ai_loading_overlay");
+            (async () => {
+                try {
+                    await until(() => document.querySelector(".o_list_view"), "la lista");
+                    await until(() => !overlay(), "sin aviso al terminar de cargar");
+                    const bus = odoo.__WOWL_DEBUG__.root.env.bus;
+                    // Ids negativos: no chocan con los de las llamadas reales.
+                    const rpc = (type, id, model, method) =>
+                        bus.trigger(type, { data: { id, params: { model, method } }, settings: {} });
+                    rpc("RPC:REQUEST", -1, "ai.purchase.chat.session", "chat_send");
+                    rpc("RPC:REQUEST", -2, "res.partner", "web_search_read");
+                    await sleep(800);
+                    if (overlay()) {
+                        throw new Error("El aviso salió con la pregunta del chat o con otro modelo");
+                    }
+                    rpc("RPC:REQUEST", -3, "ai.v.reabastecimiento", "web_search_read");
+                    const shown = await until(overlay, "el aviso");
+                    if (!shown.textContent.includes("Cargando")) {
+                        throw new Error("El aviso no dice Cargando");
+                    }
+                    await until(() => document.querySelector(".o_ai_loading_slow"), "el aviso de espera larga");
+                    rpc("RPC:RESPONSE", -3, "ai.v.reabastecimiento", "web_search_read");
+                    await until(() => !overlay(), "que se fuera el aviso");
+                    rpc("RPC:RESPONSE", -1, "ai.purchase.chat.session", "chat_send");
+                    rpc("RPC:RESPONSE", -2, "res.partner", "web_search_read");
+                    console.log("test successful");
+                } catch (e) {
+                    console.error(e.message);
+                }
+            })();
+        """, login="ai_purchase_admin_ui")
 
 
 CHAT_FLOW = """

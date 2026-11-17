@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="dromax_asistente_compras.AiLoadingOverlay">
+        <div t-if="state.show" class="o_ai_loading_overlay" role="status" aria-live="polite">
+            <div class="o_ai_loading_card">
+                <div class="o_ai_loading_spinner" aria-hidden="true"/>
+                <div class="o_ai_loading_title">Cargando…</div>
+                <div t-if="!state.slow" class="o_ai_loading_text">
+                    El Agente IA está preparando la información.
+                </div>
+                <div t-else="" class="o_ai_loading_text o_ai_loading_slow">
+                    Sigue calculando: puede tardar unos segundos más.<br/>No cierre ni recargue la página.
+                </div>
+            </div>
+        </div>
+    </t>
+
+</templates>

@@ -1,6 +1,6 @@
 # Estado del proyecto
 
-Última actualización: 2026-11-14 (asistente `17.0.0.19.1`, 171 tests; módulo
+Última actualización: 2026-11-17 (asistente `17.0.0.19.2`, 172 tests; módulo
 FTP 1.5 con 38). Qué está hecho, qué decidimos y qué falta.
 El README explica cómo funciona lo que ya existe.
 
@@ -466,6 +466,23 @@ El README explica cómo funciona lo que ya existe.
       inventario (¿siempre la misma?), si la dirección de entrega del PDF
       debe ser la de esa farmacia o el almacén de Dromax (hoy, Dromax) y
       cómo factura la droguería esas órdenes.
+  - Asistente `17.0.0.19.2` (pedido del usuario, 2026-11-17): **aviso
+    «Cargando…»** grande y centrado mientras una llamada del Agente IA tarda
+    más de 0,3 s (ver README); el de Odoo es un recuadro pequeño que no se ve
+    y el comprador creía que la pantalla no cargaba. Bloquea la pantalla
+    (evita el doble clic) y a los 5 s avisa que sigue calculando; la pregunta
+    del chat queda fuera. `test_comparator` ya no espera 500 ms fijos tras
+    cerrar la ventana: con la oferta real (8315 filas) la lista tardaba más y
+    el test marcaba la fila vieja; ahora espera la fila nueva. Además, los
+    tests de análisis, propuesta y automatización ya no dependen de los
+    Ajustes guardados en la base (fallaban 5 con la automatización
+    activada o con *Compras de Dromax a nombre de* lleno): `AnalisisCase`
+    los borra antes de empezar. 172 tests.
+    Observado al probar en `dromax_ai_inventario`: *Reabastecimiento* sale
+    vacío si en el selector de empresas solo está marcada una sucursal que
+    no recibe (la regla muestra las farmacias marcadas) y el mensaje de
+    pantalla vacía («Ninguna farmacia necesita…») confunde. Pendiente:
+    avisar cuando hay líneas en farmacias no marcadas.
   - Respuestas de Daniel (reunión): códigos de barras y ventas de `ODOO2026`
     los resuelve él; no restringir su módulo de traslados (se permiten
     traslados manuales entre farmacias); historial de 8 semanas; la

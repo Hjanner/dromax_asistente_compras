@@ -1,0 +1,67 @@
+// Aviso «Cargando…» de las pantallas del Agente IA (ver loading_overlay.js).
+.o_ai_loading_overlay {
+    position: fixed;
+    inset: 0;
+    // Por encima de los diálogos (los botones de un asistente también cargan).
+    z-index: $zindex-modal + 20;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    background: rgba(0, 0, 0, 0.3);
+    cursor: wait;
+    animation: o_ai_loading_fade 0.15s ease-out;
+
+    .o_ai_loading_card {
+        width: 100%;
+        max-width: 420px;
+        padding: 2rem 2.5rem;
+        border-radius: 0.75rem;
+        background: $o-view-background-color;
+        color: $o-main-text-color;
+        box-shadow: 0 0.5rem 2rem rgba(0, 0, 0, 0.3);
+        text-align: center;
+    }
+
+    .o_ai_loading_spinner {
+        width: 4rem;
+        height: 4rem;
+        margin: 0 auto 1.25rem;
+        border: 0.4rem solid $o-gray-200;
+        border-top-color: $o-brand-primary;
+        border-radius: 50%;
+        animation: o_ai_loading_spin 0.8s linear infinite;
+    }
+
+    .o_ai_loading_title {
+        font-size: 1.5rem;
+        font-weight: 600;
+    }
+
+    .o_ai_loading_text {
+        margin-top: 0.5rem;
+        color: $o-gray-600;
+    }
+}
+
+@keyframes o_ai_loading_spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes o_ai_loading_fade {
+    from {
+        opacity: 0;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .o_ai_loading_overlay {
+        animation: none;
+
+        .o_ai_loading_spinner {
+            animation-duration: 2s;
+        }
+    }
+}
