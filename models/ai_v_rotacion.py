@@ -1,8 +1,12 @@
 # -*- coding: utf-8 -*-
 import logging
 import time
+from datetime import timedelta
 
-from odoo import api, fields, models, tools
+from markupsafe import Markup
+
+from odoo import _, api, fields, models, tools
+from odoo.tools.misc import format_date, formatLang
 
 from ..services.config import PARAM_PREFIX, get_int_setting
 from ..services.network_sql import MATRIX_SQL
@@ -160,9 +164,96 @@ class AiVRotacion(models.Model):
     demanda_mediana = fields.Float("Mediana semanal", readonly=True)
     desviacion = fields.Float("Desviación estándar", readonly=True)
     mad = fields.Float("MAD", readonly=True, help="Desviación absoluta mediana de las semanas.")
-    semanas_atipicas = fields.Integer("Semanas atípicas", readonly=True)
+    semanas_atipicas = fields.Integer("Semanas atípicas", readonly=True,
+                                      help="Semanas que se alejan de la mediana más que el umbral: no "
+                                           "cuentan en la demanda depurada. Clic en la línea para verlas.")
     demanda_depurada = fields.Float("Demanda depurada", readonly=True,
                                     help="Media semanal sin las semanas atípicas: la base de la propuesta.")
+    factor_atipicas = fields.Integer("Factor de atípicas", readonly=True,
+                                     help="Ajuste «Umbral de atípicos (× MAD)» con el que se calculó.")
+    umbral = fields.Float("Umbral", readonly=True,
+                          help="Factor × MAD (o × 1 si el MAD es menor que 1): una semana que se aleja "
+                               "de la mediana más que esto es atípica.")
+    detalle_semanas = fields.Html("Detalle por semana", compute="_compute_detalle_semanas",
+                                  sanitize=False)
+
+    def _compute_detalle_semanas(self):
+        detalles = {}
+        if self.ids:
+            self.env.cr.execute(
+                "SELECT company_id, product_id, detalle FROM " + CACHE_VIEW
+                + " WHERE product_id = ANY(%s) AND company_id = ANY(%s)",
+                (self.product_id.ids, self.company_id.ids))
+            detalles = {(c, p): d for c, p, d in self.env.cr.fetchall()}
+        for row in self:
+            semanas = detalles.get((row.company_id.id, row.product_id.id)) or []
+            row.detalle_semanas = self._render_detalle(row, semanas)
+
+    def action_open_detalle(self):
+        """Clic en la línea de la lista: la ficha con las semanas, en una ventana emergente."""
+        self.ensure_one()
+        return {
+            "type": "ir.actions.act_window",
+            "name": _("%(producto)s · %(sucursal)s", producto=self.product_id.display_name,
+                      sucursal=self.company_id.name),
+            "res_model": self._name,
+            "res_id": self.id,
+            "views": [[self.env.ref("dromax_asistente_compras.view_ai_v_rotacion_form").id, "form"]],
+            "target": "new",
+        }
+
+    def _num(self, value):
+        value = float(value or 0)
+        return formatLang(self.env, value, digits=0 if value == int(value) else 2)
+
+    def _render_detalle(self, row, semanas):
+        """Explicación con los números de la línea y tabla de semanas (atípicas resaltadas)."""
+        if not semanas:
+            return Markup("<p class='text-muted'>%s</p>") % _("Sin detalle por semana.")
+        num = self._num
+        usadas = [w for w in semanas if not w["atipica"]]
+        mad_usado = max(row.mad, 1)
+        pasos = [
+            _("Se toman las %(n)s semanas completas de %(desde)s a %(hasta)s; las semanas sin venta "
+              "cuentan como 0.", n=len(semanas), desde=format_date(self.env, row.desde),
+              hasta=format_date(self.env, row.hasta)),
+            _("Mediana de las semanas: %(mediana)s unidades.", mediana=num(row.demanda_mediana)),
+            _("MAD (mediana de lo que cada semana se aleja de la mediana): %(mad)s.", mad=num(row.mad))
+            + (" " + _("Como es menor que 1, se usa 1.") if row.mad < 1 else ""),
+            _("Umbral = %(factor)s × %(mad)s = %(umbral)s: una semana es atípica si se aleja de la "
+              "mediana más de %(umbral)s unidades. Solo cuentan las semanas de %(min)s a %(max)s.",
+              factor=row.factor_atipicas, mad=num(mad_usado), umbral=num(row.umbral),
+              min=num(max(row.demanda_mediana - row.umbral, 0)), max=num(row.demanda_mediana + row.umbral)),
+            _("Demanda depurada = media de las %(k)s semanas que quedan = %(suma)s / %(k)s = %(dep)s "
+              "(con todas las semanas, la media sería %(media)s).",
+              k=len(usadas), suma=num(sum(w["cantidad"] for w in usadas)),
+              dep=num(row.demanda_depurada), media=num(row.demanda_media)),
+        ]
+        cols = [(key, label) for key, label in (("tpv", _("TPV")), ("pedidos", _("Pedidos")),
+                                                ("traslados", _("Traslados")))
+                if any(w[key] for w in semanas)]
+        head = Markup("").join(Markup("<th class='text-end'>%s</th>") % label for _key, label in cols)
+        body = Markup("")
+        for w in semanas:
+            lunes = fields.Date.to_date(w["semana"])
+            cells = Markup("").join(Markup("<td class='text-end'>%s</td>") % num(w[key]) for key, _l in cols)
+            estado = (Markup("<span class='badge text-bg-danger'>%s</span>") % _("Atípica: no cuenta")
+                      if w["atipica"] else Markup("<span class='text-success'>%s</span>") % _("Cuenta"))
+            body += Markup(
+                "<tr class='%s'><td>%s – %s</td>%s<td class='text-end fw-bold'>%s</td>"
+                "<td class='text-end'>%s</td><td>%s</td></tr>") % (
+                "table-danger o_ai_semana_atipica" if w["atipica"] else "o_ai_semana",
+                format_date(self.env, lunes), format_date(self.env, lunes + timedelta(days=6)),
+                cells, num(w["cantidad"]), num(w["distancia"]), estado)
+        intro = _("Las semanas muy distintas de lo normal (una compra grande puntual, un faltante) "
+                  "se descartan para que no inflen ni bajen la demanda. Así se calculó esta línea:")
+        return Markup(
+            "<p class='mb-1'>%s</p><ol class='mb-3'>%s</ol>"
+            "<table class='table table-sm table-hover o_ai_detalle_semanas'><thead><tr>"
+            "<th>%s</th>%s<th class='text-end'>%s</th><th class='text-end'>%s</th><th>%s</th>"
+            "</tr></thead><tbody>%s</tbody></table>") % (
+            intro, Markup("").join(Markup("<li>%s</li>") % paso for paso in pasos),
+            _("Semana (lunes a domingo)"), head, _("Total"), _("Distancia a la mediana"), _("¿Cuenta?"), body)
 
     def init(self):
         # Tres capas: el cálculo (vista), lo guardado (vista materializada) y
@@ -275,7 +366,14 @@ class AiVRotacion(models.Model):
                 -- Con factor >= 1 siempre queda al menos la mitad de las semanas.
                 SELECT s.company_id, s.product_id,
                        count(*) FILTER (WHERE abs(s.cantidad - e.mediana) > u.umbral) AS semanas_atipicas,
-                       avg(s.cantidad) FILTER (WHERE abs(s.cantidad - e.mediana) <= u.umbral) AS demanda
+                       avg(s.cantidad) FILTER (WHERE abs(s.cantidad - e.mediana) <= u.umbral) AS demanda,
+                       max(u.umbral) AS umbral,
+                       -- Detalle por semana para la ventana de la línea (no va en ai_v_rotacion).
+                       jsonb_agg(jsonb_build_object(
+                           'semana', s.semana, 'tpv', s.tpv, 'pedidos', s.pedidos,
+                           'traslados', s.traslados, 'cantidad', s.cantidad,
+                           'distancia', abs(s.cantidad - e.mediana),
+                           'atipica', abs(s.cantidad - e.mediana) > u.umbral) ORDER BY s.semana) AS detalle
                   FROM semanal s
                   JOIN estadisticas e ON e.company_id = s.company_id AND e.product_id = s.product_id
                   JOIN dispersion d ON d.company_id = s.company_id AND d.product_id = s.product_id
@@ -303,7 +401,10 @@ class AiVRotacion(models.Model):
                    round(e.desviacion::numeric, 2) AS desviacion,
                    round(d.mad::numeric, 2) AS mad,
                    dp.semanas_atipicas,
-                   round(dp.demanda::numeric, 2) AS demanda_depurada
+                   round(dp.demanda::numeric, 2) AS demanda_depurada,
+                   params.factor_mad AS factor_atipicas,
+                   round(dp.umbral::numeric, 2) AS umbral,
+                   dp.detalle
               FROM estadisticas e
               JOIN dispersion d ON d.company_id = e.company_id AND d.product_id = e.product_id
               JOIN depurada dp ON dp.company_id = e.company_id AND dp.product_id = e.product_id
@@ -320,7 +421,12 @@ class AiVRotacion(models.Model):
         cr.execute("CREATE MATERIALIZED VIEW %s AS SELECT * FROM %s" % (CACHE_VIEW, CALC_VIEW))
         # Índice único: lo pide REFRESH ... CONCURRENTLY (se sigue leyendo mientras se recalcula).
         cr.execute("CREATE UNIQUE INDEX %s_key ON %s (company_id, product_id)" % (CACHE_VIEW, CACHE_VIEW))
-        cr.execute("CREATE VIEW ai_v_rotacion AS SELECT * FROM %s" % CACHE_VIEW)
+        # Todas las columnas menos el detalle por semana: el chat no lo necesita.
+        cr.execute("""SELECT string_agg(quote_ident(attname), ', ' ORDER BY attnum)
+                        FROM pg_attribute
+                       WHERE attrelid = %s::regclass AND attnum > 0 AND NOT attisdropped
+                         AND attname <> 'detalle'""", (CACHE_VIEW,))
+        cr.execute("CREATE VIEW ai_v_rotacion AS SELECT %s FROM %s" % (cr.fetchone()[0], CACHE_VIEW))
         cr.execute("CREATE TABLE IF NOT EXISTS %s (huella varchar, actualizado timestamptz)" % STATE_TABLE)
         cr.execute("DELETE FROM %s" % STATE_TABLE)
         cr.execute("INSERT INTO %s (huella, actualizado) SELECT (%s), now()" % (STATE_TABLE, fingerprint_sql()))

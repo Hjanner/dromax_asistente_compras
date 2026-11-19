@@ -103,6 +103,16 @@ lectura, las ve todas (la compra se arma para toda la red).
   semana, en más de *factor* unidades, queda con demanda depurada 0 (venta
   esporádica, filtro *Venta esporádica*). N (`rotation_window_weeks`, 8) y el
   factor (`outlier_mad_factor`, 3) se leen de Ajustes en cada consulta.
+  Cada fila trae también el `factor_atipicas` y el `umbral` (factor ×
+  max(MAD, 1)) con que se calculó.
+  **Clic en una línea** (`<tree action="action_open_detalle" type="object">`):
+  ventana emergente con la mediana, el MAD, el umbral y el rango de semanas
+  que cuentan, la cuenta de la demanda depurada (suma de las semanas que
+  quedan / cuántas son) y la tabla de semanas (TPV, pedidos o traslados,
+  total, distancia a la mediana y si cuenta), con las atípicas en rojo. El
+  detalle por semana se guarda en la columna `detalle` (jsonb) de
+  `ai_mv_rotacion` con el veredicto ya calculado en SQL, así que coincide
+  siempre con la línea; `ai_v_rotacion` (la del chat) no la incluye.
 - **Stock** (`ai_v_stock`): suma de los quants de las ubicaciones internas;
   incluye las existencias en 0 y negativas.
 - **Pendiente** (`ai_v_pendiente`): órdenes confirmadas con la recepción sin

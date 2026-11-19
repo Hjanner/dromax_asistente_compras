@@ -1,6 +1,6 @@
 # Estado del proyecto
 
-Última actualización: 2026-11-18 (asistente `17.0.0.20.0`, 174 tests; módulo
+Última actualización: 2026-11-19 (asistente `17.0.0.21.0`, 176 tests; módulo
 FTP 1.5 con 38). Qué está hecho, qué decidimos y qué falta.
 El README explica cómo funciona lo que ya existe.
 
@@ -506,6 +506,16 @@ El README explica cómo funciona lo que ya existe.
     oferta. Los tests leen sin rotación guardada (`rotation_cache_minutes`
     = 0) y dos nuevos prueban la huella, el vencimiento y la propuesta.
     174 tests.
+  - Asistente `17.0.0.21.0` (pedido del usuario, 2026-11-19: que el
+    descarte de semanas atípicas sea más transparente). En *Rotación*, el
+    clic en una línea abre una ventana emergente con el cálculo paso a paso
+    con los números de esa línea (mediana, MAD, umbral, rango que cuenta,
+    suma / semanas = demanda depurada, frente a la media con todas) y la
+    tabla de semanas con las atípicas en rojo. Sin JavaScript: atributo
+    `action` de la lista. El detalle por semana se guarda en la vista
+    materializada (recalcular sube de ~2,4 a ~2,9 s en `dromax_ai_inventario`;
+    19 MB). Las filas tienen ahora `factor_atipicas` y `umbral` (también en el
+    catálogo del chat). 176 tests.
 
 ## Decisiones
 

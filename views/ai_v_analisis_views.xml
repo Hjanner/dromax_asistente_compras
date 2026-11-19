@@ -92,7 +92,7 @@
         <field name="name">ai.v.rotacion.tree</field>
         <field name="model">ai.v.rotacion</field>
         <field name="arch" type="xml">
-            <tree create="0" edit="0" delete="0">
+            <tree create="0" edit="0" delete="0" action="action_open_detalle" type="object">
                 <field name="company_id" groups="base.group_multi_company"/>
                 <field name="product_id"/>
                 <field name="demanda_depurada"/>
@@ -111,6 +111,40 @@
                 <field name="desde" optional="hide"/>
                 <field name="hasta" optional="hide"/>
             </tree>
+        </field>
+    </record>
+
+    <!-- Clic en una línea: cómo salió la demanda depurada y qué semanas se descartaron. -->
+    <record id="view_ai_v_rotacion_form" model="ir.ui.view">
+        <field name="name">ai.v.rotacion.form</field>
+        <field name="model">ai.v.rotacion</field>
+        <field name="arch" type="xml">
+            <form create="0" edit="0" delete="0" string="Rotación">
+                <sheet>
+                    <group>
+                        <group string="Resultado">
+                            <field name="company_id"/>
+                            <field name="product_id"/>
+                            <field name="demanda_depurada"/>
+                            <field name="demanda_media"/>
+                            <field name="semanas_atipicas"/>
+                            <field name="semanas_con_venta"/>
+                        </group>
+                        <group string="Cálculo de las semanas atípicas">
+                            <field name="demanda_mediana"/>
+                            <field name="mad"/>
+                            <field name="factor_atipicas"/>
+                            <field name="umbral"/>
+                            <field name="desde"/>
+                            <field name="hasta"/>
+                        </group>
+                    </group>
+                    <field name="detalle_semanas" nolabel="1"/>
+                </sheet>
+                <footer>
+                    <button string="Cerrar" special="cancel" class="btn-secondary"/>
+                </footer>
+            </form>
         </field>
     </record>
 

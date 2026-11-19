@@ -180,6 +180,25 @@ class TestAnalisis(AnalisisCase):
         self.assertEqual(row.producto, "ZQX IBUPROFENO 400MG")
         self.assertEqual(row.codigo, "ZQX1")
 
+    def test_rotation_atypical_weeks_detail(self):
+        """La ficha de la línea explica el umbral y marca la semana atípica."""
+        weekly = [10, 12, 11, 10, 13, 12, 11, 60]  # semanas 1..8 atrás; 60 es atípica
+        for weeks_ago, qty in enumerate(weekly, start=1):
+            self._pos_sale(self.ibuprofeno, qty, self._week_date(weeks_ago))
+        row = self._row("ai.v.rotacion", self.ibuprofeno)
+        self.assertEqual((row.factor_atipicas, row.umbral), (3, 3))   # 3 × MAD 1
+        html = str(row.detalle_semanas)
+        self.assertEqual(html.count("<tr class="), 8)
+        self.assertEqual(html.count("o_ai_semana_atipica"), 1)
+        # La atípica es la más antigua (la primera fila) y se aleja 48,5 de la mediana 11,5.
+        first = html.split("<tr class=")[1]
+        self.assertIn("o_ai_semana_atipica", first)
+        self.assertIn(">60<", first)
+        self.assertIn("8.5", html.replace(",", "."))      # solo cuentan de 8,5 a 14,5
+        self.assertIn("79 / 7", html)
+        action = row.action_open_detalle()
+        self.assertEqual((action["res_id"], action["target"]), (row.id, "new"))
+
     def test_rotation_weeks_follow_local_time(self):
         # Domingo 22:00 en Caracas = lunes 02:00 UTC: sigue siendo la semana del domingo.
         self._pos_sale(self.ibuprofeno, 7, self._week_date(1, weekday=6, hour=22))

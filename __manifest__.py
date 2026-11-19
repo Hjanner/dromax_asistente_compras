@@ -26,7 +26,7 @@ cuando el comprador se lo pide; las órdenes en borrador las crea el botón.
     """,
     'author': "Hjanner",
     'category': 'Inventory/Purchase',
-    'version': '17.0.0.20.0',
+    'version': '17.0.0.21.0',
     'license': 'LGPL-3',
     'application': True,
     'installable': True,

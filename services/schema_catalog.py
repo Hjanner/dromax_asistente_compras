@@ -37,6 +37,9 @@ CATALOG = {
             ("desviacion", "desviación estándar semanal"),
             ("mad", "desviación absoluta mediana"),
             ("semanas_atipicas", "semanas descartadas por alejarse de la mediana más de factor × MAD"),
+            ("factor_atipicas", "factor del umbral de atípicas (Ajustes)"),
+            ("umbral", "factor × max(MAD, 1): unidades que una semana puede alejarse de la mediana "
+                       "sin ser atípica"),
             ("demanda_depurada", "media semanal sin las semanas atípicas: la demanda para la propuesta"),
         ],
     ),

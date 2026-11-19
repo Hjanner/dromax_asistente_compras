@@ -171,6 +171,46 @@ class TestUi(HttpCase):
             self._open("action=dromax_asistente_compras." + action + cids,
                        ".o_list_view .o_data_row td[name='%s']" % column, login=buyer.login)
 
+    def test_rotation_atypical_popup(self):
+        """Rotación: el clic en una línea abre la ventana con las semanas y marca la atípica."""
+        product = self.env["product.product"].create({"name": "ZQX UI ROTACION", "detailed_type": "product"})
+        session = self.env["pos.session"].create({
+            "config_id": self.env["pos.config"].create({"name": "ZQX TPV UI ROT"}).id, "user_id": self.env.uid})
+        for weeks, qty in enumerate([10, 12, 11, 10, 13, 12, 11, 60], start=1):
+            order = self.env["pos.order"].create({
+                "session_id": session.id, "amount_tax": 0, "amount_total": qty, "amount_paid": qty,
+                "amount_return": 0,
+                "lines": [(0, 0, {"product_id": product.id, "qty": qty, "price_unit": 1,
+                                  "price_subtotal": qty, "price_subtotal_incl": qty})],
+            })
+            order.write({"state": "paid", "date_order": order.date_order - timedelta(weeks=weeks)})
+        self.env["ir.config_parameter"].sudo().set_param("dromax_asistente_compras.rotation_window_weeks", "8")
+        admin = self.env["res.users"].search([("login", "=", "ai_purchase_admin_ui")])
+        admin.password = admin.login
+        self.browser_js("/web#action=dromax_asistente_compras.action_ai_v_rotacion", """
+            const until = (sel) => new Promise((resolve, reject) => {
+                let n = 0;
+                const t = setInterval(() => {
+                    const el = typeof sel === "function" ? sel() : document.querySelector(sel);
+                    if (el) { clearInterval(t); resolve(el); }
+                    else if (++n > 150) { clearInterval(t); reject(new Error("No apareció " + sel)); }
+                }, 100);
+            });
+            (async () => {
+                const cell = await until(() => [...document.querySelectorAll(".o_data_row td")]
+                    .find((td) => td.textContent.includes("ZQX UI ROTACION")));
+                cell.click();
+                const modal = await until(".modal .o_ai_detalle_semanas");
+                const atypical = modal.querySelectorAll("tr.o_ai_semana_atipica");
+                if (atypical.length !== 1 || !atypical[0].textContent.includes("60")) {
+                    throw new Error("Semana atípica mal marcada: " + atypical.length);
+                }
+                document.querySelector(".modal-footer .btn-secondary").click();
+                await until(() => !document.querySelector(".modal") && document.querySelector(".o_list_view"));
+                console.log("test successful");
+            })().catch((e) => console.error(e.message));
+        """, login=admin.login)
+
     def test_replenishment_screens(self):
         """Reabastecimiento desde la matriz: lista (con el botón al elegir líneas) y tabla dinámica."""
         matriz = self.env["res.company"].create({"name": "ZQX MATRIZ UI"})
