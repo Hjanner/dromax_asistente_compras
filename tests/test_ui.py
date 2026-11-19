@@ -34,6 +34,7 @@ class TestUi(HttpCase):
         ICP = cls.env["ir.config_parameter"].sudo()
         ICP.set_param("dromax_asistente_compras.reorder_point_pct", "100")
         ICP.set_param("dromax_asistente_compras.safety_margin_pct", "0")
+        ICP.set_param("dromax_asistente_compras.rotation_cache_minutes", "0")
         new_test_user(cls.env, login="ai_purchase_admin_ui",
                       groups="base.group_user,base.group_system")
         cls.env["ai.usage.log"].create({

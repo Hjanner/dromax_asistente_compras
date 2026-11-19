@@ -21,6 +21,7 @@ from odoo import Command, _, api, fields, models
 from odoo.exceptions import AccessError, UserError
 
 from ..services.network_sql import PURCHASE_NAME_PARAM, matrix_company
+from .ai_v_rotacion import ensure_rotation_fresh
 
 ORIGIN = "Oferta de proveedores"
 
@@ -50,6 +51,7 @@ class AiComparadorPedido(models.TransientModel):
             raise UserError(_("No hay sucursal matriz: elígela en Agente IA → Configuración → Ajustes."))
         in_catalog = rows.filtered("product_id")
         # Lo sugerido para el inventario de la matriz, que es quien recibe.
+        ensure_rotation_fresh(self.env)
         self.env.cr.execute("""SELECT product_id, cantidad_sugerida FROM ai_v_faltantes
                                 WHERE para_matriz AND product_id = ANY(%s)""", (in_catalog.product_id.ids,))
         suggested = dict(self.env.cr.fetchall())

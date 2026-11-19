@@ -55,6 +55,7 @@ class AiVFaltantes(models.Model):
     id = product_id × 1000 + company_id, como en el reabastecimiento.
     """
     _name = "ai.v.faltantes"
+    _inherit = ["ai.rotation.cache.mixin"]
     _description = "Necesidad de compra"
     _auto = False
     _order = "cobertura_actual, demanda_semanal desc, product_id, company_id"

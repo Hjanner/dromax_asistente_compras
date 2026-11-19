@@ -1,6 +1,6 @@
 # Estado del proyecto
 
-Última actualización: 2026-11-17 (asistente `17.0.0.19.2`, 172 tests; módulo
+Última actualización: 2026-11-18 (asistente `17.0.0.20.0`, 174 tests; módulo
 FTP 1.5 con 38). Qué está hecho, qué decidimos y qué falta.
 El README explica cómo funciona lo que ya existe.
 
@@ -492,6 +492,20 @@ El README explica cómo funciona lo que ya existe.
     a laboratorios o representantes, ~160 solo a droguerías y ~400 por las
     dos vías. Propuesta: usar el proveedor principal del producto
     (`product.supplierinfo`) para separar la compra directa.
+  - Asistente `17.0.0.20.0` (pedido del usuario, 2026-11-18: pasar de una
+    pantalla de análisis a otra tardaba aunque se volviera a una ya vista).
+    En vez de guardar pantallas en el navegador, se guarda lo caro: la
+    **rotación** (venta de semanas completas) en una vista materializada que
+    se recalcula al cambiar de semana o de ajustes, cada 60 min como máximo
+    (ajuste nuevo *Recalcular la venta cada*) y con una tarea cada 30 min;
+    la propuesta y los borradores diarios de traslado la recalculan siempre.
+    Stock, pendientes y oferta siguen en vivo (ver README, *Rotación
+    guardada*). En `dromax_ai_inventario`: necesidad de compra 4,9 → 1,5 s,
+    reabastecimiento 4,0 → 0,6 s, rotación 3,0 → 0,2 s. Lo que queda en la
+    necesidad de compra (~0,5 s por consulta) es el stock y el cruce con la
+    oferta. Los tests leen sin rotación guardada (`rotation_cache_minutes`
+    = 0) y dos nuevos prueban la huella, el vencimiento y la propuesta.
+    174 tests.
 
 ## Decisiones
 

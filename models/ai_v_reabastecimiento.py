@@ -8,7 +8,7 @@ from odoo.exceptions import AccessError, UserError
 from ..services import automation
 from ..services.network_sql import MATRIX_PARAM, network_ctes  # noqa: F401 (MATRIX_PARAM lo usan los tests)
 from .ai_v_oferta import grant_readonly
-from .ai_v_rotacion import network_params_sql
+from .ai_v_rotacion import ensure_rotation_fresh, network_params_sql
 
 _logger = logging.getLogger(__name__)
 
@@ -41,6 +41,7 @@ class AiVReabastecimiento(models.Model):
     líneas elegidas en la pantalla sean las mismas al generar los borradores.
     """
     _name = "ai.v.reabastecimiento"
+    _inherit = ["ai.rotation.cache.mixin"]
     _description = "Reabastecimiento desde la sucursal matriz"
     _auto = False
     _order = "estado, cobertura_actual, valor desc, company_id"
@@ -226,6 +227,7 @@ class AiVReabastecimiento(models.Model):
                 self._cancel_stale_auto_transfers()
                 self.env.flush_all()
                 self.invalidate_model()
+                ensure_rotation_fresh(self.env, force=True)
                 lines = self.sudo().search([("cantidad", ">", 0)])
                 pickings = lines._create_transfers(lines.matriz_id | lines.company_id)
                 pickings.ai_auto_replenishment_date = fields.Date.context_today(self)

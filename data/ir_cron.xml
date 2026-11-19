@@ -30,5 +30,19 @@
             <field name="nextcall" eval="(DateTime.now() + relativedelta(days=1, hour=10, minute=0, second=0)).strftime('%Y-%m-%d %H:%M:%S')"/>
             <field name="active" eval="True"/>
         </record>
+
+        <!-- Rotación guardada: se recalcula cada 30 minutos para que las pantallas
+             no tengan que hacerlo al abrirse (ver ai_v_rotacion.ensure_rotation_fresh). -->
+        <record id="cron_ai_rotation_refresh" model="ir.cron">
+            <field name="name">Agente IA: recalcular la rotación guardada</field>
+            <field name="model_id" ref="model_ai_v_rotacion"/>
+            <field name="state">code</field>
+            <field name="code">model._cron_refresh_cache()</field>
+            <field name="user_id" ref="base.user_root"/>
+            <field name="interval_number">30</field>
+            <field name="interval_type">minutes</field>
+            <field name="numbercall">-1</field>
+            <field name="active" eval="True"/>
+        </record>
     </data>
 </odoo>

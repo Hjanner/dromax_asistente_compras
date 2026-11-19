@@ -58,6 +58,7 @@ from ..services.config import get_int_setting, get_setting
 from ..services.prompt import DEFAULT_COVERAGE_WEEKS, DEFAULT_WINDOW_WEEKS
 from .ai_barcode_mismatch import GROUP_XMLID
 from .ai_v_faltantes import needs_presentation_review
+from .ai_v_rotacion import ensure_rotation_fresh
 
 _logger = logging.getLogger(__name__)
 
@@ -244,6 +245,7 @@ class AiPurchaseProposal(models.Model):
         """Crea la propuesta a partir de ai_v_faltantes y descarta las anteriores
         del mismo modo que seguían abiertas."""
         self.env.flush_all()
+        ensure_rotation_fresh(self.env, force=True)
         cr = self.env.cr
         cr.execute("SELECT * FROM ai_v_faltantes ORDER BY company_id, product_id")
         rows = cr.dictfetchall()

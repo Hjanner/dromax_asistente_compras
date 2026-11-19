@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
-from odoo import fields, models, tools
+import logging
+import time
 
-from ..services.config import PARAM_PREFIX
+from odoo import api, fields, models, tools
+
+from ..services.config import PARAM_PREFIX, get_int_setting
 from ..services.network_sql import MATRIX_SQL
 from ..services.prompt import (DEFAULT_COVERAGE_WEEKS, DEFAULT_OUTLIER_MAD, DEFAULT_REORDER_POINT_PCT,
                                DEFAULT_SAFETY_MARGIN_PCT, DEFAULT_WINDOW_WEEKS)
@@ -28,6 +31,87 @@ def network_params_sql():
             _int_param("safety_margin_pct", DEFAULT_SAFETY_MARGIN_PCT, 200, minimum=0))
 
 
+# --- Demanda guardada --------------------------------------------------------
+#
+# Calcular la rotación es la parte cara de la necesidad de compra y del
+# reabastecimiento (~1,5 s con 26 semanas de TPV, y Odoo consulta la vista
+# varias veces por pantalla). Como solo usa semanas completas, no cambia con lo
+# que pasa en la semana: se guarda en una vista materializada (ai_mv_rotacion)
+# y ai_v_rotacion la lee. Stock, pendientes, traslados en camino y oferta
+# siguen en vivo. Se recalcula cuando:
+# - cambia la huella: empezó otra semana o cambiaron los ajustes del cálculo
+#   (semanas de historial, factor de atípicas, sucursal matriz);
+# - pasaron más de rotation_cache_minutes minutos (ventas de semanas pasadas
+#   que llegan tarde); 0 = recalcular en cada lectura;
+# - lo pide la tarea programada (cada 30 minutos).
+_logger = logging.getLogger(__name__)
+
+CACHE_VIEW = "ai_mv_rotacion"
+CALC_VIEW = "ai_v_rotacion_calculo"
+STATE_TABLE = "ai_rotacion_estado"
+CACHE_MINUTES = "rotation_cache_minutes"
+DEFAULT_CACHE_MINUTES = 60
+# Candado de Postgres para que dos peticiones no recalculen a la vez.
+LOCK_KEY = 0x41495254      # «AIRT»
+
+
+def fingerprint_sql():
+    """SQL que da la huella de lo que define la rotación, además de los datos."""
+    return """
+        SELECT md5(concat_ws('|', %(semanas)s, %(factor)s, %(matriz)s,
+               (SELECT string_agg(c.id || ':' || date_trunc(
+                           'week', now() AT TIME ZONE COALESCE(NULLIF(p.tz, ''), '%(tz)s'))::date,
+                           ',' ORDER BY c.id)
+                  FROM res_company c
+                  JOIN res_partner p ON p.id = c.partner_id)))
+    """ % {
+        "semanas": _int_param("rotation_window_weeks", DEFAULT_WINDOW_WEEKS, 104),
+        "factor": _int_param("outlier_mad_factor", DEFAULT_OUTLIER_MAD, 20),
+        "matriz": MATRIX_SQL,
+        "tz": DEFAULT_TZ,
+    }
+
+
+def ensure_rotation_fresh(env, force=False):
+    """Recalcula la rotación guardada si hace falta. Devuelve True si la recalculó.
+
+    Va en la misma transacción que la lectura (en REPEATABLE READ no se vería
+    lo que otra transacción guarde después). REFRESH ... CONCURRENTLY no
+    bloquea a quien la esté leyendo; el candado evita dos cálculos a la vez.
+    `force` recalcula aunque esté al día: las acciones que crean documentos
+    (propuesta, borradores de traslado) usan siempre la venta exacta.
+    """
+    cr = env.cr
+    cr.execute(fingerprint_sql())
+    huella = cr.fetchone()[0]
+    minutes = get_int_setting(env, CACHE_MINUTES, DEFAULT_CACHE_MINUTES, 1440, minimum=0)
+    if not force and minutes:
+        cr.execute("SELECT 1 FROM " + STATE_TABLE
+                   + " WHERE huella = %s AND actualizado > now() - %s * interval '1 minute'",
+                   (huella, minutes))
+        if cr.fetchone():
+            return False
+    cr.execute("SELECT pg_advisory_xact_lock(%s)", (LOCK_KEY,))
+    start = time.monotonic()
+    cr.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY " + CACHE_VIEW)
+    cr.execute("DELETE FROM " + STATE_TABLE)
+    cr.execute("INSERT INTO " + STATE_TABLE + " (huella, actualizado) VALUES (%s, now())", (huella,))
+    _logger.info("Rotación recalculada en %.1f s.", time.monotonic() - start)
+    return True
+
+
+class AiRotationCacheMixin(models.AbstractModel):
+    """Pantallas que leen la rotación: antes de buscar, la ponen al día."""
+    _name = "ai.rotation.cache.mixin"
+    _description = "Lectura de la rotación guardada"
+
+    @api.model
+    def _search(self, domain, offset=0, limit=None, order=None, access_rights_uid=None):
+        ensure_rotation_fresh(self.env)
+        return super()._search(domain, offset=offset, limit=limit, order=order,
+                               access_rights_uid=access_rights_uid)
+
+
 class AiVRotacion(models.Model):
     """Demanda semanal por producto y sucursal en las últimas N semanas completas.
 
@@ -48,6 +132,7 @@ class AiVRotacion(models.Model):
     Ajustes en cada consulta (por defecto 8 semanas y 3).
     """
     _name = "ai.v.rotacion"
+    _inherit = ["ai.rotation.cache.mixin"]
     _description = "Rotación semanal por producto y farmacia"
     _auto = False
     _order = "company_id, demanda_depurada desc, product_id"
@@ -80,9 +165,14 @@ class AiVRotacion(models.Model):
                                     help="Media semanal sin las semanas atípicas: la base de la propuesta.")
 
     def init(self):
-        tools.drop_view_if_exists(self.env.cr, self._table)
-        self.env.cr.execute("""
-            CREATE VIEW ai_v_rotacion AS
+        # Tres capas: el cálculo (vista), lo guardado (vista materializada) y
+        # ai_v_rotacion, que lee lo guardado (la usan las demás vistas y el chat).
+        cr = self.env.cr
+        tools.drop_view_if_exists(cr, self._table)
+        cr.execute("DROP MATERIALIZED VIEW IF EXISTS %s CASCADE" % CACHE_VIEW)
+        tools.drop_view_if_exists(cr, CALC_VIEW)
+        cr.execute("""
+            CREATE VIEW ai_v_rotacion_calculo AS
             WITH params AS (
                 SELECT %(semanas)s AS semanas, %(factor)s AS factor_mad, %(matriz)s AS matriz_id
             ),
@@ -227,4 +317,16 @@ class AiVRotacion(models.Model):
             "matriz": MATRIX_SQL,
             "tz": DEFAULT_TZ,
         })
+        cr.execute("CREATE MATERIALIZED VIEW %s AS SELECT * FROM %s" % (CACHE_VIEW, CALC_VIEW))
+        # Índice único: lo pide REFRESH ... CONCURRENTLY (se sigue leyendo mientras se recalcula).
+        cr.execute("CREATE UNIQUE INDEX %s_key ON %s (company_id, product_id)" % (CACHE_VIEW, CACHE_VIEW))
+        cr.execute("CREATE VIEW ai_v_rotacion AS SELECT * FROM %s" % CACHE_VIEW)
+        cr.execute("CREATE TABLE IF NOT EXISTS %s (huella varchar, actualizado timestamptz)" % STATE_TABLE)
+        cr.execute("DELETE FROM %s" % STATE_TABLE)
+        cr.execute("INSERT INTO %s (huella, actualizado) SELECT (%s), now()" % (STATE_TABLE, fingerprint_sql()))
         grant_readonly(self.env, self._table)
+
+    @api.model
+    def _cron_refresh_cache(self):
+        """Tarea programada: recalcula la rotación guardada (ver ensure_rotation_fresh)."""
+        ensure_rotation_fresh(self.env, force=True)

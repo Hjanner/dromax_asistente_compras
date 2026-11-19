@@ -115,6 +115,43 @@ lectura, las ve todas (la compra se arma para toda la red).
 En `dromax_ai_multi` (3 años simulados): 5186 filas de rotación (~3,5 s),
 5576 de stock y 1613 de pendientes (~0,6 s cada una).
 
+### Rotación guardada (desde la 0.20.0)
+
+Calcular la rotación es la parte cara de la necesidad de compra y del
+reabastecimiento, y Odoo consulta la vista varias veces por pantalla (filas,
+total, lectura). Como solo usa semanas completas, no cambia con lo que pasa en
+la semana, así que se guarda en tres capas:
+
+- `ai_v_rotacion_calculo`: la vista con el cálculo;
+- `ai_mv_rotacion`: vista materializada con su resultado (índice único por
+  sucursal y producto, para `REFRESH ... CONCURRENTLY`: se puede seguir
+  leyendo mientras se recalcula);
+- `ai_v_rotacion`: lee la materializada. Es la que usan las demás vistas, las
+  pantallas y el chat (el rol de solo lectura solo tiene permiso sobre esta).
+
+`ensure_rotation_fresh` (en `models/ai_v_rotacion.py`) la recalcula cuando
+cambia la **huella** (empezó otra semana en alguna sucursal o cambiaron las
+semanas de historial, el factor de atípicos o la sucursal matriz) o cuando
+pasaron más de *Recalcular la venta cada (min)* (`rotation_cache_minutes`,
+60; 0 = en cada consulta), por las ventas de semanas pasadas que se
+registran tarde. La llaman antes de buscar las pantallas de rotación,
+necesidad de compra y reabastecimiento (`ai.rotation.cache.mixin`, en
+`_search`) y el asistente del comparador. **Calcular la propuesta** y los
+**borradores diarios de traslado** la recalculan siempre (`force=True`): los
+documentos salen con la venta exacta. Además la recalcula la tarea
+*Agente IA: recalcular la rotación guardada* cada 30 minutos, para que casi
+nunca le toque a una pantalla. El estado (huella y hora) está en la tabla
+`ai_rotacion_estado`; un candado de Postgres evita dos cálculos a la vez.
+
+Stock, pendientes, traslados en camino y oferta siguen en vivo: lo que se
+compra, recibe o traslada se ve enseguida. El chat lee por otra conexión: ve
+lo último guardado y confirmado (como mucho, de hace 30 minutos).
+
+En `dromax_ai_inventario` (26 semanas de TPV, 11896 filas de rotación),
+primera página de cada lista con su total, antes → después: rotación
+3,0 → 0,2 s; necesidad de compra 4,9 → 1,5 s; reabastecimiento 4,0 → 0,6 s.
+Recalcular cuesta ~2,5 s.
+
 ## Necesidad de compra (`ai_v_faltantes`)
 
 Lo que hay que comprar esta semana: **una fila por producto y sucursal que

@@ -36,6 +36,13 @@ class ResConfigSettings(models.TransientModel):
     ai_purchase_outlier_mad_factor = fields.Integer(
         "Umbral de atípicos (× MAD)", config_parameter=PARAM_PREFIX + "outlier_mad_factor",
         default=prompt.DEFAULT_OUTLIER_MAD)
+    ai_purchase_rotation_cache_minutes = fields.Integer(
+        "Recalcular la venta cada (min)", config_parameter=PARAM_PREFIX + "rotation_cache_minutes",
+        default=60,
+        help="La venta de las semanas completas se guarda para que las pantallas abran rápido y se "
+             "recalcula al empezar otra semana, al cambiar estos ajustes y, como máximo, cada tantos "
+             "minutos (por ventas de semanas pasadas que se registran tarde). 0 = recalcular en "
+             "cada consulta (más lento).")
     ai_purchase_coverage_weeks = fields.Integer(
         "Semanas de cobertura", config_parameter=PARAM_PREFIX + "coverage_weeks",
         default=prompt.DEFAULT_COVERAGE_WEEKS)
@@ -89,6 +96,8 @@ class ResConfigSettings(models.TransientModel):
         # el margen 0 es válido, así que se guarda explícito.
         if not self.ai_purchase_safety_margin_pct:
             self.env["ir.config_parameter"].sudo().set_param(PARAM_PREFIX + "safety_margin_pct", "0")
+        if not self.ai_purchase_rotation_cache_minutes:
+            self.env["ir.config_parameter"].sudo().set_param(PARAM_PREFIX + "rotation_cache_minutes", "0")
 
     def action_ai_run_weekly_purchase(self):
         """Ejecuta ahora la tarea del lunes (lo mismo que hará sola) y abre la propuesta."""

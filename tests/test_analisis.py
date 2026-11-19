@@ -8,6 +8,7 @@ from odoo import Command, fields
 from odoo.tests import Form
 from odoo.tests.common import TransactionCase, new_test_user, tagged
 
+from ..models.ai_v_rotacion import ensure_rotation_fresh
 from ..services.prompt import build_system_prompt
 from .test_oferta import _ean
 
@@ -26,6 +27,8 @@ class AnalisisCase(TransactionCase):
         ICP = cls.env["ir.config_parameter"].sudo()
         ICP.set_param("dromax_asistente_compras.rotation_window_weeks", "8")
         ICP.set_param("dromax_asistente_compras.outlier_mad_factor", "3")
+        # Sin rotación guardada: cada lectura ve las ventas que crea el test.
+        ICP.set_param("dromax_asistente_compras.rotation_cache_minutes", "0")
         ICP.set_param("dromax_asistente_compras.coverage_weeks", "1")
         # Sin punto de pedido ni margen: falta = venta de la semana − lo que hay
         # (los umbrales tienen sus propios tests en test_reabastecimiento).
@@ -224,6 +227,41 @@ class TestAnalisis(AnalisisCase):
         row = self._row("ai.v.rotacion", self.vitamina)
         self.assertEqual(row.semanas_atipicas, 0)
         self.assertAlmostEqual(row.demanda_depurada, 0.25)
+
+    def test_rotation_cache(self):
+        """La rotación guardada se recalcula al cambiar la huella, al vencer o a la fuerza."""
+        ICP = self.env["ir.config_parameter"].sudo()
+        ICP.set_param("dromax_asistente_compras.rotation_cache_minutes", "60")
+        self._pos_sale(self.ibuprofeno, 4, self._week_date(2))
+        self.env.flush_all()
+        self.assertTrue(ensure_rotation_fresh(self.env, force=True))
+        self.assertFalse(ensure_rotation_fresh(self.env))   # al día: no recalcula
+        self.assertEqual(self._row("ai.v.rotacion", self.ibuprofeno).venta_tpv, 4)
+        # Una venta de una semana pasada registrada tarde no se ve hasta recalcular...
+        self._pos_sale(self.ibuprofeno, 6, self._week_date(3))
+        self.assertEqual(self._row("ai.v.rotacion", self.ibuprofeno).venta_tpv, 4)
+        # ...y la necesidad de compra, que es lo que se compra, la ve al recalcular.
+        self.assertTrue(ensure_rotation_fresh(self.env, force=True))
+        self.assertEqual(self._row("ai.v.rotacion", self.ibuprofeno).venta_tpv, 10)
+        # Cambiar los ajustes del cálculo cambia la huella: se recalcula sola.
+        ICP.set_param("dromax_asistente_compras.rotation_window_weeks", "2")
+        self.assertEqual(self._row("ai.v.rotacion", self.ibuprofeno).venta_tpv, 4)
+        # Vencida (o con 0 minutos) se recalcula en cada lectura.
+        self.env.cr.execute("UPDATE ai_rotacion_estado SET actualizado = now() - interval '2 hours'")
+        self.assertTrue(ensure_rotation_fresh(self.env))
+        ICP.set_param("dromax_asistente_compras.rotation_cache_minutes", "0")
+        self.assertTrue(ensure_rotation_fresh(self.env))
+
+    def test_proposal_uses_exact_rotation(self):
+        """Calcular la propuesta recalcula la rotación aunque la guardada no haya vencido."""
+        ICP = self.env["ir.config_parameter"].sudo()
+        ICP.set_param("dromax_asistente_compras.rotation_cache_minutes", "60")
+        self.env.flush_all()
+        ensure_rotation_fresh(self.env, force=True)
+        self._weekly_sales(self.ibuprofeno, 5)
+        self.env.flush_all()
+        proposal = self.env["ai.purchase.proposal"]._generate()
+        self.assertIn(self.ibuprofeno, proposal.line_ids.product_id)
 
     # -- stock --------------------------------------------------------------
 
